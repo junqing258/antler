@@ -1,0 +1,18 @@
+sequenceDiagram
+  participant P as "Pi Agent"
+  participant T as "ToolRegistry"
+  participant G as "Policy gate"
+  participant U as "Antler UI"
+  participant X as "Tool executor"
+  participant S as "RunStore"
+
+  P->>T: tool call + validated parameters
+  T->>G: classify and enforce limits
+  alt approval required
+    G->>S: save approval request
+    G-->>U: tool.approval_required
+    U->>G: approve or reject
+  end
+  G->>X: execute allowed call
+  X-->>S: save result summary
+  X-->>P: structured tool result

@@ -1,0 +1,16 @@
+flowchart LR
+  UI["React / Tauri UI"]
+  API["Fastify REST + SSE"]
+  Runtime["Antler Host Runtime"]
+  RunStore["RunStore: SQLite"]
+  EventLog["Event stream / SSE projection"]
+  Pi["Pi Agent Core + pi-ai"]
+  Tools["ToolRegistry + Policy"]
+  Provider["OpenAI / Anthropic / Ollama"]
+  Local["Constrained local tools"]
+
+  UI --> API --> Runtime
+  Runtime <--> RunStore
+  Runtime --> EventLog --> API
+  Runtime --> Pi --> Provider
+  Runtime --> Tools --> Local

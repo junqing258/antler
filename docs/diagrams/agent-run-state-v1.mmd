@@ -1,0 +1,13 @@
+stateDiagram-v2
+  [*] --> queued
+  queued --> running: worker starts
+  running --> awaiting_approval: sensitive tool proposed
+  awaiting_approval --> running: approved
+  awaiting_approval --> cancelled: rejected
+  running --> succeeded: final answer
+  running --> failed: unrecoverable error
+  queued --> cancelled: cancel
+  running --> cancelled: cancel / timeout
+  succeeded --> [*]
+  failed --> [*]
+  cancelled --> [*]

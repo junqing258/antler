@@ -1,0 +1,10 @@
+flowchart LR
+  UI["React / Tauri"] --> API["Fastify API + SSE"]
+  API --> Host["AntlerHostRuntime"]
+  Host --> Adapter["PiAgentAdapter"]
+  Adapter --> Pi["Pi Agent Core + pi-ai"]
+  Pi --> Provider["Configured LLM provider"]
+  Pi --> Tools["Antler ToolRegistry"]
+  Tools --> Policy["Policy + approval gate"]
+  Host <--> Store[("SQLite RunStore")]
+  Host --> Events["Event projector"] --> API

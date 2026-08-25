@@ -134,13 +134,13 @@ function Welcome() {
       <div className="mt-6 w-full">
         <Composer />
       </div>
-      <div className="mt-4 flex flex-wrap justify-center gap-2">
+      {/* <div className="mt-4 flex flex-wrap justify-center gap-2">
         <Suggestion icon={<CloudSunIcon />} label="Weather" />
         <Suggestion icon={<BracesIcon />} label="Code" />
         <Suggestion icon={<PenLineIcon />} label="Write" />
         <Suggestion icon={<BarChart3Icon />} label="Analyze" />
         <Suggestion icon={<LightbulbIcon />} label="Brainstorm" />
-      </div>
+      </div> */}
     </div>
   );
 }
