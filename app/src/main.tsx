@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import { AssistantThread } from '@/components/assistant-ui/thread';
 import { useAntlerRuntime } from '@/components/assistant-ui/use-antler-runtime';
-import { MessageSquareMoreIcon, PlusIcon } from 'lucide-react';
+import { MessageSquareMoreIcon, PlusIcon, SettingsIcon } from 'lucide-react';
 import './styles.css';
 
 type ServerInfo = { baseUrl: string; token: string };
@@ -27,6 +27,13 @@ function Chat() {
             <p>Earlier</p>
             <button type="button">User Greeting</button>
           </nav>
+          <div className="sidebar-footer">
+            <button className="user-center" type="button" aria-label="用户中心">
+              <span className="user-avatar">U</span>
+              <span className="user-details"><strong>Unsloth</strong><small>Unsloth</small></span>
+            </button>
+            <button className="settings-center" type="button" aria-label="设置中心"><SettingsIcon /></button>
+          </div>
         </aside>
         <section className="chat-panel"><AssistantThread /></section>
       </main>
