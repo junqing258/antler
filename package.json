@@ -1,0 +1,14 @@
+{
+  "name": "antler",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "pnpm --parallel --stream --filter @antler/app --filter @antler/server dev",
+    "dev:web": "pnpm --filter @antler/app dev",
+    "dev:server": "pnpm --filter @antler/server dev",
+    "dev:app": "pnpm --filter @antler/app tauri dev",
+    "build:app": "pnpm --filter @antler/server build && pnpm --filter @antler/app tauri build",
+    "check": "pnpm --filter @antler/app check && pnpm --filter @antler/server check"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Antler",
+  "version": "0.1.0",
+  "identifier": "com.antler.app",
+  "build": { "beforeDevCommand": "pnpm dev", "devUrl": "http://localhost:1420", "beforeBuildCommand": "pnpm build", "frontendDist": "../dist" },
+  "app": { "windows": [{ "title": "Antler", "width": 900, "height": 680 }], "security": { "csp": null } },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [],
+    "resources": {
+      "../../server/dist/": "server/"
+    }
+  }
+}
