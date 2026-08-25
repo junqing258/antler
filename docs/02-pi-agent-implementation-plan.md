@@ -39,7 +39,7 @@ flowchart LR
 
 ### 3.1 Pi 会话与并发
 
-- 一个会话在任意时刻只允许一个 active run；新请求返回 `409 conversation_busy`，而不是向同一个 Pi 实例并发 `prompt()`。
+- 一个会话在任意时刻只允许一个 active run；新请求返回 `409 conversation_busy`，而不是向同一个 Pi 实例并发 `prompt()`。会话由请求中的 `conversationId` 标识（见 3.4）。
 - 每个会话保存一个可重建的 Pi message history；进程重启时由 Antler SQLite 消息记录恢复，而非使用 Pi 的 JSONL session 文件。
 - `PiAgentAdapter` 对外只暴露 `run(input, context, signal)`、`abort(runId)` 与 `restore(history)`；Pi 的类型和事件不泄漏到 route、UI 或数据库层。
 - `AbortController` 是 run 的取消源。用户取消、窗口关闭、SSE 断开策略（可配置）和总超时都会触发 abort，并等待 Pi 停止后写入终态事件。
@@ -103,8 +103,11 @@ sequenceDiagram
 | `assistant.delta` | `runId`, `delta` |
 | `step.started` / `step.completed` | `runId`, `stepId`, `kind` |
 | `tool.approval_required` | `runId`, `approvalId`, `tool`, `summary` |
+| `run.awaiting_approval` | `runId`, `approvalId`, `status` |
 | `tool.completed` | `runId`, `stepId`, `tool`, `summary` |
 | `run.completed` / `run.failed` / `run.cancelled` | `runId`, `status`, `error?` |
+
+run 状态机一次到位：`queued -> running -> awaiting_approval -> running -> succeeded | failed | cancelled`。进入 `awaiting_approval` 时发出 `run.awaiting_approval`；审批通过后回到 `running`，拒绝则进入终态 `cancelled`（与[架构规划](./01-architecture-plan.md)一致）。审批等待期间总超时暂停计时，只累计实际运行时间，避免"用户审批慢导致整个 run 超时失败"。
 
 不得把 Pi 的原始事件名作为对外协议；`PiAgentAdapter` 负责映射，避免 Pi 升级破坏 UI。
 
@@ -112,11 +115,17 @@ sequenceDiagram
 
 | 接口 | 行为 |
 |---|---|
-| `POST /api/tasks` | M1 兼容入口，创建 run 并返回 `taskId`、`runId`、`eventsUrl` |
-| `POST /api/runs` | M2 正式创建入口，返回 `202` 与 `runId` |
+| `POST /api/tasks` | M1 兼容入口，body 为 `{ message, conversationId? }`（缺省时创建新会话）；返回 `taskId`、`runId`、`eventsUrl` |
+| `POST /api/runs` | M2 正式创建入口，body 必须含 `conversationId`；返回 `202` 与 `runId` |
+| `POST /api/conversations` | 创建会话，返回 `conversationId` |
+| `GET /api/conversations` | 会话列表，含最后一条消息摘要与 `updated_at` |
+| `GET /api/conversations/:id/messages` | 分页返回历史消息，用于 UI 回放与恢复 Pi 上下文 |
+| `DELETE /api/conversations/:id` | 删除会话及其 runs、事件与审批记录（M2） |
 | `GET /api/runs/:runId/events` | SSE 流或基于 `afterEventId` 补放事件 |
 | `POST /api/runs/:runId/cancel` | 幂等取消 active run |
 | `POST /api/approvals/:approvalId` | body 为 `{ decision: "approve" | "reject" }`；仅影响对应 run/tool call |
+
+事件名的切换点：`/api/tasks` 兼容路由在下线前**始终输出旧事件名**（`task.started` / `message.delta` / `task.completed` / `task.failed`）；事件 v1 的新名称只出现在 `/api/runs/:runId/events`。现有前端仅解析 `message.delta`，因此两条路由的事件协议互不污染，前端迁移到 `/api/runs` 后再移除兼容路由。
 
 所有接口延续 loopback + `x-antler-token` 保护。EventSource 场景可沿用受控的 query token；不得在日志、SSE payload 或持久化事件中回显令牌。
 
@@ -129,13 +138,13 @@ sequenceDiagram
 3. 将 Pi text delta 映射为现有 SSE 占位事件，保留 `/health` 与本地令牌行为。
 4. 编写一个真实 provider 的手工验收脚本；API key 仅来自环境变量，不写入仓库或 SQLite。
 
-**完成标准：** UI 能收到真实模型逐 token 输出；未知/缺失 key 得到结构化 `run.failed`，服务不崩溃。
+**完成标准：** UI 能收到真实模型逐 token 输出；未知/缺失 key 在兼容事件流上得到结构化 `task.failed`，服务不崩溃。
 
 ### P1：Host Runtime 与 run 生命周期（1 天）
 
 1. 新增 `agent/pi-agent-adapter.ts` 与 `agent/host-runtime.ts`。
 2. 用 `RunService` 替换当前 `TaskService` 的内存占位流程，保留 `tasks` 兼容 route。
-3. 实现 `queued → running → succeeded | failed | cancelled`，以及 abort、超时和单会话互斥。
+3. 实现完整状态机 `queued -> running -> awaiting_approval -> running -> succeeded | failed | cancelled`（`awaiting_approval` 在 P3 接入审批后才可达，但状态与终态定义在此阶段一次定型），以及 abort、超时和单会话互斥。
 4. 统一 Pi event 到领域事件的映射，并为每一种终态写一个单元测试。
 
 **完成标准：** 取消不会继续输出 delta；每个 run 只有一个终态；同会话并发请求被明确拒绝。
@@ -144,10 +153,11 @@ sequenceDiagram
 
 1. 引入 SQLite driver 和 migration；实现 `RunStore` 与事务化的 `appendEvent()`。
 2. 持久化 run、messages、events 与 approvals；读取历史时恢复 Pi 上下文。
-3. 增加正式 `/api/runs` 路由、事件补放与客户端重连处理。
-4. 添加进程重启后查询历史 run/补放事件的集成测试。
+3. 增加正式 `/api/runs` 与 `/api/conversations`（创建/列表/历史消息/删除）路由、事件补放与客户端重连处理。
+4. 服务启动时将所有非终态 run 批量置为 `failed`（`error_code` 为 `server_restarted`）并补写终态事件，保证重启后不存在残留的 active run。
+5. 添加进程重启后查询历史 run/补放事件的集成测试。
 
-**完成标准：** 运行过程中断开并重连不丢失事件；服务重启后历史对话可继续。
+**完成标准：** 运行过程中断开并重连不丢失事件；服务重启后历史对话可继续，且没有停留在非终态的 run。
 
 ### P3：受限工具与审批（1.5–2 天）
 
