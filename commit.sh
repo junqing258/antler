@@ -109,7 +109,16 @@ fi || {
 echo -e "${GREEN}提交信息生成完成${NC}"
 
 commit_message="$(node - "$tmp_output" <<'NODE'
-const content = require('fs').readFileSync(process.argv[2], 'utf8').trim();
+// claude --print 的输出可能混入 CLI 告警行（如未识别模型的提示），提交前剔除
+const noisePatterns = [
+  /^\[claude-code:/,
+  /is not a model this version of Claude Code recognizes/,
+];
+const content = require('fs').readFileSync(process.argv[2], 'utf8')
+  .split('\n')
+  .filter((line) => !noisePatterns.some((p) => p.test(line)))
+  .join('\n')
+  .trim();
 process.stdout.write(content);
 NODE
 )"
