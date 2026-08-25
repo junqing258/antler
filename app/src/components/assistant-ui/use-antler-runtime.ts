@@ -31,7 +31,11 @@ export function useAntlerRuntime(getServerInfo: () => Promise<ServerInfo>) {
         signal: abortSignal,
       });
       if (!created.ok) throw new Error("任务创建失败");
-      const { eventsUrl } = (await created.json()) as { eventsUrl: string };
+      const { eventsUrl, runId } = (await created.json()) as { eventsUrl: string; runId: string };
+      const cancel = () => {
+        void fetch(`${server.baseUrl}/api/runs/${runId}/cancel`, { method: "POST", headers });
+      };
+      abortSignal.addEventListener("abort", cancel, { once: true });
       const events = await fetch(
         `${server.baseUrl}${eventsUrl}?token=${encodeURIComponent(server.token)}`,
         { headers: { "x-antler-token": server.token }, signal: abortSignal },
@@ -42,6 +46,7 @@ export function useAntlerRuntime(getServerInfo: () => Promise<ServerInfo>) {
       const decoder = new TextDecoder();
       let buffer = "";
       let text = "";
+      try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -53,12 +58,17 @@ export function useAntlerRuntime(getServerInfo: () => Promise<ServerInfo>) {
           boundary = buffer.indexOf("\n\n");
           const event = block.match(/^event: (.+)$/m)?.[1];
           const data = block.match(/^data: (.+)$/m)?.[1];
-          if (event !== "message.delta" || !data) continue;
-          const payload = JSON.parse(data) as { delta?: string };
+          if (!data) continue;
+          const payload = JSON.parse(data) as { delta?: string; error?: { message?: string } };
+          if (event === "task.failed") throw new Error(payload.error?.message ?? "任务执行失败");
+          if (event !== "message.delta") continue;
           if (!payload.delta) continue;
           text += payload.delta;
           yield { content: [{ type: "text" as const, text }] };
         }
+      }
+      } finally {
+        abortSignal.removeEventListener("abort", cancel);
       }
     },
   };

@@ -11,7 +11,7 @@ pnpm dev:app    # 浏览器模式下的 React 前端
 # 或在 app/ 中执行 pnpm tauri dev，体验 Tauri 拉起 Node 伴生服务
 ```
 
-当前服务流返回确定性的占位响应，待 Q3（LLM provider 与模型）收敛后替换为真实 Agent 编排和模型调用。
+服务已接入 Pi Agent Core 的最小运行时。当前首个 provider 为 OpenAI：设置 `OPENAI_API_KEY`（可选 `ANTLER_MODEL`，默认 `gpt-4.1-mini`）后，`/api/tasks` 会返回真实的流式模型输出；未配置密钥时会以结构化 `task.failed` 结束，而不会回退到占位回复。运行时为每个会话限制一个 active run，并支持 `POST /api/runs/:runId/cancel` 取消。
 
 ## macOS：应用无法启动
 
