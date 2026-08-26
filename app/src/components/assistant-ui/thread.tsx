@@ -127,7 +127,7 @@ function UserMessage() {
   );
 }
 
-function Composer() {
+function Composer({ model }: { model: string }) {
   return (
     <ComposerPrimitive.Root className="aui-composer mx-auto w-full max-w-[702px] rounded-[23px] border border-[#e8e8e8] bg-background px-4 pt-3 pb-2 shadow-[0_1px_2px_rgba(0,0,0,.02)] focus-within:border-[#dadada]">
       <ComposerPrimitive.Input
@@ -146,7 +146,7 @@ function Composer() {
           </button>
           <button className="model-picker" type="button">
             <BotIcon />
-            <span>GPT-5.6 Luna</span>
+            <span>{model}</span>
             <ChevronDownIcon />
           </button>
         </div>
@@ -180,14 +180,14 @@ function Composer() {
   );
 }
 
-function Welcome() {
+function Welcome({ model }: { model: string }) {
   return (
     <div className="aui-welcome flex min-h-[calc(100svh-47px)] flex-col items-center justify-center px-4 text-center">
       <p className="m-0 text-[24px] font-semibold tracking-[-1px] text-foreground">
         How can I help you today?
       </p>
       <div className="mt-6 w-full">
-        <Composer />
+        <Composer model={model} />
       </div>
       {/* <div className="mt-4 flex flex-wrap justify-center gap-2">
         <Suggestion icon={<CloudSunIcon />} label="Weather" />
@@ -209,7 +209,7 @@ function Suggestion({ icon, label }: { icon: ReactNode; label: string }) {
   );
 }
 
-export function AssistantThread() {
+export function AssistantThread({ model }: { model: string }) {
   return (
     <ThreadPrimitive.Root className="aui-thread-root flex h-full min-h-0 flex-col bg-background">
       <header className="chat-header">
@@ -221,7 +221,7 @@ export function AssistantThread() {
       </header>
       <ThreadPrimitive.Viewport className="aui-thread-viewport flex min-h-0 flex-1 flex-col overflow-y-auto">
         <AuiIf condition={(s) => s.thread.isEmpty}>
-          <Welcome />
+          <Welcome model={model} />
         </AuiIf>
         <ThreadPrimitive.Messages
           components={{ AssistantMessage, UserMessage }}
@@ -231,7 +231,7 @@ export function AssistantThread() {
             <ThreadPrimitive.ScrollToBottom className="aui-scroll-to-bottom absolute bottom-20 left-1/2 grid size-8 -translate-x-1/2 place-items-center rounded-full border bg-background text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground">
               <ArrowDownIcon className="size-4" />
             </ThreadPrimitive.ScrollToBottom>
-            <Composer />
+            <Composer model={model} />
             <p className="mt-2 text-center text-xs text-muted-foreground">
               Antler can make mistakes. Check important results.
             </p>

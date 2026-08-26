@@ -3,6 +3,7 @@ import {
   type ThreadAssistantMessagePart,
   useLocalRuntime,
 } from "@assistant-ui/react";
+import type { ProviderConfig } from "@/lib/provider-config";
 
 type ServerInfo = { baseUrl: string; token: string };
 type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];
@@ -32,6 +33,7 @@ function getText(
 export function useAntlerRuntime(
   getServerInfo: () => Promise<ServerInfo>,
   conversationId: string,
+  getProviderConfig: () => ProviderConfig,
 ) {
   const adapter: ChatModelAdapter = {
     async *run({ messages, abortSignal }) {
@@ -45,10 +47,21 @@ export function useAntlerRuntime(
           "content-type": "application/json",
           "x-antler-token": server.token,
         };
+        const provider = getProviderConfig();
         const created = await fetch(`${server.baseUrl}/api/runs`, {
           method: "POST",
           headers,
-          body: JSON.stringify({ message, conversationId }),
+          // The key is read from browser localStorage and used only for this
+          // local request. The server never persists provider configuration.
+          body: JSON.stringify({
+            message,
+            conversationId,
+            // Keep the existing environment-variable setup usable until the
+            // user has saved a local provider key.
+            ...(provider.apiKey.trim()
+              ? { provider }
+              : {}),
+          }),
           signal: abortSignal,
         });
         if (!created.ok) {

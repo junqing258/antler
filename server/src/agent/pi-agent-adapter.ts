@@ -9,6 +9,7 @@ export type PiAgentAdapterConfig = {
   provider: "anthropic" | "openai";
   model: string;
   openAiApiKey?: string;
+  openAiBaseUrl?: string;
   anthropicAuthToken?: string;
   anthropicBaseUrl?: string;
   tavilyApiKey?: string;
@@ -44,14 +45,18 @@ export class PiAgentAdapter {
         "未配置 OPENAI_API_KEY，无法调用模型。",
       );
     const provider = openaiProvider();
-    const model = provider
+    const catalogModel = provider
       .getModels()
       .find((candidate) => candidate.id === this.config.model);
-    if (!model)
+    if (!catalogModel)
       throw new PiAdapterError(
         "model_not_found",
         `OpenAI model 不受 Pi catalog 支持：${this.config.model}`,
       );
+    const model = {
+      ...catalogModel,
+      ...(this.config.openAiBaseUrl ? { baseUrl: this.config.openAiBaseUrl } : {}),
+    };
     let agent = this.agents.get(conversationId);
     if (!agent) {
       agent = new Agent({

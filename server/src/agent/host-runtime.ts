@@ -8,6 +8,13 @@ import {
 } from "./events.js";
 import { PiAgentAdapter, PiAdapterError } from "./pi-agent-adapter.js";
 
+export type ProviderRunConfig = {
+  protocol: "openai-responses" | "anthropic-messages";
+  baseUrl?: string;
+  apiKey: string;
+  model: string;
+};
+
 export type Run = {
   id: string;
   conversationId: string;
@@ -24,6 +31,7 @@ type ActiveRun = {
   events: RunEvent[];
   listeners: Set<(event: RunEvent) => void>;
   timeout?: NodeJS.Timeout;
+  adapter: PiAgentAdapter;
 };
 export class ConversationBusyError extends Error {}
 export type HostRuntimeConfig = { maxRunDurationMs: number; maxEvents: number };
@@ -31,10 +39,10 @@ export class AntlerHostRuntime {
   private readonly runs = new Map<string, ActiveRun>();
   private readonly activeConversations = new Map<string, string>();
   constructor(
-    private readonly adapter: PiAgentAdapter,
+    private readonly createAdapter: (config?: ProviderRunConfig) => PiAgentAdapter,
     private readonly config: HostRuntimeConfig,
   ) {}
-  createRun(input: string, conversationId: string = randomUUID()): Run {
+  createRun(input: string, conversationId: string = randomUUID(), provider?: ProviderRunConfig): Run {
     if (this.activeConversations.has(conversationId))
       throw new ConversationBusyError("conversation_busy");
     const now = new Date().toISOString();
@@ -50,6 +58,7 @@ export class AntlerHostRuntime {
       controller: new AbortController(),
       events: [],
       listeners: new Set(),
+      adapter: this.createAdapter(provider),
     };
     this.runs.set(run.id, active);
     this.activeConversations.set(conversationId, run.id);
@@ -89,7 +98,7 @@ export class AntlerHostRuntime {
       this.config.maxRunDurationMs,
     );
     try {
-      await this.adapter.run(
+      await active.adapter.run(
         run.input,
         run.conversationId,
         active.controller.signal,

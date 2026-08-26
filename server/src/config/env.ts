@@ -17,6 +17,7 @@ export type AppConfig = {
   accessToken?: string;
   provider: 'anthropic' | 'openai';
   openAiApiKey?: string;
+  openAiBaseUrl?: string;
   anthropicAuthToken?: string;
   anthropicBaseUrl?: string;
   tavilyApiKey?: string;
@@ -30,6 +31,7 @@ export const config: AppConfig = {
   accessToken: process.env.ANTLER_ACCESS_TOKEN,
   provider: process.env.ANTHROPIC_AUTH_TOKEN ? 'anthropic' : 'openai',
   openAiApiKey: process.env.OPENAI_API_KEY,
+  openAiBaseUrl: process.env.OPENAI_BASE_URL,
   anthropicAuthToken: process.env.ANTHROPIC_AUTH_TOKEN,
   anthropicBaseUrl: process.env.ANTHROPIC_BASE_URL,
   tavilyApiKey: process.env.TAVILY_API_KEY,

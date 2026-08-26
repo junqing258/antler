@@ -7,19 +7,38 @@ import { TaskService } from './services/task-service.js';
 import { AntlerHostRuntime } from './agent/host-runtime.js';
 import { PiAgentAdapter } from './agent/pi-agent-adapter.js';
 import { registerRunRoutes } from './routes/runs.js';
+import type { ProviderRunConfig } from './agent/host-runtime.js';
 
 export function createApp(config: AppConfig) {
   const app = Fastify({ logger: false });
-  const runtime = new AntlerHostRuntime(new PiAgentAdapter({
-    provider: config.provider,
-    model: config.model,
-    openAiApiKey: config.openAiApiKey,
-    anthropicAuthToken: config.anthropicAuthToken,
-    anthropicBaseUrl: config.anthropicBaseUrl,
-    tavilyApiKey: config.tavilyApiKey,
-    requestTimeoutMs: config.maxRunDurationMs,
-    systemPrompt: 'You are Antler, a helpful desktop agent. Answer accurately and concisely.'
-  }), { maxRunDurationMs: config.maxRunDurationMs, maxEvents: 10_000 });
+  const adapters = new Map<string, PiAgentAdapter>();
+  const createAdapter = (provider?: ProviderRunConfig) => {
+    const runtimeConfig = provider
+      ? {
+          provider: provider.protocol === 'anthropic-messages' ? 'anthropic' as const : 'openai' as const,
+          model: provider.model,
+          openAiApiKey: provider.protocol === 'openai-responses' ? provider.apiKey : undefined,
+          openAiBaseUrl: provider.protocol === 'openai-responses' ? provider.baseUrl : undefined,
+          anthropicAuthToken: provider.protocol === 'anthropic-messages' ? provider.apiKey : undefined,
+          anthropicBaseUrl: provider.protocol === 'anthropic-messages' ? provider.baseUrl : undefined,
+        }
+      : {
+          provider: config.provider,
+          model: config.model,
+          openAiApiKey: config.openAiApiKey,
+          openAiBaseUrl: config.openAiBaseUrl,
+          anthropicAuthToken: config.anthropicAuthToken,
+          anthropicBaseUrl: config.anthropicBaseUrl,
+        };
+    const key = JSON.stringify(runtimeConfig);
+    let adapter = adapters.get(key);
+    if (!adapter) {
+      adapter = new PiAgentAdapter({ ...runtimeConfig, tavilyApiKey: config.tavilyApiKey, requestTimeoutMs: config.maxRunDurationMs, systemPrompt: 'You are Antler, a helpful desktop agent. Answer accurately and concisely.' });
+      adapters.set(key, adapter);
+    }
+    return adapter;
+  };
+  const runtime = new AntlerHostRuntime(createAdapter, { maxRunDurationMs: config.maxRunDurationMs, maxEvents: 10_000 });
   const taskService = new TaskService(runtime);
 
   registerHttpHooks(app, config);
