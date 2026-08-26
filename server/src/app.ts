@@ -6,6 +6,7 @@ import { registerTaskRoutes } from './routes/tasks.js';
 import { TaskService } from './services/task-service.js';
 import { AntlerHostRuntime } from './agent/host-runtime.js';
 import { PiAgentAdapter } from './agent/pi-agent-adapter.js';
+import { DEFAULT_SYSTEM_PROMPT } from './agent/system-prompt.js';
 import { registerRunRoutes } from './routes/runs.js';
 import type { ProviderRunConfig } from './agent/host-runtime.js';
 
@@ -33,7 +34,7 @@ export function createApp(config: AppConfig) {
     const key = JSON.stringify(runtimeConfig);
     let adapter = adapters.get(key);
     if (!adapter) {
-      adapter = new PiAgentAdapter({ ...runtimeConfig, tavilyApiKey: config.tavilyApiKey, requestTimeoutMs: config.maxRunDurationMs, systemPrompt: 'You are Antler, a helpful desktop agent. Answer accurately and concisely.' });
+      adapter = new PiAgentAdapter({ ...runtimeConfig, tavilyApiKey: config.tavilyApiKey, workspaceRoot: config.workspaceRoot, requestTimeoutMs: config.maxRunDurationMs, systemPrompt: DEFAULT_SYSTEM_PROMPT });
       adapters.set(key, adapter);
     }
     return adapter;

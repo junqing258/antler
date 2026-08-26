@@ -228,7 +228,7 @@ export function AssistantThread({ model, title }: { model: string; title: string
         />
         <AuiIf condition={(s) => !s.thread.isEmpty}>
           <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mt-auto bg-gradient-to-t from-background via-background to-transparent px-4 pb-4 pt-12 md:px-6">
-            <ThreadPrimitive.ScrollToBottom className="aui-scroll-to-bottom absolute bottom-20 left-1/2 grid size-8 -translate-x-1/2 place-items-center rounded-full border bg-background text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground">
+            <ThreadPrimitive.ScrollToBottom className="aui-scroll-to-bottom absolute bottom-20 right-4 grid size-8 place-items-center rounded-full border bg-background text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground">
               <ArrowDownIcon className="size-4" />
             </ThreadPrimitive.ScrollToBottom>
             <Composer model={model} />

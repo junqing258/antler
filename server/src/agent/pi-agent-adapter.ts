@@ -4,6 +4,7 @@ import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 import type { Model } from "@earendil-works/pi-ai";
 import { createTavilySearchTool } from "./tavily-search-tool.js";
+import { createWorkspaceTools } from "./workspace-tools.js";
 
 export type PiAgentAdapterConfig = {
   provider: "anthropic" | "openai";
@@ -13,6 +14,7 @@ export type PiAgentAdapterConfig = {
   anthropicAuthToken?: string;
   anthropicBaseUrl?: string;
   tavilyApiKey?: string;
+  workspaceRoot: string;
   systemPrompt: string;
   requestTimeoutMs: number;
 };
@@ -28,7 +30,10 @@ export class PiAgentAdapter {
   private readonly agents = new Map<string, Agent>();
   constructor(private readonly config: PiAgentAdapterConfig) {}
   private tools() {
-    return this.config.tavilyApiKey ? [createTavilySearchTool(this.config.tavilyApiKey)] : [];
+    return [
+      ...createWorkspaceTools(this.config.workspaceRoot),
+      ...(this.config.tavilyApiKey ? [createTavilySearchTool(this.config.tavilyApiKey)] : []),
+    ];
   }
   async run(
     input: string,
