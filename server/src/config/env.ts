@@ -19,6 +19,7 @@ export type AppConfig = {
   openAiApiKey?: string;
   anthropicAuthToken?: string;
   anthropicBaseUrl?: string;
+  tavilyApiKey?: string;
   model: string;
   maxRunDurationMs: number;
 };
@@ -31,6 +32,7 @@ export const config: AppConfig = {
   openAiApiKey: process.env.OPENAI_API_KEY,
   anthropicAuthToken: process.env.ANTHROPIC_AUTH_TOKEN,
   anthropicBaseUrl: process.env.ANTHROPIC_BASE_URL,
+  tavilyApiKey: process.env.TAVILY_API_KEY,
   model: process.env.ANTHROPIC_AUTH_TOKEN
     ? (process.env.ANTHROPIC_MODEL ?? process.env.AGENT_RUNTIME_MODEL ?? 'claude-sonnet-4-20250514')
     : (process.env.ANTLER_MODEL ?? 'gpt-4.1-mini'),

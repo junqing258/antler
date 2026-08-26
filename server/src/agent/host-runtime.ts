@@ -135,6 +135,13 @@ export class AntlerHostRuntime {
         stepId: `turn-${active.events.length}`,
         kind: "model",
       });
+    else if (event.type === "tool_execution_start")
+      this.emit(active, "step.started", {
+        runId,
+        stepId: event.toolCallId,
+        kind: "tool",
+        tool: event.toolName,
+      });
     else if (event.type === "tool_execution_end")
       this.emit(active, "tool.completed", {
         runId,

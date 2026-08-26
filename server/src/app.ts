@@ -16,6 +16,7 @@ export function createApp(config: AppConfig) {
     openAiApiKey: config.openAiApiKey,
     anthropicAuthToken: config.anthropicAuthToken,
     anthropicBaseUrl: config.anthropicBaseUrl,
+    tavilyApiKey: config.tavilyApiKey,
     requestTimeoutMs: config.maxRunDurationMs,
     systemPrompt: 'You are Antler, a helpful desktop agent. Answer accurately and concisely.'
   }), { maxRunDurationMs: config.maxRunDurationMs, maxEvents: 10_000 });

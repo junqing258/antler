@@ -3,6 +3,7 @@ import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 import type { Model } from "@earendil-works/pi-ai";
+import { createTavilySearchTool } from "./tavily-search-tool.js";
 
 export type PiAgentAdapterConfig = {
   provider: "anthropic" | "openai";
@@ -10,6 +11,7 @@ export type PiAgentAdapterConfig = {
   openAiApiKey?: string;
   anthropicAuthToken?: string;
   anthropicBaseUrl?: string;
+  tavilyApiKey?: string;
   systemPrompt: string;
   requestTimeoutMs: number;
 };
@@ -24,6 +26,9 @@ export class PiAdapterError extends Error {
 export class PiAgentAdapter {
   private readonly agents = new Map<string, Agent>();
   constructor(private readonly config: PiAgentAdapterConfig) {}
+  private tools() {
+    return this.config.tavilyApiKey ? [createTavilySearchTool(this.config.tavilyApiKey)] : [];
+  }
   async run(
     input: string,
     conversationId: string,
@@ -55,7 +60,7 @@ export class PiAgentAdapter {
           systemPrompt: this.config.systemPrompt,
           thinkingLevel: "low",
           messages: [],
-          tools: [],
+          tools: this.tools(),
         },
         streamFn: (activeModel, context, options) =>
           provider.streamSimple(
@@ -129,7 +134,7 @@ export class PiAgentAdapter {
           systemPrompt: this.config.systemPrompt,
           thinkingLevel: "low",
           messages: [],
-          tools: [],
+          tools: this.tools(),
         },
         streamFn: (activeModel, context, options) =>
           provider.streamSimple(
