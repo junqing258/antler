@@ -359,7 +359,7 @@ function Chat({
           <nav className="thread-history" aria-label="Chat history">
             <p>Earlier</p>
             {conversations.map((conversation) => (
-              <div className="thread-history-item" key={conversation.id}>
+              <div className="thread-history-item mb-1" key={conversation.id}>
                 <button
                   className="thread-history-select"
                   type="button"
@@ -370,7 +370,7 @@ function Chat({
                 >
                   {conversation.title}
                 </button>
-                <div className="thread-history-actions">
+                <div className="thread-history-actions ml-auto">
                   <button
                     type="button"
                     aria-label={`重命名 ${conversation.title}`}
