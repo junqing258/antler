@@ -11,7 +11,12 @@ import { registerRunRoutes } from './routes/runs.js';
 export function createApp(config: AppConfig) {
   const app = Fastify({ logger: false });
   const runtime = new AntlerHostRuntime(new PiAgentAdapter({
-    model: config.model, apiKey: config.openAiApiKey, requestTimeoutMs: config.maxRunDurationMs,
+    provider: config.provider,
+    model: config.model,
+    openAiApiKey: config.openAiApiKey,
+    anthropicAuthToken: config.anthropicAuthToken,
+    anthropicBaseUrl: config.anthropicBaseUrl,
+    requestTimeoutMs: config.maxRunDurationMs,
     systemPrompt: 'You are Antler, a helpful desktop agent. Answer accurately and concisely.'
   }), { maxRunDurationMs: config.maxRunDurationMs, maxEvents: 10_000 });
   const taskService = new TaskService(runtime);

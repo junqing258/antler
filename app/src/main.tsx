@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { StrictMode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { invoke } from '@tauri-apps/api/core';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
@@ -14,15 +14,19 @@ async function serverInfo(): Promise<ServerInfo> {
   return { baseUrl: 'http://127.0.0.1:3210', token: '' };
 }
 
-function Chat() {
-  const runtime = useAntlerRuntime(serverInfo);
+function newConversationId() {
+  return crypto.randomUUID();
+}
+
+function Chat({ conversationId, onNewThread }: { conversationId: string; onNewThread: () => void }) {
+  const runtime = useAntlerRuntime(serverInfo, conversationId);
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <main className="app-shell">
         <aside className="app-sidebar">
           <div className="brand"><MessageSquareMoreIcon aria-hidden="true" /><span>assistant-ui</span></div>
-          <button className="new-thread" type="button"><PlusIcon aria-hidden="true" />New Thread</button>
+          <button className="new-thread" type="button" onClick={onNewThread}><PlusIcon aria-hidden="true" />New Thread</button>
           <nav className="thread-history" aria-label="Chat history">
             <p>Earlier</p>
             <button type="button">User Greeting</button>
@@ -41,4 +45,12 @@ function Chat() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(<StrictMode><Chat /></StrictMode>);
+function App() {
+  const [conversationId, setConversationId] = useState(newConversationId);
+  const startNewThread = () => setConversationId(newConversationId());
+
+  // Remounting clears the local view; every turn in this thread keeps its backend session id.
+  return <Chat key={conversationId} conversationId={conversationId} onNewThread={startNewThread} />;
+}
+
+createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);

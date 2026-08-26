@@ -1,8 +1,24 @@
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+// `pnpm --filter @antler/server` runs from server/, while direct execution is
+// normally from the repository root. Load either location without overriding
+// values explicitly supplied by the environment.
+for (const path of [resolve(process.cwd(), '.env'), resolve(process.cwd(), '..', '.env')]) {
+  if (existsSync(path)) {
+    process.loadEnvFile(path);
+    break;
+  }
+}
+
 export type AppConfig = {
   host: string;
   port: number;
   accessToken?: string;
+  provider: 'anthropic' | 'openai';
   openAiApiKey?: string;
+  anthropicAuthToken?: string;
+  anthropicBaseUrl?: string;
   model: string;
   maxRunDurationMs: number;
 };
@@ -11,7 +27,12 @@ export const config: AppConfig = {
   host: process.env.ANTLER_HOST ?? '127.0.0.1',
   port: Number(process.env.ANTLER_PORT ?? 3210),
   accessToken: process.env.ANTLER_ACCESS_TOKEN,
+  provider: process.env.ANTHROPIC_AUTH_TOKEN ? 'anthropic' : 'openai',
   openAiApiKey: process.env.OPENAI_API_KEY,
-  model: process.env.ANTLER_MODEL ?? 'gpt-4.1-mini',
+  anthropicAuthToken: process.env.ANTHROPIC_AUTH_TOKEN,
+  anthropicBaseUrl: process.env.ANTHROPIC_BASE_URL,
+  model: process.env.ANTHROPIC_AUTH_TOKEN
+    ? (process.env.ANTHROPIC_MODEL ?? process.env.AGENT_RUNTIME_MODEL ?? 'claude-sonnet-4-20250514')
+    : (process.env.ANTLER_MODEL ?? 'gpt-4.1-mini'),
   maxRunDurationMs: Number(process.env.ANTLER_MAX_RUN_DURATION_MS ?? 120_000)
 };

@@ -1,22 +1,163 @@
-import { Agent } from '@earendil-works/pi-agent-core';
-import type { AgentEvent, AgentMessage } from '@earendil-works/pi-agent-core';
-import { openaiProvider } from '@earendil-works/pi-ai/providers/openai';
-import type { Model } from '@earendil-works/pi-ai';
+import { Agent } from "@earendil-works/pi-agent-core";
+import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
+import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
+import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
+import type { Model } from "@earendil-works/pi-ai";
 
-export type PiAgentAdapterConfig = { model: string; apiKey?: string; systemPrompt: string; requestTimeoutMs: number };
-export class PiAdapterError extends Error { constructor(readonly code: 'provider_not_configured' | 'model_not_found', message: string) { super(message); } }
+export type PiAgentAdapterConfig = {
+  provider: "anthropic" | "openai";
+  model: string;
+  openAiApiKey?: string;
+  anthropicAuthToken?: string;
+  anthropicBaseUrl?: string;
+  systemPrompt: string;
+  requestTimeoutMs: number;
+};
+export class PiAdapterError extends Error {
+  constructor(
+    readonly code: "provider_not_configured" | "model_not_found",
+    message: string,
+  ) {
+    super(message);
+  }
+}
 export class PiAgentAdapter {
+  private readonly agents = new Map<string, Agent>();
   constructor(private readonly config: PiAgentAdapterConfig) {}
-  async run(input: string, signal: AbortSignal, onEvent: (event: AgentEvent) => void | Promise<void>) {
-    if (!this.config.apiKey) throw new PiAdapterError('provider_not_configured', '未配置 OPENAI_API_KEY，无法调用模型。');
+  async run(
+    input: string,
+    conversationId: string,
+    signal: AbortSignal,
+    onEvent: (event: AgentEvent) => void | Promise<void>,
+  ) {
+    if (this.config.provider === "anthropic") {
+      return this.runAnthropic(input, conversationId, signal, onEvent);
+    }
+    if (!this.config.openAiApiKey)
+      throw new PiAdapterError(
+        "provider_not_configured",
+        "未配置 OPENAI_API_KEY，无法调用模型。",
+      );
     const provider = openaiProvider();
-    const model = provider.getModels().find((candidate) => candidate.id === this.config.model);
-    if (!model) throw new PiAdapterError('model_not_found', `OpenAI model 不受 Pi catalog 支持：${this.config.model}`);
-    const agent = new Agent({ initialState: { model: model as Model<any>, systemPrompt: this.config.systemPrompt, thinkingLevel: 'low', messages: [], tools: [] }, streamFn: (activeModel, context, options) => provider.streamSimple(activeModel as Model<'openai-responses'>, context, { ...options, apiKey: this.config.apiKey, signal: options?.signal, timeoutMs: this.config.requestTimeoutMs }) });
+    const model = provider
+      .getModels()
+      .find((candidate) => candidate.id === this.config.model);
+    if (!model)
+      throw new PiAdapterError(
+        "model_not_found",
+        `OpenAI model 不受 Pi catalog 支持：${this.config.model}`,
+      );
+    let agent = this.agents.get(conversationId);
+    if (!agent) {
+      agent = new Agent({
+        initialState: {
+          model: model as Model<any>,
+          systemPrompt: this.config.systemPrompt,
+          thinkingLevel: "low",
+          messages: [],
+          tools: [],
+        },
+        streamFn: (activeModel, context, options) =>
+          provider.streamSimple(
+            activeModel as Model<"openai-responses">,
+            context,
+            {
+              ...options,
+              apiKey: this.config.openAiApiKey,
+              signal: options?.signal,
+              timeoutMs: this.config.requestTimeoutMs,
+            },
+          ),
+      });
+      this.agents.set(conversationId, agent);
+    }
     const unsubscribe = agent.subscribe(onEvent);
     const abort = () => agent.abort();
-    signal.addEventListener('abort', abort, { once: true });
-    try { await agent.prompt(input); if (agent.state.errorMessage) throw new Error(agent.state.errorMessage); return agent.state.messages as AgentMessage[]; }
-    finally { signal.removeEventListener('abort', abort); unsubscribe(); }
+    signal.addEventListener("abort", abort, { once: true });
+    try {
+      await agent.prompt(input);
+      if (agent.state.errorMessage) throw new Error(agent.state.errorMessage);
+      return agent.state.messages as AgentMessage[];
+    } finally {
+      signal.removeEventListener("abort", abort);
+      unsubscribe();
+    }
+  }
+
+  private async runAnthropic(
+    input: string,
+    conversationId: string,
+    signal: AbortSignal,
+    onEvent: (event: AgentEvent) => void | Promise<void>,
+  ) {
+    if (!this.config.anthropicAuthToken)
+      throw new PiAdapterError(
+        "provider_not_configured",
+        "未配置 ANTHROPIC_AUTH_TOKEN，无法调用模型。",
+      );
+    const provider = anthropicProvider();
+    const catalogModel = provider
+      .getModels()
+      .find((candidate) => candidate.id === this.config.model);
+    // Anthropic-compatible gateways may expose models outside Pi's first-party
+    // catalog. Keep the catalog's capability metadata while sending the
+    // configured model id to the gateway.
+    const fallbackModel =
+      provider
+        .getModels()
+        .find((candidate) => candidate.id === "claude-sonnet-4-20250514") ??
+      provider.getModels()[0];
+    if (!catalogModel && !fallbackModel)
+      throw new PiAdapterError(
+        "model_not_found",
+        "Pi 的 Anthropic model catalog 为空。",
+      );
+    const model = {
+      ...(catalogModel ?? fallbackModel),
+      ...(catalogModel
+        ? {}
+        : { id: this.config.model, name: this.config.model }),
+      ...(this.config.anthropicBaseUrl
+        ? { baseUrl: this.config.anthropicBaseUrl }
+        : {}),
+    };
+    let agent = this.agents.get(conversationId);
+    if (!agent) {
+      agent = new Agent({
+        initialState: {
+          model: model as Model<any>,
+          systemPrompt: this.config.systemPrompt,
+          thinkingLevel: "low",
+          messages: [],
+          tools: [],
+        },
+        streamFn: (activeModel, context, options) =>
+          provider.streamSimple(
+            activeModel as Model<"anthropic-messages">,
+            context,
+            {
+              ...options,
+              headers: {
+                ...options?.headers,
+                Authorization: `Bearer ${this.config.anthropicAuthToken}`,
+              },
+              signal: options?.signal,
+              timeoutMs: this.config.requestTimeoutMs,
+            },
+          ),
+      });
+      this.agents.set(conversationId, agent);
+    }
+    const unsubscribe = agent.subscribe(onEvent);
+    const abort = () => agent.abort();
+    signal.addEventListener("abort", abort, { once: true });
+    try {
+      await agent.prompt(input);
+      if (agent.state.errorMessage) throw new Error(agent.state.errorMessage);
+      return agent.state.messages as AgentMessage[];
+    } finally {
+      signal.removeEventListener("abort", abort);
+      unsubscribe();
+    }
   }
 }
