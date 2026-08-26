@@ -1,0 +1,40 @@
+flowchart LR
+  subgraph Client["Antler Desktop"]
+    UI["React / Tauri UI"]
+  end
+
+  subgraph Backend["Node.js local companion service"]
+    API["Fastify REST + SSE"]
+    Host["AntlerHostRuntime"]
+    Pi["PiAgentAdapter / Pi Agent Core"]
+    Tool["knowledge_search tool"]
+    Retrieval["RetrievalService"]
+    Ingestion["IngestionService"]
+    Worker["Local indexing worker"]
+    Embed["EmbeddingProvider"]
+    Metadata["KnowledgeRepository"]
+    Index["RetrievalIndex"]
+  end
+
+  subgraph Persistence["Application data directory"]
+    SQLite[("SQLite: collections, sources, jobs, active versions")]
+    Lance[("LanceDB: chunks, vectors, FTS")]
+  end
+
+  Sources["Workspace files / imported documents"]
+  Provider["Embedding API or local model"]
+
+  UI --> API --> Host --> Pi
+  Pi --> Tool --> Retrieval
+  Retrieval --> Metadata --> SQLite
+  Retrieval --> Index --> Lance
+  Retrieval --> Embed --> Provider
+  Tool --> Pi
+  Host --> API --> UI
+
+  UI --> API --> Ingestion --> Worker
+  Sources --> Worker
+  Worker --> Embed
+  Worker --> Metadata
+  Worker --> Index
+
