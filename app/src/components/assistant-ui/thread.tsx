@@ -169,7 +169,7 @@ function Composer({ model }: { model: string }) {
           <AuiIf condition={(s) => !s.thread.isRunning}>
             <ComposerPrimitive.Send
               aria-label="发送消息"
-              className="grid size-7 place-items-center rounded-full bg-[#939393] text-background hover:bg-[#777] disabled:cursor-not-allowed disabled:opacity-100"
+              className="grid size-7 place-items-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-100"
             >
               <ArrowUpIcon className="size-4" />
             </ComposerPrimitive.Send>
