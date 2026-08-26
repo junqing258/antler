@@ -319,6 +319,7 @@ function Chat({
   onRenameThread,
   onDeleteThread,
   providerConfig,
+  onModelChange,
   onOpenSettings,
   onConversationSaved,
 }: {
@@ -331,6 +332,7 @@ function Chat({
   onRenameThread: (conversation: Conversation) => void;
   onDeleteThread: (conversation: Conversation) => void;
   providerConfig: ProviderConfig;
+  onModelChange: (model: string) => void;
   onOpenSettings: (tab?: SettingsTab) => void;
   onConversationSaved: () => void;
 }) {
@@ -408,7 +410,12 @@ function Chat({
           </div>
         </aside>
         <section className="chat-panel">
-          <AssistantThread model={providerConfig.model} title={title} />
+          <AssistantThread
+            model={providerConfig.model}
+            models={providerConfig.models}
+            title={title}
+            onModelChange={onModelChange}
+          />
         </section>
       </main>
     </AssistantRuntimeProvider>
@@ -488,6 +495,13 @@ function App() {
     setProviderConfig(next);
     setSettingsOpen(false);
   };
+  const selectModel = (model: string) => {
+    if (model === providerConfig.model || !providerConfig.models.includes(model))
+      return;
+    const next = { ...providerConfig, model };
+    saveProviderConfig(next);
+    setProviderConfig(next);
+  };
   const openSettings = (tab: SettingsTab = "provider") => {
     setSettingsTab(tab);
     setSettingsOpen(true);
@@ -510,6 +524,7 @@ function App() {
           onRenameThread={renameThread}
           onDeleteThread={removeThread}
           providerConfig={providerConfig}
+          onModelChange={selectModel}
           onOpenSettings={openSettings}
           onConversationSaved={refreshConversations}
         />

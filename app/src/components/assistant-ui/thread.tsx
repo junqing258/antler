@@ -8,6 +8,7 @@ import {
   type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
+import { DropdownMenu } from "radix-ui";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -23,6 +24,7 @@ import {
   CloudSunIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  CheckIcon,
   CopyIcon,
   RefreshCwIcon,
   SearchIcon,
@@ -127,7 +129,62 @@ function UserMessage() {
   );
 }
 
-function Composer({ model }: { model: string }) {
+type ModelPickerProps = {
+  model: string;
+  models: string[];
+  onModelChange: (model: string) => void;
+};
+
+export function ModelPicker({
+  model,
+  models,
+  onModelChange,
+}: ModelPickerProps) {
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          className="model-picker"
+          type="button"
+          aria-label={`选择模型，当前模型 ${model}`}
+        >
+          <BotIcon />
+          <span>{model}</span>
+          <ChevronDownIcon />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          className="model-picker-content"
+          side="top"
+          align="start"
+          sideOffset={8}
+          collisionPadding={8}
+        >
+          <DropdownMenu.Label className="model-picker-label">
+            选择模型
+          </DropdownMenu.Label>
+          <DropdownMenu.RadioGroup value={model} onValueChange={onModelChange}>
+            {models.map((candidate) => (
+              <DropdownMenu.RadioItem
+                className="model-picker-item"
+                key={candidate}
+                value={candidate}
+              >
+                <span>{candidate}</span>
+                <DropdownMenu.ItemIndicator className="model-picker-indicator">
+                  <CheckIcon aria-hidden="true" />
+                </DropdownMenu.ItemIndicator>
+              </DropdownMenu.RadioItem>
+            ))}
+          </DropdownMenu.RadioGroup>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+function Composer(props: ModelPickerProps) {
   return (
     <ComposerPrimitive.Root className="aui-composer mx-auto w-full max-w-175.5 rounded-[23px] border border-[#e8e8e8] bg-background px-4 pt-3 pb-2 shadow-[0_1px_2px_rgba(0,0,0,.02)] focus-within:border-[#dadada]">
       <ComposerPrimitive.Input
@@ -144,11 +201,7 @@ function Composer({ model }: { model: string }) {
           >
             <PlusIcon />
           </button>
-          <button className="model-picker" type="button">
-            <BotIcon />
-            <span>{model}</span>
-            <ChevronDownIcon />
-          </button>
+          <ModelPicker {...props} />
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -180,14 +233,14 @@ function Composer({ model }: { model: string }) {
   );
 }
 
-function Welcome({ model }: { model: string }) {
+function Welcome(props: ModelPickerProps) {
   return (
     <div className="aui-welcome flex min-h-[calc(100svh-47px)] flex-col items-center justify-center px-4 text-center">
       <p className="m-0 text-[24px] font-semibold tracking-[-1px] text-foreground">
         How can I help you today?
       </p>
       <div className="mt-6 w-full">
-        <Composer model={model} />
+        <Composer {...props} />
       </div>
       {/* <div className="mt-4 flex flex-wrap justify-center gap-2">
         <Suggestion icon={<CloudSunIcon />} label="Weather" />
@@ -209,7 +262,12 @@ function Suggestion({ icon, label }: { icon: ReactNode; label: string }) {
   );
 }
 
-export function AssistantThread({ model, title }: { model: string; title: string }) {
+export function AssistantThread({
+  model,
+  models,
+  title,
+  onModelChange,
+}: ModelPickerProps & { title: string }) {
   return (
     <ThreadPrimitive.Root className="aui-thread-root flex h-full min-h-0 flex-col bg-background">
       <header className="chat-header">
@@ -221,7 +279,11 @@ export function AssistantThread({ model, title }: { model: string; title: string
       </header>
       <ThreadPrimitive.Viewport className="aui-thread-viewport flex min-h-0 flex-1 flex-col overflow-y-auto">
         <AuiIf condition={(s) => s.thread.isEmpty}>
-          <Welcome model={model} />
+          <Welcome
+            model={model}
+            models={models}
+            onModelChange={onModelChange}
+          />
         </AuiIf>
         <ThreadPrimitive.Messages
           components={{ AssistantMessage, UserMessage }}
@@ -231,7 +293,11 @@ export function AssistantThread({ model, title }: { model: string; title: string
             <ThreadPrimitive.ScrollToBottom className="aui-scroll-to-bottom absolute bottom-20 right-4 grid size-8 place-items-center rounded-full border bg-background text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground">
               <ArrowDownIcon className="size-4" />
             </ThreadPrimitive.ScrollToBottom>
-            <Composer model={model} />
+            <Composer
+              model={model}
+              models={models}
+              onModelChange={onModelChange}
+            />
             <p className="mt-2 text-center text-xs text-muted-foreground">
               Antler can make mistakes. Check important results.
             </p>
