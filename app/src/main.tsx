@@ -7,6 +7,7 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 import { invoke } from "@tauri-apps/api/core";
+import { BrowserRouter, useSearchParams } from "react-router";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { AssistantThread } from "@/components/assistant-ui/thread";
 import { useAntlerRuntime } from "@/components/assistant-ui/use-antler-runtime";
@@ -44,16 +45,6 @@ async function serverInfo(): Promise<ServerInfo> {
 
 function newConversationId() {
   return crypto.randomUUID();
-}
-
-function getConversationIdFromUrl() {
-  return new URL(window.location.href).searchParams.get("conversationId");
-}
-
-function setConversationIdInUrl(conversationId: string, replace = false) {
-  const url = new URL(window.location.href);
-  url.searchParams.set("conversationId", conversationId);
-  window.history[replace ? "replaceState" : "pushState"]({}, "", url);
 }
 
 type SettingsTab = "provider" | "profile" | "about";
@@ -425,8 +416,9 @@ function Chat({
 }
 
 function App() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [conversationId, setConversationId] = useState(
-    () => getConversationIdFromUrl() ?? newConversationId(),
+    () => searchParams.get("conversationId") ?? newConversationId(),
   );
   const [initialMessages, setInitialMessages] = useState<
     ThreadMessageLike[] | null
@@ -442,8 +434,6 @@ function App() {
   }, []);
   useEffect(() => {
     let cancelled = false;
-    if (!getConversationIdFromUrl())
-      setConversationIdInUrl(conversationId, true);
     setInitialMessages(null);
     void ensureConversation(conversationId)
       .then((conversation) => {
@@ -461,22 +451,23 @@ function App() {
     };
   }, [conversationId, refreshConversations]);
   useEffect(() => {
-    const onPopState = () => {
-      const id = getConversationIdFromUrl() ?? newConversationId();
-      if (!getConversationIdFromUrl()) setConversationIdInUrl(id, true);
-      setConversationId(id);
-    };
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+    const urlConversationId = searchParams.get("conversationId");
+    if (urlConversationId) {
+      setConversationId((current) =>
+        current === urlConversationId ? current : urlConversationId,
+      );
+    } else {
+      setSearchParams({ conversationId }, { replace: true });
+    }
+  }, [searchParams, conversationId, setSearchParams]);
   const startNewThread = () => {
     const id = newConversationId();
-    setConversationIdInUrl(id);
+    setSearchParams({ conversationId: id });
     setConversationId(id);
   };
   const selectThread = (id: string) => {
     if (id === conversationId) return;
-    setConversationIdInUrl(id);
+    setSearchParams({ conversationId: id });
     setConversationId(id);
   };
   const renameThread = (conversation: Conversation) => {
@@ -537,6 +528,8 @@ function App() {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
   </StrictMode>,
 );
