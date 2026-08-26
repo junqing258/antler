@@ -209,12 +209,12 @@ function Suggestion({ icon, label }: { icon: ReactNode; label: string }) {
   );
 }
 
-export function AssistantThread({ model }: { model: string }) {
+export function AssistantThread({ model, title }: { model: string; title: string }) {
   return (
     <ThreadPrimitive.Root className="aui-thread-root flex h-full min-h-0 flex-col bg-background">
       <header className="chat-header">
         <PanelsTopLeftIcon />
-        <span>New Chat</span>
+        <span>{title}</span>
         <button type="button" aria-label="分享对话">
           <ShareIcon />
         </button>

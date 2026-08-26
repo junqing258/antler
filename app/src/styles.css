@@ -114,6 +114,8 @@ button {
 }
 .thread-history {
   margin-top: 15px;
+  min-height: 0;
+  overflow-y: auto;
 }
 .thread-history p {
   margin: 0 8px 10px;
@@ -121,20 +123,61 @@ button {
   font-size: 11px;
   font-weight: 500;
 }
-.thread-history button {
+.thread-history-item {
+  display: flex;
+  align-items: center;
+  padding: 2px 12px;
+  border-radius: 999px;
+}
+.thread-history-item:hover,
+.thread-history-item:has(.thread-history-select[aria-current="page"]) {
+  background: #f1f1f1;
+}
+.thread-history-select {
+  min-width: 0;
+  flex: 1;
   width: 100%;
-  padding: 2px 8px;
+  padding: 8px 0;
   border: 0;
   background: transparent;
   color: #222;
-  border-radius: 5px;
   font-size: 14px;
-  line-height: 1.35;
+  line-height: 1.5;
   text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
 }
-.thread-history button:hover {
-  background: #f1f1f1;
+.thread-history-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+.thread-history-item:hover .thread-history-actions,
+.thread-history-item:focus-within .thread-history-actions {
+  opacity: 1;
+}
+.thread-history-actions button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #777;
+  cursor: pointer;
+}
+.thread-history-actions button:hover {
+  background: #ddd;
+  color: #333;
+}
+.thread-history-actions svg {
+  width: 14px;
+  height: 14px;
 }
 .sidebar-footer {
   display: flex;

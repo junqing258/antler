@@ -1,9 +1,12 @@
 import {
   type ChatModelAdapter,
   type ThreadAssistantMessagePart,
+  type ThreadMessageLike,
   useLocalRuntime,
 } from "@assistant-ui/react";
+import { useEffect, useMemo } from "react";
 import type { ProviderConfig } from "@/lib/provider-config";
+import { saveConversationMessages } from "@/lib/conversation-store";
 
 type ServerInfo = { baseUrl: string; token: string };
 type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];
@@ -34,8 +37,10 @@ export function useAntlerRuntime(
   getServerInfo: () => Promise<ServerInfo>,
   conversationId: string,
   getProviderConfig: () => ProviderConfig,
+  initialMessages: ThreadMessageLike[],
+  onConversationSaved: () => void,
 ) {
-  const adapter: ChatModelAdapter = {
+  const adapter = useMemo<ChatModelAdapter>(() => ({
     async *run({ messages, abortSignal }) {
       const message = getText(messages.at(-1)!);
       if (!message.trim()) return;
@@ -206,6 +211,26 @@ export function useAntlerRuntime(
         if (cancel) abortSignal.removeEventListener("abort", cancel);
       }
     },
-  };
-  return useLocalRuntime(adapter);
+  }), [conversationId, getProviderConfig, getServerInfo]);
+  const runtime = useLocalRuntime(adapter, { initialMessages });
+
+  useEffect(() => {
+    let timeout: number | undefined;
+    const persist = () => {
+      const messages = runtime.thread.getState().messages as ThreadMessageLike[];
+      void saveConversationMessages(conversationId, messages).then(onConversationSaved);
+    };
+    const schedulePersist = () => {
+      window.clearTimeout(timeout);
+      timeout = window.setTimeout(persist, 250);
+    };
+    const unsubscribe = runtime.thread.subscribe(schedulePersist);
+    return () => {
+      window.clearTimeout(timeout);
+      unsubscribe();
+      persist();
+    };
+  }, [conversationId, onConversationSaved, runtime]);
+
+  return runtime;
 }

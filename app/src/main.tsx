@@ -1,11 +1,13 @@
-import { StrictMode, useState, type FormEvent } from 'react';
+import { StrictMode, useCallback, useEffect, useState, type FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { invoke } from '@tauri-apps/api/core';
 import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import { AssistantThread } from '@/components/assistant-ui/thread';
 import { useAntlerRuntime } from '@/components/assistant-ui/use-antler-runtime';
 import { defaultProviderConfig, loadProviderConfig, saveProviderConfig, type ProviderConfig } from '@/lib/provider-config';
-import { PlusIcon, SettingsIcon, XIcon } from 'lucide-react';
+import { deleteConversation, ensureConversation, listConversations, renameConversation, type Conversation } from '@/lib/conversation-store';
+import type { ThreadMessageLike } from '@assistant-ui/react';
+import { PencilIcon, PlusIcon, SettingsIcon, Trash2Icon, XIcon } from 'lucide-react';
 import './styles.css';
 
 type ServerInfo = { baseUrl: string; token: string };
@@ -17,6 +19,16 @@ async function serverInfo(): Promise<ServerInfo> {
 
 function newConversationId() {
   return crypto.randomUUID();
+}
+
+function getConversationIdFromUrl() {
+  return new URL(window.location.href).searchParams.get('conversationId');
+}
+
+function setConversationIdInUrl(conversationId: string, replace = false) {
+  const url = new URL(window.location.href);
+  url.searchParams.set('conversationId', conversationId);
+  window.history[replace ? 'replaceState' : 'pushState']({}, '', url);
 }
 
 function SettingsDialog({ config, onSave, onClose }: { config: ProviderConfig; onSave: (config: ProviderConfig) => void; onClose: () => void }) {
@@ -51,8 +63,8 @@ function SettingsDialog({ config, onSave, onClose }: { config: ProviderConfig; o
   </div>;
 }
 
-function Chat({ conversationId, onNewThread, providerConfig, onOpenSettings }: { conversationId: string; onNewThread: () => void; providerConfig: ProviderConfig; onOpenSettings: () => void }) {
-  const runtime = useAntlerRuntime(serverInfo, conversationId, () => providerConfig);
+function Chat({ conversationId, initialMessages, title, conversations, onNewThread, onSelectThread, onRenameThread, onDeleteThread, providerConfig, onOpenSettings, onConversationSaved }: { conversationId: string; initialMessages: ThreadMessageLike[]; title: string; conversations: Conversation[]; onNewThread: () => void; onSelectThread: (id: string) => void; onRenameThread: (conversation: Conversation) => void; onDeleteThread: (conversation: Conversation) => void; providerConfig: ProviderConfig; onOpenSettings: () => void; onConversationSaved: () => void }) {
+  const runtime = useAntlerRuntime(serverInfo, conversationId, () => providerConfig, initialMessages, onConversationSaved);
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
@@ -62,7 +74,7 @@ function Chat({ conversationId, onNewThread, providerConfig, onOpenSettings }: {
           <button className="new-thread" type="button" onClick={onNewThread}><PlusIcon aria-hidden="true" />New Thread</button>
           <nav className="thread-history" aria-label="Chat history">
             <p>Earlier</p>
-            <button type="button">User Greeting</button>
+            {conversations.map((conversation) => <div className="thread-history-item" key={conversation.id}><button className="thread-history-select" type="button" aria-current={conversation.id === conversationId ? 'page' : undefined} onClick={() => onSelectThread(conversation.id)}>{conversation.title}</button><div className="thread-history-actions"><button type="button" aria-label={`重命名 ${conversation.title}`} onClick={() => onRenameThread(conversation)}><PencilIcon /></button><button type="button" aria-label={`删除 ${conversation.title}`} onClick={() => onDeleteThread(conversation)}><Trash2Icon /></button></div></div>)}
           </nav>
           <div className="sidebar-footer">
             <button className="user-center" type="button" aria-label="用户中心">
@@ -72,21 +84,73 @@ function Chat({ conversationId, onNewThread, providerConfig, onOpenSettings }: {
             <button className="settings-center" type="button" aria-label="设置中心" onClick={onOpenSettings}><SettingsIcon /></button>
           </div>
         </aside>
-        <section className="chat-panel"><AssistantThread model={providerConfig.model} /></section>
+        <section className="chat-panel"><AssistantThread model={providerConfig.model} title={title} /></section>
       </main>
     </AssistantRuntimeProvider>
   );
 }
 
 function App() {
-  const [conversationId, setConversationId] = useState(newConversationId);
+  const [conversationId, setConversationId] = useState(() => getConversationIdFromUrl() ?? newConversationId());
+  const [initialMessages, setInitialMessages] = useState<ThreadMessageLike[] | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [providerConfig, setProviderConfig] = useState(loadProviderConfig);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const startNewThread = () => setConversationId(newConversationId());
+  const refreshConversations = useCallback(() => {
+    void listConversations().then(setConversations).catch(() => setConversations([]));
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    if (!getConversationIdFromUrl()) setConversationIdInUrl(conversationId, true);
+    setInitialMessages(null);
+    void ensureConversation(conversationId)
+      .then((conversation) => {
+        if (cancelled) return;
+        setInitialMessages(conversation.messages);
+        refreshConversations();
+      })
+      // IndexedDB can be disabled by a browser policy. Keep chat usable even
+      // though persistence is unavailable in that environment.
+      .catch(() => {
+        if (!cancelled) setInitialMessages([]);
+      });
+    return () => { cancelled = true; };
+  }, [conversationId, refreshConversations]);
+  useEffect(() => {
+    const onPopState = () => {
+      const id = getConversationIdFromUrl() ?? newConversationId();
+      if (!getConversationIdFromUrl()) setConversationIdInUrl(id, true);
+      setConversationId(id);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+  const startNewThread = () => {
+    const id = newConversationId();
+    setConversationIdInUrl(id);
+    setConversationId(id);
+  };
+  const selectThread = (id: string) => {
+    if (id === conversationId) return;
+    setConversationIdInUrl(id);
+    setConversationId(id);
+  };
+  const renameThread = (conversation: Conversation) => {
+    const title = window.prompt('会话名称', conversation.title)?.trim();
+    if (!title || title === conversation.title) return;
+    void renameConversation(conversation.id, title).then(refreshConversations);
+  };
+  const removeThread = (conversation: Conversation) => {
+    if (!window.confirm(`删除会话“${conversation.title}”？此操作无法撤销。`)) return;
+    void deleteConversation(conversation.id).then(() => {
+      refreshConversations();
+      if (conversation.id === conversationId) startNewThread();
+    });
+  };
   const saveSettings = (next: ProviderConfig) => { saveProviderConfig(next); setProviderConfig(next); setSettingsOpen(false); };
 
-  // Remounting clears the local view; every turn in this thread keeps its backend session id.
-  return <><Chat key={conversationId} conversationId={conversationId} onNewThread={startNewThread} providerConfig={providerConfig} onOpenSettings={() => setSettingsOpen(true)} />{settingsOpen && <SettingsDialog config={providerConfig} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />}</>;
+  const activeConversation = conversations.find((conversation) => conversation.id === conversationId);
+  return <>{initialMessages && <Chat key={conversationId} conversationId={conversationId} initialMessages={initialMessages} title={activeConversation?.title ?? 'New Chat'} conversations={conversations} onNewThread={startNewThread} onSelectThread={selectThread} onRenameThread={renameThread} onDeleteThread={removeThread} providerConfig={providerConfig} onOpenSettings={() => setSettingsOpen(true)} onConversationSaved={refreshConversations} />}{settingsOpen && <SettingsDialog config={providerConfig} onSave={saveSettings} onClose={() => setSettingsOpen(false)} />}</>;
 }
 
 createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
