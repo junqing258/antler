@@ -129,7 +129,7 @@ function UserMessage() {
 
 function Composer({ model }: { model: string }) {
   return (
-    <ComposerPrimitive.Root className="aui-composer mx-auto w-full max-w-[702px] rounded-[23px] border border-[#e8e8e8] bg-background px-4 pt-3 pb-2 shadow-[0_1px_2px_rgba(0,0,0,.02)] focus-within:border-[#dadada]">
+    <ComposerPrimitive.Root className="aui-composer mx-auto w-full max-w-175.5 rounded-[23px] border border-[#e8e8e8] bg-background px-4 pt-3 pb-2 shadow-[0_1px_2px_rgba(0,0,0,.02)] focus-within:border-[#dadada]">
       <ComposerPrimitive.Input
         aria-label="消息"
         className="block min-h-[37px] max-h-24 w-full resize-none bg-transparent py-0 text-[14px] leading-5 outline-none placeholder:text-[#afafaf]"
@@ -161,7 +161,7 @@ function Composer({ model }: { model: string }) {
           <AuiIf condition={(s) => s.thread.isRunning}>
             <ComposerPrimitive.Cancel
               aria-label="停止生成"
-              className="grid size-7 place-items-center rounded-full bg-[#242424] text-background hover:opacity-90"
+              className="grid size-7 place-items-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
             >
               <SquareIcon className="size-2.5 fill-current" />
             </ComposerPrimitive.Cancel>

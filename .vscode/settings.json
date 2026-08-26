@@ -1,3 +1,4 @@
 {
+  "tailwindCSS.lint.suggestCanonicalClasses": "ignore",
   "rust-analyzer.linkedProjects": ["app/src-tauri/Cargo.toml"]
 }

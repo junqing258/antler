@@ -5,7 +5,7 @@ import { AssistantRuntimeProvider } from '@assistant-ui/react';
 import { AssistantThread } from '@/components/assistant-ui/thread';
 import { useAntlerRuntime } from '@/components/assistant-ui/use-antler-runtime';
 import { defaultProviderConfig, loadProviderConfig, saveProviderConfig, type ProviderConfig } from '@/lib/provider-config';
-import { MessageSquareMoreIcon, PlusIcon, SettingsIcon, XIcon } from 'lucide-react';
+import { PlusIcon, SettingsIcon, XIcon } from 'lucide-react';
 import './styles.css';
 
 type ServerInfo = { baseUrl: string; token: string };
@@ -58,7 +58,7 @@ function Chat({ conversationId, onNewThread, providerConfig, onOpenSettings }: {
     <AssistantRuntimeProvider runtime={runtime}>
       <main className="app-shell">
         <aside className="app-sidebar">
-          <div className="brand"><MessageSquareMoreIcon aria-hidden="true" /><span>assistant-ui</span></div>
+          <div className="brand"><img className="brand-logo" src="/favicon.png" alt="" /><span>Antler</span></div>
           <button className="new-thread" type="button" onClick={onNewThread}><PlusIcon aria-hidden="true" />New Thread</button>
           <nav className="thread-history" aria-label="Chat history">
             <p>Earlier</p>
@@ -67,7 +67,7 @@ function Chat({ conversationId, onNewThread, providerConfig, onOpenSettings }: {
           <div className="sidebar-footer">
             <button className="user-center" type="button" aria-label="用户中心">
               <span className="user-avatar">U</span>
-              <span className="user-details"><strong>Unsloth</strong><small>Unsloth</small></span>
+              <span className="user-details"><strong>User</strong><small>User</small></span>
             </button>
             <button className="settings-center" type="button" aria-label="设置中心" onClick={onOpenSettings}><SettingsIcon /></button>
           </div>

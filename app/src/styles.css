@@ -26,15 +26,15 @@
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
+  --primary: #16bb91;
+  --primary-foreground: #fff;
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: #16bb91;
   --radius: 0.625rem;
 }
 
@@ -81,10 +81,11 @@ button {
   font-weight: 650;
   letter-spacing: -0.4px;
 }
-.brand svg {
-  width: 20px;
-  height: 20px;
-  stroke-width: 2.6;
+.brand-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: contain;
 }
 .new-thread {
   display: flex;
@@ -164,7 +165,7 @@ button {
   height: 30px;
   place-items: center;
   border-radius: 50%;
-  background: #16bb91;
+  background: var(--primary);
   color: #fff;
   font-size: 14px;
   font-weight: 500;
@@ -228,7 +229,7 @@ button {
 .settings-heading svg { width: 17px; height: 17px; }
 .settings-dialog label { display: grid; gap: 7px; color: #4b4b4b; font-size: 12px; font-weight: 600; }
 .settings-dialog input, .settings-dialog select { width: 100%; height: 36px; padding: 0 10px; border: 1px solid #ddd; border-radius: 7px; background: #fff; color: #222; font: inherit; font-size: 13px; outline: none; }
-.settings-dialog input:focus, .settings-dialog select:focus { border-color: #999; box-shadow: 0 0 0 3px rgb(0 0 0 / 5%); }
+.settings-dialog input:focus, .settings-dialog select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgb(22 187 145 / 15%); }
 .provider-models { display: grid; gap: 7px; color: #4b4b4b; font-size: 12px; font-weight: 600; }
 .provider-model-list { display: grid; overflow: hidden; border: 1px solid #ddd; border-radius: 7px; }
 .provider-model-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 35px; padding: 0 9px; border-bottom: 1px solid #eee; font-weight: 400; }
@@ -242,7 +243,7 @@ button {
 .provider-model-add button { flex: 0 0 auto; height: 36px; padding: 0 10px; border: 1px solid #ddd; border-radius: 7px; background: #fff; color: #333; font-size: 12px; cursor: pointer; }
 .settings-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 3px; }
 .settings-actions button { height: 34px; padding: 0 12px; border: 1px solid #ddd; border-radius: 7px; background: #fff; color: #333; font-size: 13px; cursor: pointer; }
-.settings-actions .settings-save { border-color: #242424; background: #242424; color: #fff; }
+.settings-actions .settings-save { border-color: var(--primary); background: var(--primary); color: var(--primary-foreground); }
 .chat-panel {
   min-width: 0;
   flex: 1;
@@ -416,13 +417,13 @@ button {
   font-weight: 650;
 }
 .aui-assistant-message .aui-md a {
-  color: #2563eb;
+  color: var(--primary);
   text-decoration: underline;
-  text-decoration-color: #bfdbfe;
+  text-decoration-color: rgb(22 187 145 / 35%);
   text-underline-offset: 3px;
 }
 .aui-assistant-message .aui-md a:hover {
-  color: #1d4ed8;
+  color: #109a76;
   text-decoration-color: currentColor;
 }
 .aui-assistant-message .aui-md :not(pre) > code {
