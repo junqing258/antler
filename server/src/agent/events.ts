@@ -8,6 +8,7 @@ export type RunStatus =
 export type RunEventType =
   | "run.started"
   | "assistant.delta"
+  | "assistant.thinking.delta"
   | "step.started"
   | "step.completed"
   | "tool.approval_required"

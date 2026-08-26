@@ -4,6 +4,8 @@ import {
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  type ReasoningMessagePartProps,
+  type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import {
@@ -20,8 +22,11 @@ import {
   ShareIcon,
   CloudSunIcon,
   ChevronDownIcon,
+  ChevronRightIcon,
   CopyIcon,
   RefreshCwIcon,
+  SearchIcon,
+  WrenchIcon,
   SquareIcon,
 } from "lucide-react";
 import remarkGfm from "remark-gfm";
@@ -36,10 +41,60 @@ function MarkdownText() {
   );
 }
 
+function Reasoning({ text, status }: ReasoningMessagePartProps) {
+  return (
+    <details className="agent-activity" open={status.type === "running"}>
+      <summary>
+        <LightbulbIcon aria-hidden="true" />
+        <span>{status.type === "running" ? "正在思考" : "思考过程"}</span>
+        <ChevronRightIcon className="agent-activity-chevron" aria-hidden="true" />
+      </summary>
+      <div className="agent-activity-content whitespace-pre-wrap">{text}</div>
+    </details>
+  );
+}
+
+function ToolCall({ toolName, args, result, isError }: ToolCallMessagePartProps) {
+  const isRunning = result === undefined;
+  const query =
+    args && typeof args === "object" && "query" in args
+      ? String(args.query ?? "")
+      : "";
+  return (
+    <details className="agent-activity agent-tool-call" open={isRunning}>
+      <summary>
+        {toolName.toLowerCase().includes("search") ? (
+          <SearchIcon aria-hidden="true" />
+        ) : (
+          <WrenchIcon aria-hidden="true" />
+        )}
+        <span>
+          {isRunning
+            ? `正在调用 ${toolName}`
+            : isError
+              ? `${toolName} 调用失败`
+              : `${toolName} 调用完成`}
+        </span>
+        <ChevronRightIcon className="agent-activity-chevron" aria-hidden="true" />
+      </summary>
+      <div className="agent-activity-content">
+        {query && <p className="m-0">查询：{query}</p>}
+        {!query && <pre>{JSON.stringify(args, null, 2)}</pre>}
+      </div>
+    </details>
+  );
+}
+
 function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="aui-assistant-message group relative mx-auto w-full max-w-3xl px-4 py-6 md:px-6">
-      <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
+      <MessagePrimitive.Parts
+        components={{
+          Text: MarkdownText,
+          Reasoning,
+          tools: { Fallback: ToolCall },
+        }}
+      />
       <ActionBarPrimitive.Root
         hideWhenRunning
         autohide="not-last"

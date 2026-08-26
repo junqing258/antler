@@ -317,6 +317,57 @@ button {
 .aui-md > :last-child {
   margin-bottom: 0;
 }
+.agent-activity {
+  width: 100%;
+  margin: 0 0 10px;
+  border: 1px solid #e9e9e9;
+  border-radius: 10px;
+  background: #fcfcfc;
+  color: #656565;
+  font-size: 13px;
+}
+.agent-activity summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  color: #4c4c4c;
+  font-weight: 500;
+  cursor: pointer;
+  list-style: none;
+}
+.agent-activity summary::-webkit-details-marker {
+  display: none;
+}
+.agent-activity summary > svg:first-child {
+  width: 15px;
+  height: 15px;
+  color: #777;
+}
+.agent-activity-chevron {
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+  transition: transform 150ms ease;
+}
+.agent-activity[open] .agent-activity-chevron {
+  transform: rotate(90deg);
+}
+.agent-activity-content {
+  max-height: 260px;
+  overflow: auto;
+  border-top: 1px solid #eeeeee;
+  padding: 10px 12px 12px;
+  color: #686868;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.agent-activity-content pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 @media (max-width: 800px) {
   .app-sidebar {

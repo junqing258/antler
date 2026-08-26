@@ -123,6 +123,14 @@ export class AntlerHostRuntime {
         runId,
         delta: event.assistantMessageEvent.delta,
       });
+    else if (
+      event.type === "message_update" &&
+      event.assistantMessageEvent.type === "thinking_delta"
+    )
+      this.emit(active, "assistant.thinking.delta", {
+        runId,
+        delta: event.assistantMessageEvent.delta,
+      });
     else if (event.type === "turn_start")
       this.emit(active, "step.started", {
         runId,
@@ -141,6 +149,7 @@ export class AntlerHostRuntime {
         stepId: event.toolCallId,
         kind: "tool",
         tool: event.toolName,
+        args: event.args,
       });
     else if (event.type === "tool_execution_end")
       this.emit(active, "tool.completed", {
@@ -148,6 +157,8 @@ export class AntlerHostRuntime {
         stepId: event.toolCallId,
         tool: event.toolName,
         summary: event.isError ? "工具执行失败。" : "工具执行完成。",
+        result: event.result,
+        isError: event.isError,
       });
   }
   private finish(
