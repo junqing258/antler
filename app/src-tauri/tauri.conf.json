@@ -16,7 +16,7 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../../server/dist/": "server/"
+      "../../backend/dist/": "backend/"
     }
   }
 }

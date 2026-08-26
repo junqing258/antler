@@ -133,7 +133,7 @@ run 状态机一次到位：`queued -> running -> awaiting_approval -> running -
 
 ### P0：兼容性 Spike（半天）
 
-1. 在 `server` 安装并锁定 Pi Core 与 pi-ai 版本；记录 Node 版本要求与选定 provider。
+1. 在 `backend` 安装并锁定 Pi Core 与 pi-ai 版本；记录 Node 版本要求与选定 provider。
 2. 建立最小 `PiAgentAdapter`：固定 system prompt、一个模型、无工具、单 prompt 流式输出。
 3. 将 Pi text delta 映射为现有 SSE 占位事件，保留 `/health` 与本地令牌行为。
 4. 编写一个真实 provider 的手工验收脚本；API key 仅来自环境变量，不写入仓库或 SQLite。
@@ -180,7 +180,7 @@ run 状态机一次到位：`queued -> running -> awaiting_approval -> running -
 ## 5. 文件落点与依赖顺序
 
 ```
-server/src/
+backend/src/
 ├── agent/
 │   ├── pi-agent-adapter.ts
 │   ├── host-runtime.ts

@@ -18,7 +18,7 @@ fn main() {
     let app = tauri::Builder::default()
         .setup(move |app| {
             let server_script = app.path()
-                .resolve("server/index.js", BaseDirectory::Resource)
+                .resolve("backend/index.js", BaseDirectory::Resource)
                 .expect("无法定位打包的本地服务");
             let child = Command::new("node")
                 .arg(server_script)

@@ -66,7 +66,7 @@ antler/
 │   ├── src/            # React 源码
 │   ├── src-tauri/      # Rust 壳
 │   └── package.json
-├── server/             # Node.js 后端
+├── backend/            # Node.js 后端
 │   ├── src/
 │   └── package.json
 ├── packages/           # 共享 (可选：类型、协议定义)
@@ -97,7 +97,7 @@ antler/
 采用 **Pi Agent Core + Antler Host Runtime**：
 
 - 使用 `@earendil-works/pi-agent-core` 作为 Agent loop：管理对话上下文、流式模型调用与工具执行循环。
-- `server` 内保留薄的 `AntlerHostRuntime`，负责 run 生命周期、工具策略与审批、取消、SQLite 持久化，以及将 Pi 事件投影为稳定的 SSE 领域事件。
+- `backend` 内保留薄的 `AntlerHostRuntime`，负责 run 生命周期、工具策略与审批、取消、SQLite 持久化，以及将 Pi 事件投影为稳定的 SSE 领域事件。
 - 使用 Pi 自带的 `@earendil-works/pi-ai` provider/model 适配；不再引入 Vercel AI SDK。
 - 不直接采用完整的 `pi-coding-agent`。它面向编码 Agent，包含默认 Bash/编辑工具、`~/.pi/agent` 配置发现和 JSONL 会话管理；这些默认行为不符合 Antler 的最小权限与 SQLite 记录边界。
 - 不使用已弃用的 `@mariozechner/pi-agent-core` 包；包已迁移至 `@earendil-works` 命名空间。
@@ -178,7 +178,7 @@ stateDiagram-v2
 ### 推荐的目录增量
 
 ```
-server/src/
+backend/src/
 ├── agent/
 │   ├── pi-agent-adapter.ts # Pi session、prompt 与事件订阅
 │   ├── host-runtime.ts     # run 生命周期与 Pi 事件映射
