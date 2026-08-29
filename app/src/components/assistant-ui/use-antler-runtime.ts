@@ -36,6 +36,7 @@ function getText(
 export function useAntlerRuntime(
   getServerInfo: () => Promise<ServerInfo>,
   conversationId: string,
+  workingDirectory: string,
   getProviderConfig: () => ProviderConfig,
   initialMessages: ThreadMessageLike[],
   onConversationSaved: () => void,
@@ -61,6 +62,7 @@ export function useAntlerRuntime(
           body: JSON.stringify({
             message,
             conversationId,
+            ...(workingDirectory.trim() ? { workingDirectory } : {}),
             // Keep the existing environment-variable setup usable until the
             // user has saved a local provider key.
             ...(provider.apiKey.trim()
@@ -211,7 +213,7 @@ export function useAntlerRuntime(
         if (cancel) abortSignal.removeEventListener("abort", cancel);
       }
     },
-  }), [conversationId, getProviderConfig, getServerInfo]);
+  }), [conversationId, getProviderConfig, getServerInfo, workingDirectory]);
   const runtime = useLocalRuntime(adapter, { initialMessages });
 
   useEffect(() => {

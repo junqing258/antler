@@ -9,11 +9,12 @@ import { PiAgentAdapter } from './agent/pi-agent-adapter.js';
 import { DEFAULT_SYSTEM_PROMPT } from './agent/system-prompt.js';
 import { registerRunRoutes } from './routes/runs.js';
 import type { ProviderRunConfig } from './agent/host-runtime.js';
+import { resolve } from 'node:path';
 
 export function createApp(config: AppConfig) {
   const app = Fastify({ logger: false });
   const adapters = new Map<string, PiAgentAdapter>();
-  const createAdapter = (provider?: ProviderRunConfig) => {
+  const createAdapter = (provider?: ProviderRunConfig, workingDirectory?: string) => {
     const runtimeConfig = provider
       ? {
           provider: provider.protocol === 'anthropic-messages' ? 'anthropic' as const : 'openai' as const,
@@ -31,10 +32,11 @@ export function createApp(config: AppConfig) {
           anthropicAuthToken: config.anthropicAuthToken,
           anthropicBaseUrl: config.anthropicBaseUrl,
         };
-    const key = JSON.stringify(runtimeConfig);
+    const workspaceRoot = resolve(workingDirectory ?? config.workspaceRoot);
+    const key = JSON.stringify({ ...runtimeConfig, workspaceRoot });
     let adapter = adapters.get(key);
     if (!adapter) {
-      adapter = new PiAgentAdapter({ ...runtimeConfig, tavilyApiKey: config.tavilyApiKey, workspaceRoot: config.workspaceRoot, requestTimeoutMs: config.maxRunDurationMs, systemPrompt: DEFAULT_SYSTEM_PROMPT });
+      adapter = new PiAgentAdapter({ ...runtimeConfig, tavilyApiKey: config.tavilyApiKey, workspaceRoot, requestTimeoutMs: config.maxRunDurationMs, systemPrompt: DEFAULT_SYSTEM_PROMPT });
       adapters.set(key, adapter);
     }
     return adapter;

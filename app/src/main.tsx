@@ -18,15 +18,23 @@ import {
   type ProviderConfig,
 } from "@/lib/provider-config";
 import {
+  createProject,
+  DEFAULT_PROJECT_ID,
   deleteConversation,
   ensureConversation,
   listConversations,
+  listProjects,
   renameConversation,
+  updateProject,
   type Conversation,
+  type Project,
 } from "@/lib/conversation-store";
 import type { ThreadMessageLike } from "@assistant-ui/react";
 import {
   CircleHelpIcon,
+  FolderCogIcon,
+  FolderIcon,
+  FolderPlusIcon,
   PencilIcon,
   PlusIcon,
   SettingsIcon,
@@ -48,6 +56,76 @@ function newConversationId() {
 }
 
 type SettingsTab = "provider" | "profile" | "about";
+
+function ProjectDialog({
+  project,
+  onSave,
+  onClose,
+}: {
+  project?: Project;
+  onSave: (values: { name: string; workingDirectory: string }) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(project?.name ?? "");
+  const [workingDirectory, setWorkingDirectory] = useState(
+    project?.workingDirectory ?? "",
+  );
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!name.trim()) return;
+    onSave({ name: name.trim(), workingDirectory: workingDirectory.trim() });
+  };
+
+  return (
+    <div className="project-backdrop" role="presentation" onMouseDown={onClose}>
+      <form
+        className="project-dialog"
+        aria-labelledby="project-dialog-title"
+        onSubmit={submit}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="project-dialog-heading">
+          <div>
+            <h2 id="project-dialog-title">
+              {project ? "Project settings" : "New project"}
+            </h2>
+            <p>Conversations in this project use the same working directory.</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close">
+            <XIcon />
+          </button>
+        </div>
+        <label>
+          Project name
+          <input
+            autoFocus
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="My project"
+          />
+        </label>
+        <label>
+          Working directory
+          <input
+            value={workingDirectory}
+            onChange={(event) => setWorkingDirectory(event.target.value)}
+            placeholder="/absolute/path/to/project"
+            spellCheck={false}
+          />
+          <small>
+            Leave empty to use the server default. The directory must already exist.
+          </small>
+        </label>
+        <div className="project-dialog-actions">
+          <button type="button" onClick={onClose}>Cancel</button>
+          <button className="project-dialog-save" type="submit" disabled={!name.trim()}>
+            {project ? "Save" : "Create project"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
 
 function SettingsDialog({
   config,
@@ -314,7 +392,12 @@ function Chat({
   initialMessages,
   title,
   conversations,
+  projects,
+  activeProject,
   onNewThread,
+  onNewProject,
+  onSelectProject,
+  onEditProject,
   onSelectThread,
   onRenameThread,
   onDeleteThread,
@@ -327,7 +410,12 @@ function Chat({
   initialMessages: ThreadMessageLike[];
   title: string;
   conversations: Conversation[];
+  projects: Project[];
+  activeProject: Project;
   onNewThread: () => void;
+  onNewProject: () => void;
+  onSelectProject: (project: Project) => void;
+  onEditProject: (project: Project) => void;
   onSelectThread: (id: string) => void;
   onRenameThread: (conversation: Conversation) => void;
   onDeleteThread: (conversation: Conversation) => void;
@@ -339,6 +427,7 @@ function Chat({
   const runtime = useAntlerRuntime(
     serverInfo,
     conversationId,
+    activeProject.workingDirectory,
     () => providerConfig,
     initialMessages,
     onConversationSaved,
@@ -356,38 +445,85 @@ function Chat({
             <PlusIcon aria-hidden="true" />
             New Thread
           </button>
-          <nav className="thread-history" aria-label="Chat history">
-            <p>Earlier</p>
-            {conversations.map((conversation) => (
-              <div className="thread-history-item mb-1" key={conversation.id}>
-                <button
-                  className="thread-history-select"
-                  type="button"
-                  aria-current={
-                    conversation.id === conversationId ? "page" : undefined
-                  }
-                  onClick={() => onSelectThread(conversation.id)}
-                >
-                  {conversation.title}
-                </button>
-                <div className="thread-history-actions ml-auto">
-                  <button
-                    type="button"
-                    aria-label={`重命名 ${conversation.title}`}
-                    onClick={() => onRenameThread(conversation)}
+          <nav className="project-history" aria-label="Projects and chat history">
+            <div className="project-history-title">
+              <span>Projects</span>
+              <button type="button" onClick={onNewProject} aria-label="New project">
+                <FolderPlusIcon />
+              </button>
+            </div>
+            {projects.map((project) => {
+              const projectConversations = conversations.filter(
+                (conversation) => conversation.projectId === project.id,
+              );
+              return (
+                <section className="project-group" key={project.id}>
+                  <div
+                    className="project-group-heading"
+                    data-active={project.id === activeProject.id || undefined}
                   >
-                    <PencilIcon />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`删除 ${conversation.title}`}
-                    onClick={() => onDeleteThread(conversation)}
-                  >
-                    <Trash2Icon />
-                  </button>
-                </div>
-              </div>
-            ))}
+                    <button
+                      className="project-select"
+                      type="button"
+                      onClick={() => onSelectProject(project)}
+                      title={project.workingDirectory || "Server default working directory"}
+                    >
+                      <FolderIcon aria-hidden="true" />
+                      <span>{project.name}</span>
+                    </button>
+                    <button
+                      className="project-settings"
+                      type="button"
+                      onClick={() => onEditProject(project)}
+                      aria-label={`Settings for ${project.name}`}
+                    >
+                      <FolderCogIcon />
+                    </button>
+                  </div>
+                  <div className="project-threads">
+                    {projectConversations.length === 0 && (
+                      <button
+                        className="project-empty"
+                        type="button"
+                        onClick={() => onSelectProject(project)}
+                      >
+                        Start a thread
+                      </button>
+                    )}
+                    {projectConversations.map((conversation) => (
+                      <div className="thread-history-item" key={conversation.id}>
+                        <button
+                          className="thread-history-select"
+                          type="button"
+                          aria-current={
+                            conversation.id === conversationId ? "page" : undefined
+                          }
+                          onClick={() => onSelectThread(conversation.id)}
+                        >
+                          {conversation.title}
+                        </button>
+                        <div className="thread-history-actions">
+                          <button
+                            type="button"
+                            aria-label={`重命名 ${conversation.title}`}
+                            onClick={() => onRenameThread(conversation)}
+                          >
+                            <PencilIcon />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`删除 ${conversation.title}`}
+                            onClick={() => onDeleteThread(conversation)}
+                          >
+                            <Trash2Icon />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
           </nav>
           <div className="sidebar-footer">
             <button
@@ -431,22 +567,39 @@ function App() {
     ThreadMessageLike[] | null
   >(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState(DEFAULT_PROJECT_ID);
+  const [projectDialog, setProjectDialog] = useState<
+    { project?: Project } | undefined
+  >();
   const [providerConfig, setProviderConfig] = useState(loadProviderConfig);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("provider");
-  const refreshConversations = useCallback(() => {
-    void listConversations()
-      .then(setConversations)
-      .catch(() => setConversations([]));
+  const refreshLibrary = useCallback(() => {
+    void Promise.all([listProjects(), listConversations()])
+      .then(([nextProjects, nextConversations]) => {
+        setProjects(nextProjects);
+        setConversations(nextConversations);
+      })
+      .catch(() => {
+        setProjects([]);
+        setConversations([]);
+      });
   }, []);
   useEffect(() => {
     let cancelled = false;
     setInitialMessages(null);
-    void ensureConversation(conversationId)
-      .then((conversation) => {
+    void ensureConversation(conversationId, activeProjectId)
+      .then(async (conversation) => {
+        const [nextProjects, nextConversations] = await Promise.all([
+          listProjects(),
+          listConversations(),
+        ]);
         if (cancelled) return;
+        setActiveProjectId(conversation.projectId);
+        setProjects(nextProjects);
+        setConversations(nextConversations);
         setInitialMessages(conversation.messages);
-        refreshConversations();
       })
       // IndexedDB can be disabled by a browser policy. Keep chat usable even
       // though persistence is unavailable in that environment.
@@ -456,7 +609,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [conversationId, refreshConversations]);
+  }, [conversationId]);
   useEffect(() => {
     const urlConversationId = searchParams.get("conversationId");
     if (urlConversationId) {
@@ -467,27 +620,49 @@ function App() {
       setSearchParams({ conversationId }, { replace: true });
     }
   }, [searchParams, conversationId, setSearchParams]);
-  const startNewThread = () => {
+  const startNewThread = (projectId = activeProjectId) => {
     const id = newConversationId();
+    setActiveProjectId(projectId);
     setSearchParams({ conversationId: id });
     setConversationId(id);
   };
   const selectThread = (id: string) => {
     if (id === conversationId) return;
+    const conversation = conversations.find((candidate) => candidate.id === id);
+    if (conversation) setActiveProjectId(conversation.projectId);
     setSearchParams({ conversationId: id });
     setConversationId(id);
+  };
+  const selectProject = (project: Project) => {
+    const latest = conversations.find(
+      (conversation) => conversation.projectId === project.id,
+    );
+    if (latest) selectThread(latest.id);
+    else startNewThread(project.id);
   };
   const renameThread = (conversation: Conversation) => {
     const title = window.prompt("会话名称", conversation.title)?.trim();
     if (!title || title === conversation.title) return;
-    void renameConversation(conversation.id, title).then(refreshConversations);
+    void renameConversation(conversation.id, title).then(refreshLibrary);
   };
   const removeThread = (conversation: Conversation) => {
     if (!window.confirm(`删除会话“${conversation.title}”？此操作无法撤销。`))
       return;
     void deleteConversation(conversation.id).then(() => {
-      refreshConversations();
-      if (conversation.id === conversationId) startNewThread();
+      refreshLibrary();
+      if (conversation.id === conversationId) startNewThread(conversation.projectId);
+    });
+  };
+  const saveProject = (values: { name: string; workingDirectory: string }) => {
+    const editedProject = projectDialog?.project;
+    const operation = editedProject
+      ? updateProject(editedProject.id, values)
+      : createProject(values.name, values.workingDirectory);
+    void operation.then((project) => {
+      setProjectDialog(undefined);
+      setActiveProjectId(project.id);
+      refreshLibrary();
+      if (!editedProject) startNewThread(project.id);
     });
   };
   const saveSettings = (next: ProviderConfig) => {
@@ -510,6 +685,15 @@ function App() {
   const activeConversation = conversations.find(
     (conversation) => conversation.id === conversationId,
   );
+  const activeProject =
+    projects.find((project) => project.id === activeProjectId) ??
+    ({
+      id: DEFAULT_PROJECT_ID,
+      name: "General",
+      workingDirectory: "",
+      createdAt: 0,
+      updatedAt: 0,
+    } satisfies Project);
   return (
     <>
       {initialMessages && (
@@ -519,14 +703,19 @@ function App() {
           initialMessages={initialMessages}
           title={activeConversation?.title ?? "New Chat"}
           conversations={conversations}
-          onNewThread={startNewThread}
+          projects={projects.length ? projects : [activeProject]}
+          activeProject={activeProject}
+          onNewThread={() => startNewThread()}
+          onNewProject={() => setProjectDialog({})}
+          onSelectProject={selectProject}
+          onEditProject={(project) => setProjectDialog({ project })}
           onSelectThread={selectThread}
           onRenameThread={renameThread}
           onDeleteThread={removeThread}
           providerConfig={providerConfig}
           onModelChange={selectModel}
           onOpenSettings={openSettings}
-          onConversationSaved={refreshConversations}
+          onConversationSaved={refreshLibrary}
         />
       )}
       {settingsOpen && (
@@ -535,6 +724,13 @@ function App() {
           initialTab={settingsTab}
           onSave={saveSettings}
           onClose={() => setSettingsOpen(false)}
+        />
+      )}
+      {projectDialog && (
+        <ProjectDialog
+          project={projectDialog.project}
+          onSave={saveProject}
+          onClose={() => setProjectDialog(undefined)}
         />
       )}
     </>

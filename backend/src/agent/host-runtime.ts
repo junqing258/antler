@@ -39,10 +39,18 @@ export class AntlerHostRuntime {
   private readonly runs = new Map<string, ActiveRun>();
   private readonly activeConversations = new Map<string, string>();
   constructor(
-    private readonly createAdapter: (config?: ProviderRunConfig) => PiAgentAdapter,
+    private readonly createAdapter: (
+      config?: ProviderRunConfig,
+      workingDirectory?: string,
+    ) => PiAgentAdapter,
     private readonly config: HostRuntimeConfig,
   ) {}
-  createRun(input: string, conversationId: string = randomUUID(), provider?: ProviderRunConfig): Run {
+  createRun(
+    input: string,
+    conversationId: string = randomUUID(),
+    provider?: ProviderRunConfig,
+    workingDirectory?: string,
+  ): Run {
     if (this.activeConversations.has(conversationId))
       throw new ConversationBusyError("conversation_busy");
     const now = new Date().toISOString();
@@ -58,7 +66,7 @@ export class AntlerHostRuntime {
       controller: new AbortController(),
       events: [],
       listeners: new Set(),
-      adapter: this.createAdapter(provider),
+      adapter: this.createAdapter(provider, workingDirectory),
     };
     this.runs.set(run.id, active);
     this.activeConversations.set(conversationId, run.id);

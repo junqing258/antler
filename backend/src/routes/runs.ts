@@ -5,6 +5,8 @@ import {
 } from "../agent/host-runtime.js";
 import { streamRun } from "../utils/sse.js";
 import type { ProviderRunConfig } from "../agent/host-runtime.js";
+import { statSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 
 function parseProvider(value: unknown): ProviderRunConfig | undefined {
   if (value === undefined) return undefined;
@@ -19,15 +21,31 @@ function parseProvider(value: unknown): ProviderRunConfig | undefined {
   return { protocol, apiKey: apiKey.trim(), model: model.trim(), ...(typeof baseUrl === "string" && baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}) };
 }
 
+function parseWorkingDirectory(value: unknown): string | undefined {
+  if (value === undefined || value === "") return undefined;
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("工作目录必须是非空字符串。");
+  }
+  const directory = value.trim();
+  if (!isAbsolute(directory)) throw new Error("工作目录必须使用绝对路径。");
+  try {
+    if (!statSync(directory).isDirectory()) throw new Error();
+  } catch {
+    throw new Error("工作目录不存在或不是文件夹。");
+  }
+  return resolve(directory);
+}
+
 export function registerRunRoutes(
   app: FastifyInstance,
   runtime: AntlerHostRuntime,
 ) {
   app.post("/api/runs", async (request, reply) => {
-    const { message, conversationId, provider } = (request.body ?? {}) as {
+    const { message, conversationId, provider, workingDirectory } = (request.body ?? {}) as {
       message?: unknown;
       conversationId?: unknown;
       provider?: unknown;
+      workingDirectory?: unknown;
     };
     if (
       typeof message !== "string" ||
@@ -39,14 +57,22 @@ export function registerRunRoutes(
         .code(400)
         .send({ error: "message 和 conversationId 均不能为空。" });
     try {
-      const run = runtime.createRun(message.trim(), conversationId, parseProvider(provider));
+      const run = runtime.createRun(
+        message.trim(),
+        conversationId,
+        parseProvider(provider),
+        parseWorkingDirectory(workingDirectory),
+      );
       return reply
         .code(202)
         .send({ runId: run.id, eventsUrl: `/api/runs/${run.id}/events` });
     } catch (error) {
       if (error instanceof ConversationBusyError)
         return reply.code(409).send({ error: "conversation_busy" });
-      if (error instanceof Error && error.message.startsWith("供应商配置"))
+      if (
+        error instanceof Error &&
+        (error.message.startsWith("供应商配置") || error.message.startsWith("工作目录"))
+      )
         return reply.code(400).send({ error: error.message });
       throw error;
     }
