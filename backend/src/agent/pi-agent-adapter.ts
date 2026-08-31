@@ -5,6 +5,9 @@ import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 import type { Model } from "@earendil-works/pi-ai";
 import { createTavilySearchTool } from "./tavily-search-tool.js";
 import { createWorkspaceTools } from "./workspace-tools.js";
+import type { SkillSnapshot } from "../skills/types.js";
+import { createSkillTools } from "../skills/skill-tools.js";
+import { composeSkillPrompt } from "../skills/skill-prompt.js";
 
 export type PiAgentAdapterConfig = {
   provider: "anthropic" | "openai";
@@ -27,22 +30,26 @@ export class PiAdapterError extends Error {
   }
 }
 export class PiAgentAdapter {
-  private readonly agents = new Map<string, Agent>();
+  private readonly agents = new Map<string, { agent: Agent; fingerprint: string }>();
   constructor(private readonly config: PiAgentAdapterConfig) {}
-  private tools() {
+  private tools(snapshot: SkillSnapshot) {
     return [
       ...createWorkspaceTools(this.config.workspaceRoot),
-      ...(this.config.tavilyApiKey ? [createTavilySearchTool(this.config.tavilyApiKey)] : []),
+      ...(this.config.tavilyApiKey
+        ? [createTavilySearchTool(this.config.tavilyApiKey)]
+        : []),
+      ...createSkillTools(snapshot),
     ];
   }
   async run(
     input: string,
     conversationId: string,
+    skillSnapshot: SkillSnapshot,
     signal: AbortSignal,
     onEvent: (event: AgentEvent) => void | Promise<void>,
   ) {
     if (this.config.provider === "anthropic") {
-      return this.runAnthropic(input, conversationId, signal, onEvent);
+      return this.runAnthropic(input, conversationId, skillSnapshot, signal, onEvent);
     }
     if (!this.config.openAiApiKey)
       throw new PiAdapterError(
@@ -60,17 +67,20 @@ export class PiAgentAdapter {
       );
     const model = {
       ...catalogModel,
-      ...(this.config.openAiBaseUrl ? { baseUrl: this.config.openAiBaseUrl } : {}),
+      ...(this.config.openAiBaseUrl
+        ? { baseUrl: this.config.openAiBaseUrl }
+        : {}),
     };
-    let agent = this.agents.get(conversationId);
-    if (!agent) {
-      agent = new Agent({
+    let cached = this.agents.get(conversationId);
+    if (cached && cached.fingerprint !== skillSnapshot.catalogFingerprint) throw new Error("skill_snapshot_changed");
+    if (!cached) {
+      const agent = new Agent({
         initialState: {
           model: model as Model<any>,
-          systemPrompt: this.config.systemPrompt,
+          systemPrompt: composeSkillPrompt(this.config.systemPrompt, skillSnapshot),
           thinkingLevel: "low",
           messages: [],
-          tools: this.tools(),
+          tools: this.tools(skillSnapshot),
         },
         streamFn: (activeModel, context, options) =>
           provider.streamSimple(
@@ -84,8 +94,9 @@ export class PiAgentAdapter {
             },
           ),
       });
-      this.agents.set(conversationId, agent);
+      cached = { agent, fingerprint: skillSnapshot.catalogFingerprint }; this.agents.set(conversationId, cached);
     }
+    const agent = cached.agent;
     const unsubscribe = agent.subscribe(onEvent);
     const abort = () => agent.abort();
     signal.addEventListener("abort", abort, { once: true });
@@ -102,6 +113,7 @@ export class PiAgentAdapter {
   private async runAnthropic(
     input: string,
     conversationId: string,
+    skillSnapshot: SkillSnapshot,
     signal: AbortSignal,
     onEvent: (event: AgentEvent) => void | Promise<void>,
   ) {
@@ -136,15 +148,16 @@ export class PiAgentAdapter {
         ? { baseUrl: this.config.anthropicBaseUrl }
         : {}),
     };
-    let agent = this.agents.get(conversationId);
-    if (!agent) {
-      agent = new Agent({
+    let cached = this.agents.get(conversationId);
+    if (cached && cached.fingerprint !== skillSnapshot.catalogFingerprint) throw new Error("skill_snapshot_changed");
+    if (!cached) {
+      const agent = new Agent({
         initialState: {
           model: model as Model<any>,
-          systemPrompt: this.config.systemPrompt,
+          systemPrompt: composeSkillPrompt(this.config.systemPrompt, skillSnapshot),
           thinkingLevel: "low",
           messages: [],
-          tools: this.tools(),
+          tools: this.tools(skillSnapshot),
         },
         streamFn: (activeModel, context, options) =>
           provider.streamSimple(
@@ -161,8 +174,9 @@ export class PiAgentAdapter {
             },
           ),
       });
-      this.agents.set(conversationId, agent);
+      cached = { agent, fingerprint: skillSnapshot.catalogFingerprint }; this.agents.set(conversationId, cached);
     }
+    const agent = cached.agent;
     const unsubscribe = agent.subscribe(onEvent);
     const abort = () => agent.abort();
     signal.addEventListener("abort", abort, { once: true });

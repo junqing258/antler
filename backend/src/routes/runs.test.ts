@@ -12,7 +12,7 @@ function testRuntime() {
     createdAt: new Date(0).toISOString(),
   };
   return {
-    createRun: vi.fn(() => run),
+    createRunWithSkills: vi.fn(async () => ({ run, skillDiagnostics: [] })),
   };
 }
 
@@ -33,12 +33,10 @@ describe("POST /api/runs workingDirectory", () => {
     });
 
     expect(response.statusCode).toBe(202);
-    expect(runtime.createRun).toHaveBeenCalledWith(
-      "hello",
-      "conversation-1",
-      undefined,
-      process.cwd(),
-    );
+    expect(runtime.createRunWithSkills).toHaveBeenCalledWith("hello", {
+      conversationId: "conversation-1", provider: undefined,
+      workingDirectory: process.cwd(), skillPolicy: { mode: "disabled" },
+    });
     await app.close();
   });
 
@@ -62,7 +60,7 @@ describe("POST /api/runs workingDirectory", () => {
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({ error });
-    expect(runtime.createRun).not.toHaveBeenCalled();
+    expect(runtime.createRunWithSkills).not.toHaveBeenCalled();
     await app.close();
   });
 });

@@ -7,6 +7,10 @@ import {
   type RunStatus,
 } from "./events.js";
 import { PiAgentAdapter, PiAdapterError } from "./pi-agent-adapter.js";
+import type { SkillPolicy, SkillSnapshot } from "../skills/types.js";
+import { DISABLED_SKILL_SNAPSHOT } from "../skills/types.js";
+import { SkillRegistry } from "../skills/skill-registry.js";
+import { createSkillSnapshot } from "../skills/skill-policy.js";
 
 export type ProviderRunConfig = {
   protocol: "openai-responses" | "anthropic-messages";
@@ -32,27 +36,63 @@ type ActiveRun = {
   listeners: Set<(event: RunEvent) => void>;
   timeout?: NodeJS.Timeout;
   adapter: PiAgentAdapter;
+  skillSnapshot: SkillSnapshot;
 };
 export class ConversationBusyError extends Error {}
+export class ConversationSkillContextMismatchError extends Error {
+  constructor() {
+    super("conversation_skill_context_mismatch");
+  }
+}
+export type CreateRunOptions = {
+  conversationId?: string;
+  provider?: ProviderRunConfig;
+  workingDirectory?: string;
+  skillPolicy?: SkillPolicy;
+  skillSnapshot?: SkillSnapshot;
+};
 export type HostRuntimeConfig = { maxRunDurationMs: number; maxEvents: number };
 export class AntlerHostRuntime {
   private readonly runs = new Map<string, ActiveRun>();
   private readonly activeConversations = new Map<string, string>();
+  private readonly skillContexts = new Map<
+    string,
+    { policy: SkillPolicy; catalogFingerprint: string }
+  >();
   constructor(
     private readonly createAdapter: (
       config?: ProviderRunConfig,
       workingDirectory?: string,
     ) => PiAgentAdapter,
     private readonly config: HostRuntimeConfig,
+    private readonly skills?: SkillRegistry,
   ) {}
-  createRun(
-    input: string,
-    conversationId: string = randomUUID(),
-    provider?: ProviderRunConfig,
-    workingDirectory?: string,
-  ): Run {
+  createRun(input: string, options: CreateRunOptions = {}): Run {
+    const conversationId = options.conversationId ?? randomUUID();
     if (this.activeConversations.has(conversationId))
       throw new ConversationBusyError("conversation_busy");
+    const policy = options.skillPolicy ?? { mode: "disabled" as const };
+    const workspaceRoot = options.workingDirectory ?? "";
+    const snapshot =
+      options.skillSnapshot ??
+      (policy.mode === "disabled"
+        ? { ...DISABLED_SKILL_SNAPSHOT, workspaceRoot }
+        : (() => {
+            throw new Error("Skill registry unavailable");
+          })());
+    // Registry discovery is async, so routes construct snapshots before enqueueing through createRunWithSnapshot.
+    const context = this.skillContexts.get(conversationId);
+    if (
+      context &&
+      (JSON.stringify(context.policy) !== JSON.stringify(policy) ||
+        context.catalogFingerprint !== snapshot.catalogFingerprint)
+    )
+      throw new ConversationSkillContextMismatchError();
+    if (!context)
+      this.skillContexts.set(conversationId, {
+        policy,
+        catalogFingerprint: snapshot.catalogFingerprint,
+      });
     const now = new Date().toISOString();
     const run: Run = {
       id: randomUUID(),
@@ -66,12 +106,44 @@ export class AntlerHostRuntime {
       controller: new AbortController(),
       events: [],
       listeners: new Set(),
-      adapter: this.createAdapter(provider, workingDirectory),
+      adapter: this.createAdapter(options.provider, options.workingDirectory),
+      skillSnapshot: snapshot,
     };
     this.runs.set(run.id, active);
     this.activeConversations.set(conversationId, run.id);
     queueMicrotask(() => void this.execute(active));
     return run;
+  }
+  async createRunWithSkills(
+    input: string,
+    options: CreateRunOptions,
+  ): Promise<{ run: Run; skillDiagnostics: SkillSnapshot["diagnostics"] }> {
+    const policy = options.skillPolicy ?? { mode: "disabled" as const };
+    const workspaceRoot = options.workingDirectory ?? "";
+    const catalog =
+      policy.mode === "disabled"
+        ? undefined
+        : await this.skills?.list(options.workingDirectory);
+    const snapshot = catalog
+      ? createSkillSnapshot(workspaceRoot, policy, catalog)
+      : { ...DISABLED_SKILL_SNAPSHOT, workspaceRoot };
+    const id = options.conversationId ?? randomUUID();
+    const context = this.skillContexts.get(id);
+    if (
+      context &&
+      (JSON.stringify(context.policy) !== JSON.stringify(policy) ||
+        context.catalogFingerprint !== snapshot.catalogFingerprint)
+    )
+      throw new ConversationSkillContextMismatchError();
+    if (this.activeConversations.has(id))
+      throw new ConversationBusyError("conversation_busy");
+    const run = this.createRun(input, {
+      ...options,
+      conversationId: id,
+      skillPolicy: policy,
+      skillSnapshot: snapshot,
+    });
+    return { run, skillDiagnostics: snapshot.diagnostics };
   }
   getRun(runId: string) {
     return this.runs.get(runId)?.run;
@@ -109,6 +181,7 @@ export class AntlerHostRuntime {
       await active.adapter.run(
         run.input,
         run.conversationId,
+        active.skillSnapshot,
         active.controller.signal,
         (event) => this.mapPiEvent(active, event),
       );
@@ -168,15 +241,26 @@ export class AntlerHostRuntime {
         tool: event.toolName,
         args: event.args,
       });
-    else if (event.type === "tool_execution_end")
+    else if (event.type === "tool_execution_end") {
+      const isSkillTool =
+        event.toolName === "load_skill" ||
+        event.toolName === "read_skill_resource";
+      const details = (
+        event.result as { details?: Record<string, unknown> } | undefined
+      )?.details;
       this.emit(active, "tool.completed", {
         runId,
         stepId: event.toolCallId,
         tool: event.toolName,
         summary: event.isError ? "工具执行失败。" : "工具执行完成。",
-        result: event.result,
+        // Skill instruction/resource bodies remain model-visible tool results but
+        // must never be copied into the client SSE transcript.
+        result: isSkillTool
+          ? (details ?? { tool: event.toolName })
+          : event.result,
         isError: event.isError,
       });
+    }
   }
   private finish(
     active: ActiveRun,

@@ -4,7 +4,7 @@ export class TaskService {
   constructor(readonly runtime: AntlerHostRuntime) {}
 
   create(message: string, conversationId?: string): Run {
-    return this.runtime.createRun(message.trim(), conversationId);
+    return this.runtime.createRun(message.trim(), { conversationId });
   }
 
   get(taskId: string) {

@@ -11,6 +11,8 @@ import { DEFAULT_SYSTEM_PROMPT } from './agent/system-prompt.js';
 import { registerRunRoutes } from './routes/runs.js';
 import type { ProviderRunConfig } from './agent/host-runtime.js';
 import { resolve } from 'node:path';
+import { SkillRegistry } from './skills/skill-registry.js';
+import { registerSkillRoutes } from './routes/skills.js';
 
 export function createApp(config: AppConfig) {
   const app = Fastify({ logger: false });
@@ -42,13 +44,15 @@ export function createApp(config: AppConfig) {
     }
     return adapter;
   };
-  const runtime = new AntlerHostRuntime(createAdapter, { maxRunDurationMs: config.maxRunDurationMs, maxEvents: 10_000 });
+  const skillRegistry = new SkillRegistry(config.agentsDir);
+  const runtime = new AntlerHostRuntime(createAdapter, { maxRunDurationMs: config.maxRunDurationMs, maxEvents: 10_000 }, skillRegistry);
   const taskService = new TaskService(runtime);
 
   registerHttpHooks(app, config);
   registerHealthRoutes(app);
   registerTaskRoutes(app, taskService);
   registerRunRoutes(app, runtime);
+  registerSkillRoutes(app, skillRegistry);
 
   if (config.staticDir) {
     app.register(fastifyStatic, {

@@ -11,10 +11,12 @@ flowchart LR
     User["~/.agents/skills"]
   end
 
-  Workspace --> Registry
-  User --> Registry
+  Workspace --> Env["Restricted ExecutionEnv"]
+  User --> Env
+  Env --> PiSkills["Pi loadSourcedSkills"]
+  PiSkills --> Registry
   Registry --> Snapshot["SkillSnapshot"]
-  Snapshot --> Prompt["System prompt composer"]
+  Snapshot --> Prompt["Antler SkillPromptComposer"]
   Snapshot --> SkillTools["load_skill / read_skill_resource"]
 
   Runtime --> Adapter["PiAgentAdapter"]

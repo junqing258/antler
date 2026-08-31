@@ -21,7 +21,7 @@ function parseProvider(value: unknown): ProviderRunConfig | undefined {
   return { protocol, apiKey: apiKey.trim(), model: model.trim(), ...(typeof baseUrl === "string" && baseUrl.trim() ? { baseUrl: baseUrl.trim() } : {}) };
 }
 
-function parseWorkingDirectory(value: unknown): string | undefined {
+export function parseWorkingDirectory(value: unknown): string | undefined {
   if (value === undefined || value === "") return undefined;
   if (typeof value !== "string" || !value.trim()) {
     throw new Error("工作目录必须是非空字符串。");
@@ -41,11 +41,12 @@ export function registerRunRoutes(
   runtime: AntlerHostRuntime,
 ) {
   app.post("/api/runs", async (request, reply) => {
-    const { message, conversationId, provider, workingDirectory } = (request.body ?? {}) as {
+    const { message, conversationId, provider, workingDirectory, skillPolicy } = (request.body ?? {}) as {
       message?: unknown;
       conversationId?: unknown;
       provider?: unknown;
       workingDirectory?: unknown;
+      skillPolicy?: unknown;
     };
     if (
       typeof message !== "string" ||
@@ -57,18 +58,17 @@ export function registerRunRoutes(
         .code(400)
         .send({ error: "message 和 conversationId 均不能为空。" });
     try {
-      const run = runtime.createRun(
-        message.trim(),
-        conversationId,
-        parseProvider(provider),
-        parseWorkingDirectory(workingDirectory),
-      );
+      const parsedPolicy = parseSkillPolicy(skillPolicy);
+      const outcome = await runtime.createRunWithSkills(message.trim(), { conversationId, provider: parseProvider(provider), workingDirectory: parseWorkingDirectory(workingDirectory), skillPolicy: parsedPolicy });
+      const run = outcome.run;
       return reply
         .code(202)
-        .send({ runId: run.id, eventsUrl: `/api/runs/${run.id}/events` });
+        .send({ runId: run.id, eventsUrl: `/api/runs/${run.id}/events`, skillDiagnostics: outcome.skillDiagnostics });
     } catch (error) {
       if (error instanceof ConversationBusyError)
         return reply.code(409).send({ error: "conversation_busy" });
+      if (error instanceof (await import("../agent/host-runtime.js")).ConversationSkillContextMismatchError) return reply.code(409).send({ error: "conversation_skill_context_mismatch" });
+      if (error instanceof (await import("../skills/skill-policy.js")).SkillPolicyError) return reply.code(400).send({ error: error.code });
       if (
         error instanceof Error &&
         (error.message.startsWith("供应商配置") || error.message.startsWith("工作目录"))
@@ -99,4 +99,13 @@ export function registerRunRoutes(
       return reply.code(202).send({ runId: run.id, status: run.status });
     },
   );
+}
+
+function parseSkillPolicy(value: unknown): import("../skills/types.js").SkillPolicy {
+  if (value === undefined) return { mode: "disabled" as const };
+  if (!value || typeof value !== "object") throw new Error("Skill policy 无效。");
+  const policy = value as { mode?: unknown; skillIds?: unknown };
+  if (policy.mode === "disabled" || policy.mode === "auto") { if (policy.skillIds !== undefined) throw new Error("Skill policy 无效。"); return { mode: policy.mode as "disabled" | "auto" }; }
+  if (policy.mode === "selected" && Array.isArray(policy.skillIds) && policy.skillIds.every(x => typeof x === "string" && x)) { const skillIds = [...new Set(policy.skillIds)]; if (skillIds.length > 16) throw new Error("Skill policy 无效。"); return { mode: "selected" as const, skillIds }; }
+  throw new Error("Skill policy 无效。");
 }
