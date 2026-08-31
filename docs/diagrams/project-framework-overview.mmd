@@ -1,0 +1,68 @@
+flowchart TB
+  User(["用户"])
+
+  subgraph Client["客户端与本地状态"]
+    direction LR
+    Shell["Tauri 2 / 浏览器"]
+    UI["React + assistant-ui"]
+    RuntimeHook["useAntlerRuntime"]
+    IDB[("IndexedDB\nprojects / conversations")]
+    ProviderCfg["localStorage\nProvider 配置"]
+    Shell --> UI --> RuntimeHook
+    UI <--> IDB
+    UI <--> ProviderCfg
+  end
+
+  subgraph Service["Fastify 本地伴生服务 / Web 服务"]
+    direction LR
+    Guard["HTTP Hooks\nToken / CORS / 静态资源"]
+    Routes["REST Routes\n/runs /tasks /skills /health"]
+    SSE["SSE Projection\n事件补放与实时订阅"]
+    Host["AntlerHostRuntime\n并发 / 超时 / 取消 / 事件映射"]
+    Memory[("内存状态\nruns / events / skill context")]
+    Skills["SkillRegistry\nworkspace + user scopes"]
+    Adapter["PiAgentAdapter\n按会话缓存 Agent"]
+    Guard --> Routes --> Host
+    Host <--> Memory
+    Host --> SSE
+    Skills -->|"SkillSnapshot（可选）"| Host
+    Host --> Adapter
+  end
+
+  subgraph Agent["Agent 循环与能力"]
+    direction LR
+    Pi["Pi Agent Core\n状态化 tool loop"]
+    WorkspaceTools["Workspace Tools\nread / write / edit / bash"]
+    SkillTools["Skill Tools\nload / read resource"]
+    Search["Tavily web_search\n可选"]
+    Pi --> WorkspaceTools
+    Pi --> SkillTools
+    Pi --> Search
+  end
+
+  subgraph External["外部资源"]
+    direction LR
+    Models["OpenAI / Anthropic\n兼容端点"]
+    Workspace[("项目工作目录")]
+    SkillFiles[(".agents/skills")]
+    Web["公开网络"]
+  end
+
+  User --> UI
+  RuntimeHook -->|"REST 创建 / 取消"| Guard
+  SSE -->|"流式事件"| RuntimeHook
+  Adapter --> Pi
+  Pi <--> Models
+  WorkspaceTools <--> Workspace
+  Skills <--> SkillFiles
+  SkillTools -->|"仅启用策略下"| SkillFiles
+  Search --> Web
+
+  classDef client fill:#ecfeff,stroke:#0891b2,color:#164e63;
+  classDef service fill:#eff6ff,stroke:#2563eb,color:#1e3a8a;
+  classDef agent fill:#f5f3ff,stroke:#7c3aed,color:#4c1d95;
+  classDef data fill:#fffbeb,stroke:#d97706,color:#78350f;
+  class Shell,UI,RuntimeHook,ProviderCfg client;
+  class Guard,Routes,SSE,Host,Skills,Adapter service;
+  class Pi,WorkspaceTools,SkillTools,Search agent;
+  class IDB,Memory,Models,Workspace,SkillFiles,Web data;

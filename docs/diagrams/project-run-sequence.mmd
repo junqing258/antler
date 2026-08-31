@@ -1,0 +1,50 @@
+sequenceDiagram
+  actor U as 用户
+  participant UI as React / assistant-ui
+  participant DB as IndexedDB
+  participant API as Fastify API
+  participant H as AntlerHostRuntime
+  participant A as PiAgentAdapter
+  participant P as LLM Provider
+  participant T as Workspace / Skill / Search Tools
+
+  UI->>DB: 读取会话与项目工作目录
+  U->>UI: 提交消息
+  UI->>API: POST /api/runs
+  Note over UI,API: conversationId + provider + workingDirectory
+  API->>H: createRunWithSkills()
+  H->>H: 固化 SkillSnapshot<br/>检查会话并发与上下文指纹
+  H-->>API: queued run
+  API-->>UI: 202 runId + eventsUrl
+  UI->>API: GET /api/runs/:runId/events
+  API->>H: 补放 afterEventId 后的事件并订阅
+
+  H-->>API: run.started
+  API-->>UI: SSE run.started
+  H->>A: run(input, conversationId, snapshot, signal)
+
+  loop Pi 状态化 Agent 循环
+    A->>P: 流式模型请求
+    P-->>A: text / thinking / tool call
+    A-->>H: Pi AgentEvent
+    H-->>API: 映射为领域事件
+    API-->>UI: SSE delta / step
+    opt 模型调用工具
+      A->>T: schema 校验后执行
+      T-->>A: 结构化结果
+      A-->>H: tool execution event
+      H-->>API: tool.completed
+      API-->>UI: SSE tool.completed
+    end
+  end
+
+  A-->>H: Agent 完成或抛错
+  H-->>API: run.completed / failed / cancelled
+  API-->>UI: SSE 终态后关闭连接
+  UI->>DB: 防抖保存完整消息快照
+
+  opt 用户中止、超时或事件数超限
+    UI->>API: POST /api/runs/:runId/cancel
+    API->>H: AbortController.abort()
+    H->>A: signal → agent.abort()
+  end

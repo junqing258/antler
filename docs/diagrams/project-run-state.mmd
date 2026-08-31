@@ -1,0 +1,15 @@
+stateDiagram-v2
+  [*] --> queued : POST /api/runs
+  queued --> cancelled : 启动前已取消
+  queued --> running : queueMicrotask 执行
+  running --> succeeded : Agent 正常完成
+  running --> failed : Provider / Adapter 异常
+  running --> cancelled : 用户取消 / 超时 / 事件上限
+  succeeded --> [*]
+  failed --> [*]
+  cancelled --> [*]
+
+  note right of running
+    同一 conversationId
+    同时只允许一个 active run
+  end note
