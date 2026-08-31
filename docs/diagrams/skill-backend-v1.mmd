@@ -1,0 +1,26 @@
+flowchart LR
+  Client["React / Tauri client"] -->|"POST /api/runs + skillPolicy"| Routes["Fastify run routes"]
+  Client -->|"GET /api/skills"| SkillRoutes["Skill catalog API"]
+
+  Routes --> Runtime["AntlerHostRuntime"]
+  SkillRoutes --> Registry["SkillRegistry"]
+  Runtime --> Registry
+
+  subgraph Sources["Skill sources"]
+    Workspace["workspace/.agents/skills"]
+    User["~/.agents/skills"]
+  end
+
+  Workspace --> Registry
+  User --> Registry
+  Registry --> Snapshot["SkillSnapshot"]
+  Snapshot --> Prompt["System prompt composer"]
+  Snapshot --> SkillTools["load_skill / read_skill_resource"]
+
+  Runtime --> Adapter["PiAgentAdapter"]
+  Prompt --> Adapter
+  SkillTools --> Adapter
+  Adapter --> Agent["Conversation-scoped Pi Agent"]
+  Agent -->|"lazy tool calls"| SkillTools
+  Agent --> WorkspaceTools["read / write / edit / bash"]
+  Adapter -->|"sanitized SSE events"| Client
