@@ -43,16 +43,24 @@ import {
   XIcon,
 } from "lucide-react";
 import "./styles.css";
+import { createUuid } from "@/lib/utils";
 
 type ServerInfo = { baseUrl: string; token: string };
 
 async function serverInfo(): Promise<ServerInfo> {
   if ("__TAURI_INTERNALS__" in window) return invoke<ServerInfo>("server_info");
-  return { baseUrl: "http://127.0.0.1:3210", token: "" };
+  return {
+    // Development keeps talking to the locally started backend. A production
+    // Web build uses the current origin because Fastify serves both UI and API.
+    baseUrl:
+      import.meta.env.VITE_ANTLER_SERVER_BASE_URL ??
+      (import.meta.env.DEV ? "http://127.0.0.1:3210" : ""),
+    token: import.meta.env.VITE_ANTLER_ACCESS_TOKEN ?? "",
+  };
 }
 
 function newConversationId() {
-  return crypto.randomUUID();
+  return createUuid();
 }
 
 type SettingsTab = "provider" | "profile" | "about";

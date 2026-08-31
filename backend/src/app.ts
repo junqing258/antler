@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import fastifyStatic from '@fastify/static';
 import type { AppConfig } from './config/env.js';
 import { registerHttpHooks } from './plugins/http.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -49,8 +50,30 @@ export function createApp(config: AppConfig) {
   registerTaskRoutes(app, taskService);
   registerRunRoutes(app, runtime);
 
+  if (config.staticDir) {
+    app.register(fastifyStatic, {
+      root: config.staticDir,
+      prefix: '/',
+      maxAge: '30d',
+      immutable: true,
+    });
+    app.get('/', async (_request, reply) =>
+      reply.sendFile('index.html', { maxAge: 0, immutable: false }),
+    );
+  }
+
   app.setNotFoundHandler(async (request, reply) => {
     if (!request.antlerAuthorized) return reply.code(401).send({ error: '未授权的本地服务请求。' });
+    const path = request.url.split('?', 1)[0];
+    if (
+      config.staticDir &&
+      request.method === 'GET' &&
+      request.headers.accept?.includes('text/html') &&
+      path !== '/api' &&
+      !path.startsWith('/api/')
+    ) {
+      return reply.sendFile('index.html', { maxAge: 0, immutable: false });
+    }
     return reply.code(404).send({ error: '路由不存在。' });
   });
 

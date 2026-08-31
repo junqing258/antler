@@ -22,6 +22,7 @@ export type AppConfig = {
   anthropicBaseUrl?: string;
   tavilyApiKey?: string;
   workspaceRoot: string;
+  staticDir?: string;
   model: string;
   maxRunDurationMs: number;
 };
@@ -37,6 +38,9 @@ export const config: AppConfig = {
   anthropicBaseUrl: process.env.ANTHROPIC_BASE_URL,
   tavilyApiKey: process.env.TAVILY_API_KEY,
   workspaceRoot: resolve(process.env.ANTLER_WORKSPACE_ROOT ?? process.cwd()),
+  staticDir: process.env.ANTLER_STATIC_DIR
+    ? resolve(process.env.ANTLER_STATIC_DIR)
+    : undefined,
   model: process.env.ANTHROPIC_AUTH_TOKEN
     ? (process.env.ANTHROPIC_MODEL ?? process.env.AGENT_RUNTIME_MODEL ?? 'claude-sonnet-4-20250514')
     : (process.env.ANTLER_MODEL ?? 'gpt-4.1-mini'),

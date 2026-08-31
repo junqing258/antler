@@ -1,0 +1,32 @@
+services:
+  backend:
+    image: ${ANTLER_BACKEND_IMAGE:?ANTLER_BACKEND_IMAGE is required}
+    container_name: antler-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      TZ: ${TZ:-Asia/Shanghai}
+      ANTLER_HOST: 0.0.0.0
+      ANTLER_PORT: 3210
+      ANTLER_WORKSPACE_ROOT: /workspace
+      ANTLER_STATIC_DIR: /app/public
+      # Web 与 API 共用同一个公开端口；如需访问控制，请在主机防火墙或外部网关配置。
+      ANTLER_ACCESS_TOKEN: ""
+    volumes:
+      - ./workspace:/workspace
+    ports:
+      - "${ANTLER_WEB_PORT:-3210}:3210"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3210/health', {headers: {'x-antler-token': process.env.ANTLER_ACCESS_TOKEN || ''}}).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s

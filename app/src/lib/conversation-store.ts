@@ -1,4 +1,5 @@
 import type { ThreadMessageLike } from "@assistant-ui/react";
+import { createUuid } from "@/lib/utils";
 
 const DATABASE_NAME = "antler";
 const DATABASE_VERSION = 2;
@@ -117,7 +118,7 @@ export async function listProjects(): Promise<Project[]> {
 export async function createProject(name: string, workingDirectory: string): Promise<Project> {
   const now = Date.now();
   const project: Project = {
-    id: crypto.randomUUID(),
+    id: createUuid(),
     name: name.trim(),
     workingDirectory: workingDirectory.trim(),
     createdAt: now,
