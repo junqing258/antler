@@ -44,6 +44,7 @@ import {
 } from "lucide-react";
 import "./styles.css";
 import { createUuid } from "@/lib/utils";
+import { DirectoryPicker } from "@/components/directory-picker";
 
 type ServerInfo = { baseUrl: string; token: string };
 
@@ -114,14 +115,13 @@ function ProjectDialog({
         </label>
         <label>
           Working directory
-          <input
+          <DirectoryPicker
             value={workingDirectory}
-            onChange={(event) => setWorkingDirectory(event.target.value)}
-            placeholder="/absolute/path/to/project"
-            spellCheck={false}
+            onChange={setWorkingDirectory}
+            getServerInfo={serverInfo}
           />
           <small>
-            Leave empty to use the server default. The directory must already exist.
+            Choose a folder inside the server workspace, or use the server default.
           </small>
         </label>
         <div className="project-dialog-actions">

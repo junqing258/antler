@@ -13,8 +13,11 @@ import type { ProviderRunConfig } from './agent/host-runtime.js';
 import { resolve } from 'node:path';
 import { SkillRegistry } from './skills/skill-registry.js';
 import { registerSkillRoutes } from './routes/skills.js';
+import { registerDirectoryRoutes } from './routes/directories.js';
+import { mkdirSync } from 'node:fs';
 
 export function createApp(config: AppConfig) {
+  mkdirSync(config.workspaceRoot, { recursive: true });
   const app = Fastify({ logger: false });
   const adapters = new Map<string, PiAgentAdapter>();
   const createAdapter = (provider?: ProviderRunConfig, workingDirectory?: string) => {
@@ -53,6 +56,7 @@ export function createApp(config: AppConfig) {
   registerTaskRoutes(app, taskService);
   registerRunRoutes(app, runtime);
   registerSkillRoutes(app, skillRegistry);
+  registerDirectoryRoutes(app, config.workspaceRoot);
 
   if (config.staticDir) {
     app.register(fastifyStatic, {
