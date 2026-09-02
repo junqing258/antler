@@ -12,16 +12,11 @@ import { DropdownMenu } from "radix-ui";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
-  BarChart3Icon,
   BotIcon,
-  BracesIcon,
   LightbulbIcon,
-  MicIcon,
   PanelsTopLeftIcon,
-  PenLineIcon,
   PlusIcon,
   ShareIcon,
-  CloudSunIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   CheckIcon,
@@ -49,14 +44,22 @@ function Reasoning({ text, status }: ReasoningMessagePartProps) {
       <summary>
         <LightbulbIcon aria-hidden="true" />
         <span>{status.type === "running" ? "正在思考" : "思考过程"}</span>
-        <ChevronRightIcon className="agent-activity-chevron" aria-hidden="true" />
+        <ChevronRightIcon
+          className="agent-activity-chevron"
+          aria-hidden="true"
+        />
       </summary>
       <div className="agent-activity-content whitespace-pre-wrap">{text}</div>
     </details>
   );
 }
 
-function ToolCall({ toolName, args, result, isError }: ToolCallMessagePartProps) {
+function ToolCall({
+  toolName,
+  args,
+  result,
+  isError,
+}: ToolCallMessagePartProps) {
   const isRunning = result === undefined;
   const query =
     args && typeof args === "object" && "query" in args
@@ -77,7 +80,10 @@ function ToolCall({ toolName, args, result, isError }: ToolCallMessagePartProps)
               ? `${toolName} 调用失败`
               : `${toolName} 调用完成`}
         </span>
-        <ChevronRightIcon className="agent-activity-chevron" aria-hidden="true" />
+        <ChevronRightIcon
+          className="agent-activity-chevron"
+          aria-hidden="true"
+        />
       </summary>
       <div className="agent-activity-content">
         {query && <p className="m-0">查询：{query}</p>}

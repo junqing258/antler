@@ -1,0 +1,26 @@
+flowchart LR
+  UI["React Workflow UI"] --> API["Fastify Workflow API"]
+  API --> Service["WorkflowService"]
+  Service --> Store[("SQLite / Prisma")]
+  Service --> Engine["WorkflowEngine"]
+
+  Engine --> Validator["Definition Validator"]
+  Engine --> Scheduler["Ready-node Scheduler"]
+  Scheduler --> Registry["NodeExecutor Registry"]
+
+  Registry --> AgentNode["AgentNodeExecutor"]
+  Registry --> ConditionNode["ConditionNodeExecutor"]
+  Registry --> OutputNode["OutputNodeExecutor"]
+
+  AgentNode --> Host["AntlerHostRuntime"]
+  Host --> Pi["PiAgentAdapter"]
+  Pi --> Provider["LLM Provider"]
+  Pi --> Tools["Workspace / Skill Tools"]
+
+  Engine --> Events["Workflow Event Log"]
+  Events --> Store
+  Events --> SSE["Replayable SSE"]
+  SSE --> UI
+
+  Recovery["Startup Recovery"] --> Store
+  Recovery --> Engine

@@ -1,0 +1,12 @@
+stateDiagram-v2
+  [*] --> queued : run created
+  queued --> running : scheduler claimed
+  running --> paused : approval or restart interruption
+  paused --> running : resume
+  running --> succeeded : output node completed
+  running --> failed : unrecoverable step failure
+  running --> cancelled : cancel requested
+  paused --> cancelled : cancel requested
+  failed --> running : retry from failed step
+  succeeded --> [*]
+  cancelled --> [*]
