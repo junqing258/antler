@@ -1,0 +1,21 @@
+sequenceDiagram
+  actor U as User
+  participant B as React client
+  participant A as Fastify auth layer
+  participant D as Prisma SQLite
+  participant R as Protected routes
+
+  B->>A: GET /api/auth/session
+  A-->>B: 200 authenticated=false
+  U->>B: Enter username and password
+  B->>A: POST /api/auth/login
+  A->>D: Load user and verify Argon2id
+  A->>D: Store hashed session and CSRF tokens
+  A-->>B: Set-Cookie and user projection
+  B->>A: POST /api/runs with Cookie and X-CSRF-Token
+  A->>D: Validate session and owner
+  A->>R: Attach AuthPrincipal
+  R-->>B: 202 runId and eventsUrl
+  B->>A: GET eventsUrl with Cookie
+  A->>D: Validate session and run owner
+  A-->>B: SSE events

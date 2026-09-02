@@ -204,13 +204,13 @@ function Composer(props: ModelPickerProps) {
           <ModelPicker {...props} />
         </div>
         <div className="flex items-center gap-3">
-          <button
+          {/* <button
             className="composer-icon-button text-[#888]"
             aria-label="语音输入"
             type="button"
           >
             <MicIcon />
-          </button>
+          </button> */}
           <AuiIf condition={(s) => s.thread.isRunning}>
             <ComposerPrimitive.Cancel
               aria-label="停止生成"
