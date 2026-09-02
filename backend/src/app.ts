@@ -15,10 +15,12 @@ import { SkillRegistry } from './skills/skill-registry.js';
 import { registerSkillRoutes } from './routes/skills.js';
 import { registerDirectoryRoutes } from './routes/directories.js';
 import { mkdirSync } from 'node:fs';
+import { registerDatabase } from './plugins/database.js';
 
 export function createApp(config: AppConfig) {
   mkdirSync(config.workspaceRoot, { recursive: true });
   const app = Fastify({ logger: false });
+  registerDatabase(app, config.databaseUrl);
   const adapters = new Map<string, PiAgentAdapter>();
   const createAdapter = (provider?: ProviderRunConfig, workingDirectory?: string) => {
     const runtimeConfig = provider

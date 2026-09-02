@@ -13,6 +13,13 @@ pnpm dev:app    # 浏览器模式下的 React 前端
 
 服务已接入 Pi Agent Core 的最小运行时。当前首个 provider 为 OpenAI：设置 `OPENAI_API_KEY`（可选 `ANTLER_MODEL`，默认 `gpt-4.1-mini`）后，`/api/tasks` 会返回真实的流式模型输出；未配置密钥时会以结构化 `task.failed` 结束，而不会回退到占位回复。运行时为每个会话限制一个 active run，并支持 `POST /api/runs/:runId/cancel` 取消。
 
+后端使用 Prisma + SQLite，数据库默认位于 `workspace/antler.db`，可通过 `DATABASE_URL` 覆盖。修改 `backend/prisma/schema.prisma` 后，在仓库根目录运行：
+
+```bash
+pnpm --filter @antler/server db:migrate -- --name <migration-name>
+pnpm --filter @antler/server db:generate
+```
+
 ## Docker 一键部署
 
 部署只包含一个 backend 容器：镜像构建阶段同时编译 React Web，运行时由 Fastify 直接提供静态资源、SPA 回退、API 与 SSE，不依赖 Nginx。远端工作区持久化在部署目录下的 `workspace/`。

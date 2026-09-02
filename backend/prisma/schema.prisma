@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum RunStatus {
+  queued
+  running
+  awaiting_approval
+  succeeded
+  failed
+  cancelled
+}
+
+model Run {
+  id             String     @id
+  conversationId String
+  input          String
+  status         RunStatus  @default(queued)
+  errorCode      String?
+  createdAt      DateTime   @default(now())
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  events         RunEvent[]
+
+  @@index([conversationId, createdAt])
+  @@map("runs")
+}
+
+model RunEvent {
+  id        Int      @id @default(autoincrement())
+  runId     String
+  type      String
+  payload   Json
+  createdAt DateTime @default(now())
+  run       Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, id])
+  @@map("run_events")
+}

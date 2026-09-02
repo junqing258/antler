@@ -14,4 +14,8 @@ target
 coverage
 **/coverage
 *.log
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
 .DS_Store

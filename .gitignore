@@ -5,3 +5,8 @@ target/
 .DS_Store
 .pnpm-store
 .env
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+backend/src/generated/prisma/

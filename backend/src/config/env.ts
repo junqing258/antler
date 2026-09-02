@@ -24,7 +24,13 @@ export type AppConfig = {
   model: string;
   maxRunDurationMs: number;
   agentsDir?: string;
+  databaseUrl?: string;
 };
+
+const workspaceRoot = resolve(
+  projectRoot,
+  process.env.ANTLER_WORKSPACE_ROOT ?? "workspace",
+);
 
 export const config: AppConfig = {
   host: process.env.ANTLER_HOST ?? "127.0.0.1",
@@ -36,10 +42,7 @@ export const config: AppConfig = {
   anthropicAuthToken: process.env.ANTHROPIC_AUTH_TOKEN,
   anthropicBaseUrl: process.env.ANTHROPIC_BASE_URL,
   tavilyApiKey: process.env.TAVILY_API_KEY,
-  workspaceRoot: resolve(
-    projectRoot,
-    process.env.ANTLER_WORKSPACE_ROOT ?? "workspace",
-  ),
+  workspaceRoot,
   staticDir: process.env.ANTLER_STATIC_DIR
     ? resolve(projectRoot, process.env.ANTLER_STATIC_DIR)
     : undefined,
@@ -52,4 +55,6 @@ export const config: AppConfig = {
   agentsDir: process.env.ANTLER_AGENTS_DIR
     ? resolve(projectRoot, process.env.ANTLER_AGENTS_DIR)
     : undefined,
+  databaseUrl:
+    process.env.DATABASE_URL ?? `file:${resolve(workspaceRoot, "antler.db")}`,
 };
