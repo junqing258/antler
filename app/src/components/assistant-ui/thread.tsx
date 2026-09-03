@@ -106,7 +106,7 @@ function AssistantMessage() {
       <ActionBarPrimitive.Root
         hideWhenRunning
         autohide="not-last"
-        className="aui-action-bar mt-2 flex items-center gap-1 text-muted-foreground"
+        className="aui-action-bar absolute bottom-0 left-4 flex items-center gap-1 text-muted-foreground md:left-6"
       >
         <ActionBarPrimitive.Copy
           aria-label="复制回复"

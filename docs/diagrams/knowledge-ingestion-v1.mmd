@@ -1,0 +1,28 @@
+sequenceDiagram
+  participant UI as Knowledge UI
+  participant API as Fastify API
+  participant JOB as IngestionCoordinator
+  participant SRC as SourceResolver
+  participant DOC as Parser and Chunker
+  participant DB as SQLite and FTS5
+  participant EMB as EmbeddingProvider v1
+
+  UI->>API: POST knowledge source
+  API->>DB: create source and queued job
+  API-->>UI: 202 jobId and eventsUrl
+  JOB->>DB: claim job and create indexVersion
+  JOB->>SRC: scan source safely
+  SRC-->>JOB: files and content hashes
+  loop changed documents
+    JOB->>DOC: parse and chunk
+    DOC-->>JOB: chunks with locators
+    JOB->>DB: stage documents chunks and FTS rows
+    opt semantic index v1
+      JOB->>EMB: embed uncached chunks in batches
+      EMB-->>JOB: vectors
+      JOB->>DB: stage vector rows
+    end
+    JOB->>DB: append progress event
+  end
+  JOB->>DB: atomically publish indexVersion
+  DB-->>UI: SSE completed and summary

@@ -1,0 +1,52 @@
+flowchart LR
+  subgraph UI["React / Tauri"]
+    KM["Knowledge 管理"]
+    CHAT["项目聊天"]
+    CIT["引用详情"]
+  end
+
+  subgraph API["Fastify API"]
+    KR["Knowledge routes"]
+    RR["Run routes"]
+    JS["Job event stream"]
+    RS["Run event stream"]
+  end
+
+  subgraph Domain["Domain services"]
+    KBS["KnowledgeBaseService"]
+    ING["IngestionCoordinator"]
+    PARSE["Resolver + Parser + Chunker"]
+    RET["KnowledgeRetriever"]
+    CTX["KnowledgeContextBuilder"]
+    RUN["RunService / HostRuntime"]
+    AGENT["PiAgentAdapter"]
+  end
+
+  subgraph Storage["SQLite"]
+    META[("Knowledge metadata")]
+    FTS[("FTS5 index")]
+    VEC[("Vector index - v1")]
+    EVENTS[("Runs, jobs, events, hits")]
+  end
+
+  FILES[("Workspace files")]
+  MODEL["Chat / Embedding providers"]
+
+  KM --> KR --> KBS
+  KBS --> ING --> PARSE
+  FILES --> PARSE
+  PARSE --> META
+  PARSE --> FTS
+  PARSE -. "v1" .-> VEC
+  ING --> EVENTS
+  JS --> KM
+  EVENTS --> JS
+
+  CHAT --> RR --> RUN
+  RUN --> RET
+  RET --> FTS
+  RET -. "v1" .-> VEC
+  RET --> CTX --> AGENT --> MODEL
+  RUN --> EVENTS --> RS --> CHAT
+  RS --> CIT
+
