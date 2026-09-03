@@ -1,6 +1,6 @@
 # Workflow 支持设计与实施计划
 
-> 状态：规划完成，待实施  
+> 状态：规划完成，前端展示框架待实施  
 > 目标版本：Workflow v1  
 > 依赖：[Pi Agent 后端实现计划](./02-pi-agent-implementation-plan.md)
 
@@ -301,6 +301,143 @@ provider 密钥仅用于当前执行，不能写入 workflow 定义、run input�
 
 MVP 不做自由画布。表单式编辑器更容易支持键盘操作、schema 校验和稳定测试；底层定义仍是 DAG，之后可增加画布而无需改变后端协议。
 
+### 9.1 展示框架先行
+
+在 Workflow 后端 API 开发前，先交付一套只读为主、可切换页面状态的前端展示框架，用于确认信息架构、视觉层级和组件边界。该阶段使用类型安全的本地 fixture，不调用 Workflow API，不向 IndexedDB 或 localStorage 写入 Workflow 数据，也不承诺创建、保存、发布、运行等操作已经生效。
+
+展示框架包含以下三个主视图：
+
+| 视图 | 入口 | 展示内容 | 框架阶段允许的交互 |
+|---|---|---|---|
+| Workflow 列表 | 项目侧栏的 `Workflows` | 名称、说明、草稿/已发布状态、版本、节点数、最近运行和更新时间 | 搜索、状态筛选、进入编辑页、进入最近一次运行 |
+| Workflow 编辑器 | 列表项或 `New workflow` | 节点列表、节点配置表单、输入定义、校验摘要、已发布版本 | 切换节点、编辑未持久化表单、切换诊断状态、打开测试运行预览 |
+| Workflow 运行详情 | 列表最近运行或编辑器 `Test run` | run 状态、版本、输入、输出、step timeline、attempt 与错误摘要 | 展开步骤输入/输出、切换 attempt、返回定义页 |
+
+框架阶段的按钮必须区分三类状态：
+
+- 可演示：只改变当前页面内的展示状态，例如搜索、筛选、选择节点和展开步骤。
+- 待接入：保存、发布、触发、取消和重试按钮可展示，但点击后只能给出“后端能力尚未接入”的明确提示。
+- 不展示：导入/导出、归档和运行历史筛选等 W4 能力暂不进入首批框架，避免造成已实现的错觉。
+
+### 9.2 页面布局
+
+项目侧栏沿用现有项目与会话结构，在每个项目分组内增加独立的 `Workflows` 入口。进入 Workflow 后保留应用级侧栏和设置入口，主内容区替换聊天面板，不同时渲染聊天 runtime 和 Workflow 页面。
+
+列表页：
+
+```text
+┌──────────────┬────────────────────────────────────────────────────┐
+│ Project      │ Project name                         New workflow  │
+│ ├ Workflows  │ Workflows                                          │
+│ └ Threads    │ Search                         All Published Draft │
+│              │ ┌────────────────────────────────────────────────┐ │
+│              │ │ Name        Status      Last run      Updated │ │
+│              │ │ Workflow A  Published   Succeeded     12m ago │ │
+│              │ │ Workflow B  Draft       Not run       Yesterday│ │
+│              │ └────────────────────────────────────────────────┘ │
+└──────────────┴────────────────────────────────────────────────────┘
+```
+
+编辑页：
+
+```text
+┌──────────────┬──────────────────┬─────────────────────┬───────────────┐
+│ App sidebar  │ Nodes            │ Node configuration  │ Validate      │
+│              │ Workflow input   │ Name / ID           │ Diagnostics   │
+│              │ 1. Agent         │ Type-specific form  │ Checklist     │
+│              │ 2. Condition     │ Retry policy        │ Version       │
+│              │ 3. Output        │ Edge / branch       │ Publish       │
+└──────────────┴──────────────────┴─────────────────────┴───────────────┘
+```
+
+运行页：
+
+```text
+┌──────────────┬────────────────────────────────────────────────────┐
+│ App sidebar  │ Status / run ID / version / actions               │
+│              │ ┌──────────────────────┬─────────────────────────┐ │
+│              │ │ Step timeline        │ Input                   │ │
+│              │ │ ✓ Agent · attempt 1  │ Output                  │ │
+│              │ │ ✓ Condition          │ Error / metadata        │ │
+│              │ │ ✓ Output             │                         │ │
+│              │ └──────────────────────┴─────────────────────────┘ │
+└──────────────┴────────────────────────────────────────────────────┘
+```
+
+响应式规则：
+
+- `>= 1200px`：编辑器完整三栏，运行页 timeline 与数据面板双栏。
+- `800px–1199px`：编辑器隐藏右侧面板，通过顶部 `Validation` 抽屉打开；运行页仍可双栏。
+- `< 800px`：节点列表改为下拉/抽屉，配置与运行信息单栏；保持所有状态和操作可通过键盘访问。
+
+### 9.3 路由与页面状态
+
+目标路由保持项目级语义：
+
+| 路由 | 页面 |
+|---|---|
+| `/projects/:projectId/workflows` | Workflow 列表 |
+| `/projects/:projectId/workflows/:workflowId` | Workflow 编辑器 |
+| `/projects/:projectId/workflows/:workflowId/runs/:runId` | Workflow 运行详情 |
+
+首批展示框架若受当前单页查询参数结构限制，可以暂时使用 `view=workflows`、`projectId`、`workflowId` 和 `runId` 表达相同状态，但组件内部不能依赖查询参数格式。路由适配应集中在页面入口层，避免后续迁移正式路径时改动列表、编辑器和运行详情组件。
+
+页面刷新和浏览器前进/后退必须保留当前项目与主视图。fixture ID 使用固定值，确保展示链接可复现；不存在的 workflow/run 显示独立的 not-found 状态，不自动回退到第一个样例。
+
+### 9.4 组件边界
+
+```text
+WorkflowEntry
+├── WorkflowSidebarLink
+└── WorkflowWorkspace
+    ├── WorkflowListPage
+    │   ├── WorkflowListToolbar
+    │   ├── WorkflowTable
+    │   └── WorkflowEmptyState
+    ├── WorkflowEditorPage
+    │   ├── WorkflowEditorHeader
+    │   ├── WorkflowNodeList
+    │   ├── WorkflowNodeForm
+    │   └── WorkflowValidationPanel
+    └── WorkflowRunPage
+        ├── WorkflowRunHeader
+        ├── WorkflowStepTimeline
+        ├── WorkflowStepDetails
+        └── WorkflowRunDataPanel
+```
+
+页面组件只消费 view model，不直接读取 fixture 或发起 HTTP 请求。数据源通过统一接口注入：
+
+```ts
+type WorkflowFrontendDataSource = {
+  listWorkflows(projectId: string): Promise<WorkflowSummary[]>;
+  getWorkflow(workflowId: string): Promise<WorkflowDetail>;
+  getWorkflowRun(runId: string): Promise<WorkflowRunDetail>;
+};
+```
+
+框架阶段实现 `FixtureWorkflowDataSource`；后端接口可用后增加 `ApiWorkflowDataSource`。两者返回相同 view model，使页面和交互测试无需随 API 接入重写。fixture 应覆盖 `draft`、`published`、`running`、`succeeded`、`failed`、`paused`、空列表和校验失败，且不得包含真实 provider key、工作目录或用户数据。
+
+### 9.5 视觉与交互规范
+
+- 复用现有 Antler 颜色变量、圆角、字体和 Lucide 图标，不在框架阶段引入新的 UI/画布依赖。
+- Workflow 状态统一使用文字加颜色的 badge，不能只靠颜色区分；run 与 step 状态复用同一映射表。
+- 节点类型使用固定图标和名称：`Agent`、`Condition`、`Output`；节点顺序必须有可读编号或连接线。
+- 所有表单项有可见 label；诊断项应能定位到对应节点和字段；错误文案预留 error code 展示位置。
+- 列表、编辑器和运行页分别提供 loading、empty、error、not-found 四类页面状态，避免 API 接入后再补整体布局。
+- Agent 输出默认显示摘要，展开后再展示 Markdown；step delta 不进入列表页，防止高频更新造成重渲染。
+- 框架页显式显示 `Preview` 或等价标识，直到真实 API 完成创建、保存和运行闭环。
+
+### 9.6 展示框架验收标准
+
+1. 用户能从任意项目分组进入该项目的 Workflow 列表，并通过浏览器返回回到原会话。
+2. 列表、编辑器、运行详情三种视图可用固定 fixture 串联浏览，刷新后仍能恢复相同页面。
+3. 编辑器可以切换三类节点并展示对应配置表单；校验成功和失败两种状态均可演示。
+4. 运行详情同时展示成功、失败/暂停以及多 attempt 场景，step 详情可展开。
+5. 所有未接后端的写操作都有一致的 preview 提示，不产生本地持久化副作用。
+6. 在桌面、中等宽度和窄屏三档无水平页面溢出；键盘可访问所有导航与展开操作。
+7. TypeScript 检查、组件测试和现有聊天测试通过；展示框架不改变聊天 runtime 的创建、会话保存和 provider 配置逻辑。
+
 ### 状态管理
 
 - workflow 定义和 run 是服务端状态，通过独立 API client 获取，不写入 conversation IndexedDB。
@@ -333,10 +470,14 @@ backend/src/
 app/src/
 ├── features/workflows/
 │   ├── api.ts
+│   ├── data-source.ts
+│   ├── fixtures.ts
 │   ├── types.ts
+│   ├── workflow-entry.tsx
 │   ├── workflow-list.tsx
 │   ├── workflow-editor.tsx
 │   ├── node-form.tsx
+│   ├── workflow-validation-panel.tsx
 │   └── workflow-run.tsx
 └── styles/
     └── workflow.css
@@ -377,10 +518,20 @@ app/src/
 
 1. 完成触发、详情、事件、取消、重试接口。
 2. 实现数据库补放 + 内存通知的 SSE event stream。
-3. 增加 Workflow 列表、触发表单和运行时间线。
+3. 将展示框架的数据源从 fixture 切换为 API，接通触发表单和实时运行时间线。
 4. 覆盖断线重连、页面刷新和错误文案。
 
 完成标准：刷新页面不丢进度；断线重连无重复/缺失事件；取消最终收敛到单一终态。
+
+### WF0：前端展示框架（1–1.5 天，可在 W0–W2 期间并行）
+
+1. 增加项目级 Workflow 入口和三种页面壳，接入正式路由或等价的集中式临时路由适配。
+2. 定义前端 view model、data source 接口和覆盖关键状态的 fixture。
+3. 完成列表、三栏编辑器和运行时间线的响应式展示与页面内演示交互。
+4. 为未接入的写操作增加统一 preview 提示，补 loading/empty/error/not-found 状态。
+5. 增加组件测试和三档宽度视觉检查，不修改聊天 runtime 或 Workflow 后端。
+
+完成标准：无需后端即可完整浏览并评审 Workflow 信息架构；移除 fixture、接入 API 时不需要重写页面组件。
 
 ### W4：编辑器与产品化（2–3 天）
 
@@ -391,7 +542,7 @@ app/src/
 
 完成标准：用户不编辑原始 JSON 也能创建、发布和运行 MVP workflow。
 
-整体 MVP 预计 **7.5–10.5 个工程日**，不含自由画布、审批系统和自动触发器。
+后端与完整 MVP 功能预计 **7.5–10.5 个工程日**；WF0 另需 **1–1.5 个工程日**，可与 W0–W2 并行，因此不必等量增加整体日历工期。估算不含自由画布、审批系统和自动触发器。
 
 ## 12. 测试策略
 
@@ -456,11 +607,12 @@ app/src/
 
 第一批 PR 建议严格拆为：
 
-1. `RunStore + run_events.seq + replay tests`
-2. `Workflow schema + validator + publish API`
-3. `WorkflowEngine + deterministic executors`
-4. `Workflow run API + SSE + recovery`
-5. `Workflow list/run UI`
-6. `Workflow editor UI + docs`
+1. `Workflow frontend display framework + fixtures`（只做展示框架，可与后端 W0–W2 并行）
+2. `RunStore + run_events.seq + replay tests`
+3. `Workflow schema + validator + publish API`
+4. `WorkflowEngine + deterministic executors`
+5. `Workflow run API + SSE + recovery`
+6. `Workflow UI data source: fixtures -> API`
+7. `Workflow editor write actions + docs`
 
 每个 PR 都应保持 `pnpm check` 与 `pnpm test` 通过，数据库变更独立 migration，避免 schema、引擎与大规模 UI 在同一提交中同时落地。
