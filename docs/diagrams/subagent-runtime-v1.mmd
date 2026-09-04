@@ -1,0 +1,34 @@
+flowchart LR
+  UI["React / Tauri"]
+  API["Fastify REST + SSE"]
+
+  subgraph Host["Antler Host Runtime"]
+    Parent["Parent AgentRun"]
+    Tool["delegate_task tool"]
+    Coordinator["SubagentCoordinator"]
+    Scheduler["Concurrency and budget gate"]
+    ChildA["Child AgentRun A"]
+    ChildB["Child AgentRun B"]
+  end
+
+  Adapter["PiAgentAdapter"]
+  Provider["LLM provider"]
+  Tools["Read-only child tools"]
+  Store[("RunStore and event log")]
+
+  UI <--> API
+  API --> Parent
+  Parent --> Tool --> Coordinator --> Scheduler
+  Scheduler --> ChildA
+  Scheduler --> ChildB
+  Parent <--> Store
+  ChildA <--> Store
+  ChildB <--> Store
+  Parent --> Adapter
+  ChildA --> Adapter
+  ChildB --> Adapter
+  Adapter --> Provider
+  ChildA --> Tools
+  ChildB --> Tools
+  Coordinator -. "result returned as tool output" .-> Parent
+  Parent -. "cancel cascades" .-> Coordinator
