@@ -42,14 +42,24 @@ fi
 echo -e "${BLUE}已检测到暂存改动${NC}"
 
 tmp_output="$(mktemp)"
+tmp_stderr="$(mktemp)"
+tmp_clean="$(mktemp)"
 cleanup() {
-  rm -f "$tmp_output"
+  rm -f "$tmp_output" "$tmp_stderr" "$tmp_clean"
 }
 trap cleanup EXIT
 
-# 根据工具类型构建执行命令
+# 根据工具类型构建执行命令（COMMIT_CLI 可指向绝对路径，按可执行文件名识别工具类型）
+case "$(basename "$CLI_TOOL")" in
+  *claude*) tool_kind="claude" ;;
+  *codex*) tool_kind="codex" ;;
+  *)
+    echo -e "${RED}COMMIT_CLI 指定的工具无法识别（名称需包含 claude 或 codex）：${CLI_TOOL}${NC}" >&2
+    exit 1
+    ;;
+esac
 echo -e "${BLUE}选用 CLI 工具：${CLI_TOOL_LABEL}${NC}"
-if [[ "$CLI_TOOL" == "claude" ]]; then
+if [[ "$tool_kind" == "claude" ]]; then
   if [[ "${COMMIT_MODEL:-}" ]]; then
     echo -e "${BLUE}使用模型：${COMMIT_MODEL}${NC}"
   else
@@ -59,7 +69,7 @@ if [[ "$CLI_TOOL" == "claude" ]]; then
     export ANTHROPIC_BASE_URL="$COMMIT_BASE_URL"
   fi
   exec_cmd=(
-    claude
+    "$CLI_TOOL"
     --print
     --output-format text
     # 不落盘会话、不可被 /resume 拾起，避免新增会话
@@ -72,7 +82,8 @@ if [[ "$CLI_TOOL" == "claude" ]]; then
   fi
 else
   exec_cmd=(
-    codex exec
+    "$CLI_TOOL"
+    exec
     --ephemeral
   )
   if [[ "${COMMIT_MODEL:-}" ]]; then
@@ -86,45 +97,63 @@ fi
 
 echo -e "${BLUE}通过 ${CLI_TOOL_LABEL} 生成提交信息...${NC}"
 
-(
+# CLI 告警（如模型目录提示）输出在 stderr：与结果流分离，避免混入提交信息
+# claude 的结果走 stdout；codex 的结果走 --output-last-message 指向的文件，stdout 进度直接丢弃
+if [[ "$tool_kind" == "claude" ]]; then
+  run_stdout="$tmp_output"
+else
+  run_stdout=/dev/null
+fi
+
+if ! (
   printf '为下面的阶段性差异编写 Conventional Commits git 提交消息，用简体中文输出。只输出提交消息本身，不要代码围栏、注释或多余前后缀。\n\n'
   printf '格式约定：\n'
-  printf '1. 首行为标题，必须是合法的 Conventional Commits：用反引号整体包裹，形如 `type(scope): 简述`。type 不可省略，仅从 feat、fix、docs、chore、test、refactor、style、perf、build、ci、revert 中选取；scope 与现有提交历史一致。禁止把文件名或模块名直接当作 type。\n'
+  printf '1. 首行为标题，必须是合法的 Conventional Commits：形如 type(scope): 简述，不要用反引号或任何符号包裹。type 不可省略，仅从 feat、fix、docs、chore、test、refactor、style、perf、build、ci、revert 中选取；scope 与现有提交历史一致。禁止把文件名或模块名直接当作 type。\n'
   printf '2. 标题与正文之间空一行。当差异需要解释时，用 `说明：` 起一段，逐条以 `-` 列出关键改动；改动中出现的字段名、配置项等用反引号包裹。\n'
   printf '3. 仅当差异确实需要说明时才写正文，单一且一目了然的改动可只输出标题。\n'
   printf '4. 标题简明概括意图，正文聚焦"改了什么、为什么"，不复述 diff 细节。\n\n'
   printf 'Diff:\n```diff\n'
   git diff --cached -- . "${EXCLUDE_PATTERNS[@]}"
   printf '```\n'
-) | "${exec_cmd[@]}" 2>&1 | if [[ "$CLI_TOOL" == "claude" ]]; then
-  cat > "$tmp_output"
-else
-  cat >/dev/null
-fi || {
+) | "${exec_cmd[@]}" >"$run_stdout" 2>"$tmp_stderr"; then
   echo -e "${RED}${CLI_TOOL_LABEL} 生成提交信息失败：${NC}" >&2
+  cat "$tmp_stderr" >&2
   cat "$tmp_output" >&2
   exit 1
-}
+fi
 
 echo -e "${GREEN}提交信息生成完成${NC}"
 
-commit_message="$(node - "$tmp_output" <<'NODE'
-// claude --print 的输出可能混入 CLI 告警行（如未识别模型的提示），提交前剔除
-const noisePatterns = [
-  /^\[claude-code:/,
-  /is not a model this version of Claude Code recognizes/,
-];
-const content = require('fs').readFileSync(process.argv[2], 'utf8')
-  .split('\n')
-  .filter((line) => !noisePatterns.some((p) => p.test(line)))
-  .join('\n')
-  .trim();
-process.stdout.write(content);
+# 注意：heredoc 内含反引号，不能放进 $() 命令替换（bash 3.2 解析不了），故先写入临时文件再读取
+node - "$tmp_output" >"$tmp_clean" <<'NODE'
+// 不按告警文案做字符串过滤（CLI 措辞一变就失效）：
+// 1. 从首个 Conventional Commits 标题行开始截取，跳过混入 stdout 的前置噪音
+// 2. 剥离代码围栏，以及标题行首尾误加的反引号（正文中的反引号保留）
+const fs = require('fs');
+const titleRe = /^`?(feat|fix|docs|chore|test|refactor|style|perf|build|ci|revert)(\([^)]+\))?!?:\s+\S/;
+const lines = fs.readFileSync(process.argv[2], 'utf8').split('\n');
+const start = lines.findIndex((line) => titleRe.test(line.trim()));
+const body = (start >= 0 ? lines.slice(start) : lines)
+  .filter((line) => !/^```/.test(line.trim()))
+  .map((line) => line.trimEnd());
+if (body.length) {
+  body[0] = body[0].trim().replace(/^`+/, '').replace(/`+$/, '').trim();
+}
+process.stdout.write(body.join('\n').trim());
 NODE
-)"
+
+commit_message="$(<"$tmp_clean")"
 
 if [[ -z "$commit_message" ]]; then
   echo -e "${RED}${CLI_TOOL_LABEL} 未返回提交信息。${NC}" >&2
+  cat "$tmp_output" >&2
+  exit 1
+fi
+
+# 校验标题确实是 Conventional Commits；格式不对说明输出被污染，宁可失败也不提交脏信息
+if ! printf '%s\n' "$commit_message" | head -1 | grep -qE '^(feat|fix|docs|chore|test|refactor|style|perf|build|ci|revert)(\([^)]+\))?!?: .+'; then
+  echo -e "${RED}提交信息标题不符合 Conventional Commits 格式，原始输出如下：${NC}" >&2
+  cat "$tmp_output" >&2
   exit 1
 fi
 
