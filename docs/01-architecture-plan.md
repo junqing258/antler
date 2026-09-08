@@ -88,7 +88,7 @@ antler/
 | 鉴权（若远端） | JWT + 中间件 | |
 | 配置 | 环境变量 + dotenv | LLM key 管理 |
 
-RAG 的本地存储、检索工具、索引版本和分阶段实施方案见：[Agent 后端 RAG 支持方案](./03-rag-backend-design.md)。
+RAG 的本地存储、检索工具、索引版本和分阶段实施方案见：[知识库能力设计与实施计划](./07-knowledge-base-design.md)。
 
 ## 7. 后端 Agent 框架（已确认：第一版）
 
