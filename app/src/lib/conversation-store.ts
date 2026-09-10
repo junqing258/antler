@@ -6,12 +6,18 @@ const DATABASE_VERSION = 2;
 const CONVERSATIONS_STORE = "conversations";
 const PROJECTS_STORE = "projects";
 
+// A runtime can finish its debounced save while the user is deleting that
+// conversation. Keep a short-lived tombstone so that stale saves cannot put
+// the just-deleted record back into IndexedDB.
+const deletedConversationIds = new Set<string>();
+
 export const DEFAULT_PROJECT_ID = "default";
 
 export type Project = {
   id: string;
   name: string;
   workingDirectory: string;
+  knowledgePolicy?: "disabled" | "auto";
   createdAt: number;
   updatedAt: number;
 };
@@ -144,6 +150,17 @@ export async function updateProject(
   return project;
 }
 
+export async function updateProjectKnowledgePolicy(
+  id: string,
+  knowledgePolicy: "disabled" | "auto",
+): Promise<Project> {
+  const current = await getProject(id);
+  if (!current) throw new Error("项目不存在");
+  const project: Project = { ...current, knowledgePolicy, updatedAt: Date.now() };
+  await withStore(PROJECTS_STORE, "readwrite", (store) => store.put(project));
+  return project;
+}
+
 export async function ensureConversation(
   id: string,
   projectId = DEFAULT_PROJECT_ID,
@@ -175,8 +192,13 @@ export async function getConversation(id: string): Promise<Conversation | undefi
 export async function saveConversationMessages(
   id: string,
   messages: ThreadMessageLike[],
-): Promise<Conversation> {
+): Promise<Conversation | undefined> {
+  if (deletedConversationIds.has(id)) return undefined;
   const current = await getConversation(id);
+  // Empty drafts are intentionally not persisted. They become conversations
+  // only after the user has actually sent a message.
+  if (!current && messages.length === 0) return undefined;
+  if (deletedConversationIds.has(id)) return undefined;
   const now = Date.now();
   const conversation: Conversation = {
     id,
@@ -214,5 +236,6 @@ export async function renameConversation(id: string, title: string): Promise<Con
 }
 
 export function deleteConversation(id: string): Promise<undefined> {
+  deletedConversationIds.add(id);
   return withStore(CONVERSATIONS_STORE, "readwrite", (store) => store.delete(id));
 }
