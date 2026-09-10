@@ -30,7 +30,10 @@ export class PiAdapterError extends Error {
   }
 }
 export class PiAgentAdapter {
-  private readonly agents = new Map<string, { agent: Agent; fingerprint: string }>();
+  private readonly agents = new Map<
+    string,
+    { agent: Agent; fingerprint: string }
+  >();
   constructor(private readonly config: PiAgentAdapterConfig) {}
   private tools(snapshot: SkillSnapshot) {
     return [
@@ -49,7 +52,13 @@ export class PiAgentAdapter {
     onEvent: (event: AgentEvent) => void | Promise<void>,
   ) {
     if (this.config.provider === "anthropic") {
-      return this.runAnthropic(input, conversationId, skillSnapshot, signal, onEvent);
+      return this.runAnthropic(
+        input,
+        conversationId,
+        skillSnapshot,
+        signal,
+        onEvent,
+      );
     }
     if (!this.config.openAiApiKey)
       throw new PiAdapterError(
@@ -72,12 +81,16 @@ export class PiAgentAdapter {
         : {}),
     };
     let cached = this.agents.get(conversationId);
-    if (cached && cached.fingerprint !== skillSnapshot.catalogFingerprint) throw new Error("skill_snapshot_changed");
+    if (cached && cached.fingerprint !== skillSnapshot.catalogFingerprint)
+      throw new Error("skill_snapshot_changed");
     if (!cached) {
       const agent = new Agent({
         initialState: {
           model: model as Model<any>,
-          systemPrompt: composeSkillPrompt(this.config.systemPrompt, skillSnapshot),
+          systemPrompt: composeSkillPrompt(
+            this.config.systemPrompt,
+            skillSnapshot,
+          ),
           thinkingLevel: "low",
           messages: [],
           tools: this.tools(skillSnapshot),
@@ -94,7 +107,8 @@ export class PiAgentAdapter {
             },
           ),
       });
-      cached = { agent, fingerprint: skillSnapshot.catalogFingerprint }; this.agents.set(conversationId, cached);
+      cached = { agent, fingerprint: skillSnapshot.catalogFingerprint };
+      this.agents.set(conversationId, cached);
     }
     const agent = cached.agent;
     const unsubscribe = agent.subscribe(onEvent);
@@ -149,12 +163,16 @@ export class PiAgentAdapter {
         : {}),
     };
     let cached = this.agents.get(conversationId);
-    if (cached && cached.fingerprint !== skillSnapshot.catalogFingerprint) throw new Error("skill_snapshot_changed");
+    if (cached && cached.fingerprint !== skillSnapshot.catalogFingerprint)
+      throw new Error("skill_snapshot_changed");
     if (!cached) {
       const agent = new Agent({
         initialState: {
           model: model as Model<any>,
-          systemPrompt: composeSkillPrompt(this.config.systemPrompt, skillSnapshot),
+          systemPrompt: composeSkillPrompt(
+            this.config.systemPrompt,
+            skillSnapshot,
+          ),
           thinkingLevel: "low",
           messages: [],
           tools: this.tools(skillSnapshot),
@@ -174,7 +192,8 @@ export class PiAgentAdapter {
             },
           ),
       });
-      cached = { agent, fingerprint: skillSnapshot.catalogFingerprint }; this.agents.set(conversationId, cached);
+      cached = { agent, fingerprint: skillSnapshot.catalogFingerprint };
+      this.agents.set(conversationId, cached);
     }
     const agent = cached.agent;
     const unsubscribe = agent.subscribe(onEvent);

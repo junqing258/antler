@@ -25,14 +25,12 @@ export function registerTaskRoutes(
         .send({ error: "conversationId 必须是非空字符串。" });
     try {
       const task = await taskService.create(message, conversationId);
-      return reply
-        .code(202)
-        .send({
-          taskId: task.id,
-          runId: task.id,
-          conversationId: task.conversationId,
-          eventsUrl: `/api/tasks/${task.id}/events`,
-        });
+      return reply.code(202).send({
+        taskId: task.id,
+        runId: task.id,
+        conversationId: task.conversationId,
+        eventsUrl: `/api/tasks/${task.id}/events`,
+      });
     } catch (error) {
       if (error instanceof ConversationBusyError)
         return reply.code(409).send({ error: "conversation_busy" });

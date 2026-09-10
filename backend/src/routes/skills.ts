@@ -23,11 +23,9 @@ export function registerSkillRoutes(
         diagnostics: catalog.diagnostics,
       });
     } catch (error) {
-      return reply
-        .code(400)
-        .send({
-          error: error instanceof Error ? error.message : "工作目录无效。",
-        });
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : "工作目录无效。",
+      });
     }
   });
 }

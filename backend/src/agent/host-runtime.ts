@@ -164,8 +164,11 @@ export class AntlerHostRuntime {
     return this.runs.get(runId)?.run ?? (await this.runStore?.get(runId));
   }
   async getEvents(runId: string, afterEventId = 0) {
-    return this.runs.get(runId)?.events.filter((event) => event.id > afterEventId) ??
-      (await this.runStore?.getEvents(runId, afterEventId)) ?? [];
+    return (
+      this.runs.get(runId)?.events.filter((event) => event.id > afterEventId) ??
+      (await this.runStore?.getEvents(runId, afterEventId)) ??
+      []
+    );
   }
   subscribe(runId: string, listener: (event: RunEvent) => void) {
     const active = this.runs.get(runId);
@@ -196,17 +199,30 @@ export class AntlerHostRuntime {
       });
       await this.emit(active, "knowledge.retrieved", {
         mode: knowledgeContext.mode,
-        hits: knowledgeContext.hits.map(({ citationKey, title, locator, snippet, score }) => ({
-          citationKey, title, locator, snippet, score,
-        })),
+        hits: knowledgeContext.hits.map(
+          ({ citationKey, title, locator, snippet, score }) => ({
+            citationKey,
+            title,
+            locator,
+            snippet,
+            score,
+          }),
+        ),
       });
-      await this.emit(active, "run.started", { runId: run.id, status: run.status }, true);
+      await this.emit(
+        active,
+        "run.started",
+        { runId: run.id, status: run.status },
+        true,
+      );
       active.timeout = setTimeout(
         () => active.controller.abort(),
         this.config.maxRunDurationMs,
       );
       await active.adapter.run(
-        knowledgeContext.prompt ? `${knowledgeContext.prompt}\n\nUser question: ${run.input}` : run.input,
+        knowledgeContext.prompt
+          ? `${knowledgeContext.prompt}\n\nUser question: ${run.input}`
+          : run.input,
         run.conversationId,
         active.skillSnapshot,
         active.controller.signal,
@@ -217,7 +233,8 @@ export class AntlerHostRuntime {
         active.controller.signal.aborted ? "cancelled" : "succeeded",
       );
     } catch (error) {
-      if (active.controller.signal.aborted) await this.finish(active, "cancelled");
+      if (active.controller.signal.aborted)
+        await this.finish(active, "cancelled");
       else {
         const code =
           error instanceof PiAdapterError ? error.code : "provider_error";
@@ -307,11 +324,16 @@ export class AntlerHostRuntime {
         : status === "cancelled"
           ? "run.cancelled"
           : "run.failed";
-    await this.emit(active, type, {
-      runId: active.run.id,
-      status,
-      ...(error ? { error: { code: errorCode, message: error } } : {}),
-    }, true);
+    await this.emit(
+      active,
+      type,
+      {
+        runId: active.run.id,
+        status,
+        ...(error ? { error: { code: errorCode, message: error } } : {}),
+      },
+      true,
+    );
   }
   private async emit(
     active: ActiveRun,

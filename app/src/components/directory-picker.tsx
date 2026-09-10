@@ -38,10 +38,15 @@ export function DirectoryPicker({
     try {
       const server = await getServerInfo();
       const query = path ? `?path=${encodeURIComponent(path)}` : "";
-      const response = await fetch(`${server.baseUrl}/api/directories${query}`, {
-        headers: { "x-antler-token": server.token },
-      });
-      const body = (await response.json()) as DirectoryListing & { error?: string };
+      const response = await fetch(
+        `${server.baseUrl}/api/directories${query}`,
+        {
+          headers: { "x-antler-token": server.token },
+        },
+      );
+      const body = (await response.json()) as DirectoryListing & {
+        error?: string;
+      };
       if (!response.ok) throw new Error(body.error ?? "无法读取目录");
       setListing(body);
     } catch (cause) {
@@ -85,7 +90,11 @@ export function DirectoryPicker({
       </div>
 
       {open && (
-        <div className="directory-browser" role="dialog" aria-label="Choose working directory">
+        <div
+          className="directory-browser"
+          role="dialog"
+          aria-label="Choose working directory"
+        >
           <div className="directory-browser-toolbar">
             <button
               type="button"
@@ -115,26 +124,32 @@ export function DirectoryPicker({
             {!loading && error && (
               <div className="directory-browser-message directory-browser-error">
                 {error}
-                <button type="button" onClick={() => void load(listing?.path)}>Retry</button>
+                <button type="button" onClick={() => void load(listing?.path)}>
+                  Retry
+                </button>
               </div>
             )}
             {!loading && !error && listing?.directories.length === 0 && (
               <div className="directory-browser-message">No subdirectories</div>
             )}
-            {!loading && !error && listing?.directories.map((directory) => (
-              <button
-                key={directory.path}
-                type="button"
-                onClick={() => void load(directory.path)}
-              >
-                <FolderIcon />
-                <span>{directory.name}</span>
-              </button>
-            ))}
+            {!loading &&
+              !error &&
+              listing?.directories.map((directory) => (
+                <button
+                  key={directory.path}
+                  type="button"
+                  onClick={() => void load(directory.path)}
+                >
+                  <FolderIcon />
+                  <span>{directory.name}</span>
+                </button>
+              ))}
           </div>
 
           <div className="directory-browser-actions">
-            <button type="button" onClick={() => setOpen(false)}>Cancel</button>
+            <button type="button" onClick={() => setOpen(false)}>
+              Cancel
+            </button>
             <button
               className="directory-browser-select"
               type="button"

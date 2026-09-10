@@ -123,12 +123,19 @@ function ProjectDialog({
             getServerInfo={serverInfo}
           />
           <small>
-            Choose a folder inside the server workspace, or use the server default.
+            Choose a folder inside the server workspace, or use the server
+            default.
           </small>
         </label>
         <div className="project-dialog-actions">
-          <button type="button" onClick={onClose}>Cancel</button>
-          <button className="project-dialog-save" type="submit" disabled={!name.trim()}>
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="project-dialog-save"
+            type="submit"
+            disabled={!name.trim()}
+          >
             {project ? "Save" : "Create project"}
           </button>
         </div>
@@ -159,19 +166,42 @@ function KnowledgeDialog({
             <h2 id="knowledge-dialog-title">Knowledge</h2>
             <p>Configure retrieval for {project.name}.</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close"><XIcon /></button>
+          <button type="button" onClick={onClose} aria-label="Close">
+            <XIcon />
+          </button>
         </div>
         <div className="knowledge-status">
           <BookOpenIcon aria-hidden="true" />
-          <div><strong>No sources yet</strong><span>Add files and folders once indexing is available.</span></div>
+          <div>
+            <strong>No sources yet</strong>
+            <span>Add files and folders once indexing is available.</span>
+          </div>
         </div>
         <label className="knowledge-toggle">
-          <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
-          <span><strong>Automatically search this project</strong><small>When sources are indexed, relevant snippets will be attached to new chat runs.</small></span>
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(event) => setEnabled(event.target.checked)}
+          />
+          <span>
+            <strong>Automatically search this project</strong>
+            <small>
+              When sources are indexed, relevant snippets will be attached to
+              new chat runs.
+            </small>
+          </span>
         </label>
         <div className="project-dialog-actions">
-          <button type="button" onClick={onClose}>Cancel</button>
-          <button className="project-dialog-save" type="button" onClick={() => onSave(enabled ? "auto" : "disabled")}>Save</button>
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="project-dialog-save"
+            type="button"
+            onClick={() => onSave(enabled ? "auto" : "disabled")}
+          >
+            Save
+          </button>
         </div>
       </section>
     </div>
@@ -496,19 +526,36 @@ function Chat({
             <img className="brand-logo" src="/favicon.png" alt="" />
             <span>Antler</span>
           </div>
-          <button className="new-thread !rounded-full" type="button" onClick={onNewThread}>
+          <button
+            className="new-thread !rounded-full"
+            type="button"
+            onClick={onNewThread}
+          >
             <PlusIcon aria-hidden="true" />
             New Thread
           </button>
-          <button className="knowledge-entry" type="button" onClick={onOpenKnowledge}>
+          <button
+            className="knowledge-entry"
+            type="button"
+            onClick={onOpenKnowledge}
+          >
             <BookOpenIcon aria-hidden="true" />
             <span>Knowledge</span>
-            <small>{activeProject.knowledgePolicy === "auto" ? "Auto" : "Off"}</small>
+            <small>
+              {activeProject.knowledgePolicy === "auto" ? "Auto" : "Off"}
+            </small>
           </button>
-          <nav className="project-history" aria-label="Projects and chat history">
+          <nav
+            className="project-history"
+            aria-label="Projects and chat history"
+          >
             <div className="project-history-title">
               <span>Projects</span>
-              <button type="button" onClick={onNewProject} aria-label="New project">
+              <button
+                type="button"
+                onClick={onNewProject}
+                aria-label="New project"
+              >
                 <FolderPlusIcon />
               </button>
             </div>
@@ -526,7 +573,10 @@ function Chat({
                       className="project-select"
                       type="button"
                       onClick={() => onSelectProject(project)}
-                      title={project.workingDirectory || "Server default working directory"}
+                      title={
+                        project.workingDirectory ||
+                        "Server default working directory"
+                      }
                     >
                       <FolderIcon aria-hidden="true" />
                       <span>{project.name}</span>
@@ -551,12 +601,17 @@ function Chat({
                       </button>
                     )}
                     {projectConversations.map((conversation) => (
-                      <div className="thread-history-item" key={conversation.id}>
+                      <div
+                        className="thread-history-item"
+                        key={conversation.id}
+                      >
                         <button
                           className="thread-history-select"
                           type="button"
                           aria-current={
-                            conversation.id === conversationId ? "page" : undefined
+                            conversation.id === conversationId
+                              ? "page"
+                              : undefined
                           }
                           onClick={() => onSelectThread(conversation.id)}
                         >
@@ -711,7 +766,8 @@ function App() {
       return;
     void deleteConversation(conversation.id).then(() => {
       refreshLibrary();
-      if (conversation.id === conversationId) startNewThread(conversation.projectId);
+      if (conversation.id === conversationId)
+        startNewThread(conversation.projectId);
     });
   };
   const saveProject = (values: { name: string; workingDirectory: string }) => {
@@ -732,7 +788,10 @@ function App() {
     setSettingsOpen(false);
   };
   const selectModel = (model: string) => {
-    if (model === providerConfig.model || !providerConfig.models.includes(model))
+    if (
+      model === providerConfig.model ||
+      !providerConfig.models.includes(model)
+    )
       return;
     const next = { ...providerConfig, model };
     saveProviderConfig(next);
@@ -799,10 +858,12 @@ function App() {
         <KnowledgeDialog
           project={knowledgeProject}
           onSave={(policy) => {
-            void updateProjectKnowledgePolicy(knowledgeProject.id, policy).then(() => {
-              setKnowledgeProject(undefined);
-              refreshLibrary();
-            });
+            void updateProjectKnowledgePolicy(knowledgeProject.id, policy).then(
+              () => {
+                setKnowledgeProject(undefined);
+                refreshLibrary();
+              },
+            );
           }}
           onClose={() => setKnowledgeProject(undefined)}
         />

@@ -36,8 +36,11 @@ describe("POST /api/runs workingDirectory", () => {
 
     expect(response.statusCode).toBe(202);
     expect(runtime.createRunWithSkills).toHaveBeenCalledWith("hello", {
-      projectId: "project-1", conversationId: "conversation-1", provider: undefined,
-      workingDirectory: process.cwd(), skillPolicy: { mode: "disabled" },
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      provider: undefined,
+      workingDirectory: process.cwd(),
+      skillPolicy: { mode: "disabled" },
       knowledgePolicy: { mode: "disabled" },
     });
     await app.close();
@@ -58,7 +61,12 @@ describe("POST /api/runs workingDirectory", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/runs",
-      payload: { message: "hello", projectId: "project-1", conversationId: "conversation-1", workingDirectory },
+      payload: {
+        message: "hello",
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        workingDirectory,
+      },
     });
 
     expect(response.statusCode).toBe(400);
@@ -73,18 +81,26 @@ describe("POST /api/runs workingDirectory", () => {
     registerRunRoutes(app, runtime as unknown as AntlerHostRuntime);
 
     const missingProject = await app.inject({
-      method: "POST", url: "/api/runs", payload: { message: "hello", conversationId: "conversation-1" },
+      method: "POST",
+      url: "/api/runs",
+      payload: { message: "hello", conversationId: "conversation-1" },
     });
     expect(missingProject.statusCode).toBe(400);
 
     const invalidKnowledge = await app.inject({
-      method: "POST", url: "/api/runs", payload: {
-        message: "hello", projectId: "project-1", conversationId: "conversation-1",
+      method: "POST",
+      url: "/api/runs",
+      payload: {
+        message: "hello",
+        projectId: "project-1",
+        conversationId: "conversation-1",
         knowledgePolicy: { mode: "selected", knowledgeBaseIds: ["kb-1"] },
       },
     });
     expect(invalidKnowledge.statusCode).toBe(400);
-    expect(invalidKnowledge.json()).toEqual({ error: "Knowledge policy 无效。" });
+    expect(invalidKnowledge.json()).toEqual({
+      error: "Knowledge policy 无效。",
+    });
     await app.close();
   });
 });

@@ -1,40 +1,58 @@
-import Fastify from 'fastify';
-import fastifyStatic from '@fastify/static';
-import type { AppConfig } from './config/env.js';
-import { registerHttpHooks } from './plugins/http.js';
-import { registerHealthRoutes } from './routes/health.js';
-import { registerTaskRoutes } from './routes/tasks.js';
-import { TaskService } from './services/task-service.js';
-import { AntlerHostRuntime } from './agent/host-runtime.js';
-import { PiAgentAdapter } from './agent/pi-agent-adapter.js';
-import { DEFAULT_SYSTEM_PROMPT } from './agent/system-prompt.js';
-import { registerRunRoutes } from './routes/runs.js';
-import type { ProviderRunConfig } from './agent/host-runtime.js';
-import { resolve } from 'node:path';
-import { SkillRegistry } from './skills/skill-registry.js';
-import { registerSkillRoutes } from './routes/skills.js';
-import { registerDirectoryRoutes } from './routes/directories.js';
-import { mkdirSync } from 'node:fs';
-import { registerDatabase } from './plugins/database.js';
-import { PrismaRunStore } from './runs/run-store.js';
-import { KnowledgeService } from './knowledge/service.js';
-import { registerKnowledgeRoutes } from './routes/knowledge.js';
-import { LexicalKnowledgeRetriever } from './knowledge/retriever.js';
+import Fastify from "fastify";
+import fastifyStatic from "@fastify/static";
+import type { AppConfig } from "./config/env.js";
+import { registerHttpHooks } from "./plugins/http.js";
+import { registerHealthRoutes } from "./routes/health.js";
+import { registerTaskRoutes } from "./routes/tasks.js";
+import { TaskService } from "./services/task-service.js";
+import { AntlerHostRuntime } from "./agent/host-runtime.js";
+import { PiAgentAdapter } from "./agent/pi-agent-adapter.js";
+import { DEFAULT_SYSTEM_PROMPT } from "./agent/system-prompt.js";
+import { registerRunRoutes } from "./routes/runs.js";
+import type { ProviderRunConfig } from "./agent/host-runtime.js";
+import { resolve } from "node:path";
+import { SkillRegistry } from "./skills/skill-registry.js";
+import { registerSkillRoutes } from "./routes/skills.js";
+import { registerDirectoryRoutes } from "./routes/directories.js";
+import { mkdirSync } from "node:fs";
+import { registerDatabase } from "./plugins/database.js";
+import { PrismaRunStore } from "./runs/run-store.js";
+import { KnowledgeService } from "./knowledge/service.js";
+import { registerKnowledgeRoutes } from "./routes/knowledge.js";
+import { LexicalKnowledgeRetriever } from "./knowledge/retriever.js";
 
 export function createApp(config: AppConfig) {
   mkdirSync(config.workspaceRoot, { recursive: true });
   const app = Fastify({ logger: false });
   registerDatabase(app, config.databaseUrl);
   const adapters = new Map<string, PiAgentAdapter>();
-  const createAdapter = (provider?: ProviderRunConfig, workingDirectory?: string) => {
+  const createAdapter = (
+    provider?: ProviderRunConfig,
+    workingDirectory?: string,
+  ) => {
     const runtimeConfig = provider
       ? {
-          provider: provider.protocol === 'anthropic-messages' ? 'anthropic' as const : 'openai' as const,
+          provider:
+            provider.protocol === "anthropic-messages"
+              ? ("anthropic" as const)
+              : ("openai" as const),
           model: provider.model,
-          openAiApiKey: provider.protocol === 'openai-responses' ? provider.apiKey : undefined,
-          openAiBaseUrl: provider.protocol === 'openai-responses' ? provider.baseUrl : undefined,
-          anthropicAuthToken: provider.protocol === 'anthropic-messages' ? provider.apiKey : undefined,
-          anthropicBaseUrl: provider.protocol === 'anthropic-messages' ? provider.baseUrl : undefined,
+          openAiApiKey:
+            provider.protocol === "openai-responses"
+              ? provider.apiKey
+              : undefined,
+          openAiBaseUrl:
+            provider.protocol === "openai-responses"
+              ? provider.baseUrl
+              : undefined,
+          anthropicAuthToken:
+            provider.protocol === "anthropic-messages"
+              ? provider.apiKey
+              : undefined,
+          anthropicBaseUrl:
+            provider.protocol === "anthropic-messages"
+              ? provider.baseUrl
+              : undefined,
         }
       : {
           provider: config.provider,
@@ -48,7 +66,13 @@ export function createApp(config: AppConfig) {
     const key = JSON.stringify({ ...runtimeConfig, workspaceRoot });
     let adapter = adapters.get(key);
     if (!adapter) {
-      adapter = new PiAgentAdapter({ ...runtimeConfig, tavilyApiKey: config.tavilyApiKey, workspaceRoot, requestTimeoutMs: config.maxRunDurationMs, systemPrompt: DEFAULT_SYSTEM_PROMPT });
+      adapter = new PiAgentAdapter({
+        ...runtimeConfig,
+        tavilyApiKey: config.tavilyApiKey,
+        workspaceRoot,
+        requestTimeoutMs: config.maxRunDurationMs,
+        systemPrompt: DEFAULT_SYSTEM_PROMPT,
+      });
       adapters.set(key, adapter);
     }
     return adapter;
@@ -64,7 +88,8 @@ export function createApp(config: AppConfig) {
   // Test-only in-memory apps do not run migrations. Normal server startup has
   // a configured SQLite file and marks any process-interrupted run terminal
   // before serving replay requests.
-  if (config.databaseUrl) app.addHook("onReady", () => runtime.recoverInterrupted());
+  if (config.databaseUrl)
+    app.addHook("onReady", () => runtime.recoverInterrupted());
   const taskService = new TaskService(runtime);
 
   registerHttpHooks(app, config);
@@ -80,28 +105,29 @@ export function createApp(config: AppConfig) {
   if (config.staticDir) {
     app.register(fastifyStatic, {
       root: config.staticDir,
-      prefix: '/',
-      maxAge: '30d',
+      prefix: "/",
+      maxAge: "30d",
       immutable: true,
     });
-    app.get('/', async (_request, reply) =>
-      reply.sendFile('index.html', { maxAge: 0, immutable: false }),
+    app.get("/", async (_request, reply) =>
+      reply.sendFile("index.html", { maxAge: 0, immutable: false }),
     );
   }
 
   app.setNotFoundHandler(async (request, reply) => {
-    if (!request.antlerAuthorized) return reply.code(401).send({ error: '未授权的本地服务请求。' });
-    const path = request.url.split('?', 1)[0];
+    if (!request.antlerAuthorized)
+      return reply.code(401).send({ error: "未授权的本地服务请求。" });
+    const path = request.url.split("?", 1)[0];
     if (
       config.staticDir &&
-      request.method === 'GET' &&
-      request.headers.accept?.includes('text/html') &&
-      path !== '/api' &&
-      !path.startsWith('/api/')
+      request.method === "GET" &&
+      request.headers.accept?.includes("text/html") &&
+      path !== "/api" &&
+      !path.startsWith("/api/")
     ) {
-      return reply.sendFile('index.html', { maxAge: 0, immutable: false });
+      return reply.sendFile("index.html", { maxAge: 0, immutable: false });
     }
-    return reply.code(404).send({ error: '路由不存在。' });
+    return reply.code(404).send({ error: "路由不存在。" });
   });
 
   return app;

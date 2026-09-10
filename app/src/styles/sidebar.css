@@ -62,9 +62,19 @@
   text-align: left;
   cursor: pointer;
 }
-.knowledge-entry:hover { background: #f0f0f0; color: #222; }
-.knowledge-entry svg { width: 15px; height: 15px; }
-.knowledge-entry small { margin-left: auto; color: #888; font-size: 11px; }
+.knowledge-entry:hover {
+  background: #f0f0f0;
+  color: #222;
+}
+.knowledge-entry svg {
+  width: 15px;
+  height: 15px;
+}
+.knowledge-entry small {
+  margin-left: auto;
+  color: #888;
+  font-size: 11px;
+}
 .project-history {
   margin-top: 14px;
   padding-bottom: 10px;

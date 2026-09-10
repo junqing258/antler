@@ -9,8 +9,12 @@ describe("AntlerHostRuntime knowledge contract", () => {
     const store: RunStore = {
       create: vi.fn(async () => undefined),
       update: vi.fn(async () => undefined),
-      transition: vi.fn(async (_run, event) => { events.push(event); }),
-      appendEvent: vi.fn(async (event) => { events.push(event); }),
+      transition: vi.fn(async (_run, event) => {
+        events.push(event);
+      }),
+      appendEvent: vi.fn(async (event) => {
+        events.push(event);
+      }),
       get: vi.fn(async () => undefined),
       getEvents: vi.fn(async () => []),
       recoverInterrupted: vi.fn(async () => undefined),
@@ -29,14 +33,24 @@ describe("AntlerHostRuntime knowledge contract", () => {
       projectId: "project-1",
       conversationId: "conversation-1",
     });
-    await vi.waitFor(() => expect(events.map((event) => event.type)).toEqual([
-      "knowledge.retrieved", "run.started", "run.completed",
-    ]));
+    await vi.waitFor(() =>
+      expect(events.map((event) => event.type)).toEqual([
+        "knowledge.retrieved",
+        "run.started",
+        "run.completed",
+      ]),
+    );
 
     expect(events.map((event) => event.id)).toEqual([1, 2, 3]);
-    expect(store.create).toHaveBeenCalledWith(expect.objectContaining({ projectId: "project-1" }));
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: "project-1" }),
+    );
     expect(adapter.run).toHaveBeenCalledWith(
-      "hello", "conversation-1", expect.anything(), expect.any(AbortSignal), expect.any(Function),
+      "hello",
+      "conversation-1",
+      expect.anything(),
+      expect.any(AbortSignal),
+      expect.any(Function),
     );
     expect((await runtime.getRun(run.id))?.status).toBe("succeeded");
   });

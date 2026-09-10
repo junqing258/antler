@@ -32,7 +32,13 @@ export async function listWorkspaceDirectories(
     .sort((left, right) => left.name.localeCompare(right.name));
 
   const parent = path ? relative(root, resolve(current, "..")) : null;
-  return { root, path, workingDirectory: current, parent, directories: entries };
+  return {
+    root,
+    path,
+    workingDirectory: current,
+    parent,
+    directories: entries,
+  };
 }
 
 export function registerDirectoryRoutes(
@@ -44,7 +50,10 @@ export function registerDirectoryRoutes(
     async (request, reply) => {
       try {
         return reply.send(
-          await listWorkspaceDirectories(workspaceRoot, request.query.path ?? ""),
+          await listWorkspaceDirectories(
+            workspaceRoot,
+            request.query.path ?? "",
+          ),
         );
       } catch (error) {
         return reply.code(400).send({

@@ -9,9 +9,9 @@ const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    temporaryDirectories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true }),
-    ),
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
@@ -25,7 +25,10 @@ describe("GET /api/directories", () => {
     registerDirectoryRoutes(app, root);
     const canonicalRoot = await realpath(root);
 
-    const rootResponse = await app.inject({ method: "GET", url: "/api/directories" });
+    const rootResponse = await app.inject({
+      method: "GET",
+      url: "/api/directories",
+    });
     expect(rootResponse.statusCode).toBe(200);
     expect(rootResponse.json()).toMatchObject({
       root: canonicalRoot,
@@ -51,18 +54,21 @@ describe("GET /api/directories", () => {
     await app.close();
   });
 
-  it.each(["../", resolve("/")])("rejects a path outside the workspace: %s", async (path) => {
-    const root = await mkdtemp(join(tmpdir(), "antler-workspace-"));
-    temporaryDirectories.push(root);
-    const app = Fastify();
-    registerDirectoryRoutes(app, root);
+  it.each(["../", resolve("/")])(
+    "rejects a path outside the workspace: %s",
+    async (path) => {
+      const root = await mkdtemp(join(tmpdir(), "antler-workspace-"));
+      temporaryDirectories.push(root);
+      const app = Fastify();
+      registerDirectoryRoutes(app, root);
 
-    const response = await app.inject({
-      method: "GET",
-      url: `/api/directories?path=${encodeURIComponent(path)}`,
-    });
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/directories?path=${encodeURIComponent(path)}`,
+      });
 
-    expect(response.statusCode).toBe(400);
-    await app.close();
-  });
+      expect(response.statusCode).toBe(400);
+      await app.close();
+    },
+  );
 });

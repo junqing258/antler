@@ -41,14 +41,17 @@ function openDatabase(): Promise<IDBDatabase> {
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains(CONVERSATIONS_STORE)) {
-        request.result.createObjectStore(CONVERSATIONS_STORE, { keyPath: "id" });
+        request.result.createObjectStore(CONVERSATIONS_STORE, {
+          keyPath: "id",
+        });
       }
       if (!request.result.objectStoreNames.contains(PROJECTS_STORE)) {
         request.result.createObjectStore(PROJECTS_STORE, { keyPath: "id" });
       }
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("无法打开本地会话数据库"));
+    request.onerror = () =>
+      reject(request.error ?? new Error("无法打开本地会话数据库"));
   });
 }
 
@@ -63,8 +66,10 @@ async function withStore<T>(
       const transaction = database.transaction(storeName, mode);
       const request = operation(transaction.objectStore(storeName));
       request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error ?? new Error("本地数据操作失败"));
-      transaction.onerror = () => reject(transaction.error ?? new Error("本地数据操作失败"));
+      request.onerror = () =>
+        reject(request.error ?? new Error("本地数据操作失败"));
+      transaction.onerror = () =>
+        reject(transaction.error ?? new Error("本地数据操作失败"));
     });
   } finally {
     database.close();
@@ -72,20 +77,32 @@ async function withStore<T>(
 }
 
 function normalizeConversation(conversation: StoredConversation): Conversation {
-  return { ...conversation, projectId: conversation.projectId ?? DEFAULT_PROJECT_ID };
+  return {
+    ...conversation,
+    projectId: conversation.projectId ?? DEFAULT_PROJECT_ID,
+  };
 }
 
 function getMessageText(message: ThreadMessageLike) {
   if (message.role !== "user") return "";
   if (typeof message.content === "string") return message.content.trim();
   return message.content
-    .filter((part): part is Extract<(typeof message.content)[number], { type: "text" }> => part.type === "text")
+    .filter(
+      (
+        part,
+      ): part is Extract<(typeof message.content)[number], { type: "text" }> =>
+        part.type === "text",
+    )
     .map((part) => part.text)
     .join(" ")
     .trim();
 }
 
-function getTitle(messages: ThreadMessageLike[], currentTitle: string, isTitleManuallySet = false) {
+function getTitle(
+  messages: ThreadMessageLike[],
+  currentTitle: string,
+  isTitleManuallySet = false,
+) {
   if (isTitleManuallySet) return currentTitle;
   const firstMessage = messages.map(getMessageText).find(Boolean);
   if (!firstMessage) return currentTitle;
@@ -113,7 +130,11 @@ export function getProject(id: string): Promise<Project | undefined> {
 
 export async function listProjects(): Promise<Project[]> {
   await ensureDefaultProject();
-  const projects = await withStore<Project[]>(PROJECTS_STORE, "readonly", (store) => store.getAll());
+  const projects = await withStore<Project[]>(
+    PROJECTS_STORE,
+    "readonly",
+    (store) => store.getAll(),
+  );
   return projects.sort((a, b) => {
     if (a.id === DEFAULT_PROJECT_ID) return -1;
     if (b.id === DEFAULT_PROJECT_ID) return 1;
@@ -121,7 +142,10 @@ export async function listProjects(): Promise<Project[]> {
   });
 }
 
-export async function createProject(name: string, workingDirectory: string): Promise<Project> {
+export async function createProject(
+  name: string,
+  workingDirectory: string,
+): Promise<Project> {
   const now = Date.now();
   const project: Project = {
     id: createUuid(),
@@ -156,7 +180,11 @@ export async function updateProjectKnowledgePolicy(
 ): Promise<Project> {
   const current = await getProject(id);
   if (!current) throw new Error("项目不存在");
-  const project: Project = { ...current, knowledgePolicy, updatedAt: Date.now() };
+  const project: Project = {
+    ...current,
+    knowledgePolicy,
+    updatedAt: Date.now(),
+  };
   await withStore(PROJECTS_STORE, "readwrite", (store) => store.put(project));
   return project;
 }
@@ -176,11 +204,15 @@ export async function ensureConversation(
     updatedAt: now,
     messages: [],
   };
-  await withStore(CONVERSATIONS_STORE, "readwrite", (store) => store.put(conversation));
+  await withStore(CONVERSATIONS_STORE, "readwrite", (store) =>
+    store.put(conversation),
+  );
   return conversation;
 }
 
-export async function getConversation(id: string): Promise<Conversation | undefined> {
+export async function getConversation(
+  id: string,
+): Promise<Conversation | undefined> {
   const conversation = await withStore<StoredConversation | undefined>(
     CONVERSATIONS_STORE,
     "readonly",
@@ -203,18 +235,28 @@ export async function saveConversationMessages(
   const conversation: Conversation = {
     id,
     projectId: current?.projectId ?? DEFAULT_PROJECT_ID,
-    title: getTitle(messages, current?.title ?? "New Chat", current?.isTitleManuallySet),
+    title: getTitle(
+      messages,
+      current?.title ?? "New Chat",
+      current?.isTitleManuallySet,
+    ),
     createdAt: current?.createdAt ?? now,
     updatedAt: now,
     messages,
     isTitleManuallySet: current?.isTitleManuallySet,
   };
-  await withStore(CONVERSATIONS_STORE, "readwrite", (store) => store.put(conversation));
+  await withStore(CONVERSATIONS_STORE, "readwrite", (store) =>
+    store.put(conversation),
+  );
   return conversation;
 }
 
 export async function listConversations(): Promise<Conversation[]> {
-  const stored = await withStore<StoredConversation[]>(CONVERSATIONS_STORE, "readonly", (store) => store.getAll());
+  const stored = await withStore<StoredConversation[]>(
+    CONVERSATIONS_STORE,
+    "readonly",
+    (store) => store.getAll(),
+  );
   const conversations = stored.map(normalizeConversation);
   const legacy = stored.filter((conversation) => !conversation.projectId);
   await Promise.all(
@@ -227,15 +269,27 @@ export async function listConversations(): Promise<Conversation[]> {
   return conversations.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-export async function renameConversation(id: string, title: string): Promise<Conversation> {
+export async function renameConversation(
+  id: string,
+  title: string,
+): Promise<Conversation> {
   const current = await getConversation(id);
   if (!current) throw new Error("会话不存在");
-  const conversation = { ...current, title, updatedAt: Date.now(), isTitleManuallySet: true };
-  await withStore(CONVERSATIONS_STORE, "readwrite", (store) => store.put(conversation));
+  const conversation = {
+    ...current,
+    title,
+    updatedAt: Date.now(),
+    isTitleManuallySet: true,
+  };
+  await withStore(CONVERSATIONS_STORE, "readwrite", (store) =>
+    store.put(conversation),
+  );
   return conversation;
 }
 
 export function deleteConversation(id: string): Promise<undefined> {
   deletedConversationIds.add(id);
-  return withStore(CONVERSATIONS_STORE, "readwrite", (store) => store.delete(id));
+  return withStore(CONVERSATIONS_STORE, "readwrite", (store) =>
+    store.delete(id),
+  );
 }
