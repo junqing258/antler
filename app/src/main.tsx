@@ -252,8 +252,8 @@ function KnowledgeDialog({
       >
         <div className="flex items-start justify-between gap-5">
           <div>
-            <h2 className="m-0 text-xl text-[#252525]" id="knowledge-dialog-title">Knowledge</h2>
-            <p className="m-0 mt-1.5 text-xs leading-6 text-[#777]">Configure retrieval for {project.name}.</p>
+            <h2 className="m-0 text-xl text-[#252525]" id="knowledge-dialog-title">知识库</h2>
+            <p className="m-0 mt-1.5 text-xs leading-6 text-[#777]">为 {project.name} 配置知识检索。</p>
           </div>
           <button className="grid size-[30px] shrink-0 place-items-center rounded-[7px] border-0 bg-transparent text-[#777] hover:bg-[#f0f0f0] hover:text-[#222]" type="button" onClick={onClose} aria-label="Close">
             <XIcon />
@@ -703,7 +703,7 @@ function Chat({
             onClick={onOpenKnowledge}
           >
             <BookOpenIcon className="size-[15px]" aria-hidden="true" />
-            <span>Knowledge</span>
+            <span>知识库</span>
             <small className="ml-auto text-[11px] text-[#888]">
               {activeProject.knowledgePolicy === "auto" ? "Auto" : "Off"}
             </small>
