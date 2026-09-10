@@ -1,6 +1,7 @@
 import { type Prisma, type PrismaClient } from "../generated/prisma/client.js";
 import type { RunEvent, RunStatus } from "../agent/events.js";
 import type { Run } from "../agent/host-runtime.js";
+import type { KnowledgeHit } from "../knowledge/types.js";
 
 export type StoredRun = Run;
 
@@ -12,6 +13,7 @@ export interface RunStore {
   get(runId: string): Promise<StoredRun | undefined>;
   getEvents(runId: string, afterSeq: number): Promise<RunEvent[]>;
   recoverInterrupted(): Promise<void>;
+  saveKnowledgeHits(runId: string, hits: KnowledgeHit[]): Promise<void>;
 }
 
 function toRunStatus(status: string): RunStatus {
@@ -123,6 +125,19 @@ export class PrismaRunStore implements RunStore {
         errorCode: "interrupted",
         finishedAt: new Date(),
       },
+    });
+  }
+  async saveKnowledgeHits(runId: string, hits: KnowledgeHit[]) {
+    if (!hits.length) return;
+    await this.prisma.runKnowledgeHit.createMany({
+      data: hits.map((hit, index) => ({
+        id: crypto.randomUUID(), runId, chunkId: hit.chunkId,
+        citationKey: hit.citationKey, rank: index + 1,
+        lexicalScore: hit.score, finalScore: hit.score,
+        titleSnapshot: hit.title,
+        locatorSnapshot: hit.locator as Prisma.InputJsonValue,
+        textSnapshot: hit.snippet.slice(0, 4000),
+      })),
     });
   }
 }

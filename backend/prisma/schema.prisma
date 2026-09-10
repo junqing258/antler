@@ -52,10 +52,28 @@ model Run {
   startedAt      DateTime?
   finishedAt     DateTime?
   events         RunEvent[]
+  knowledgeHits  RunKnowledgeHit[]
 
   @@index([projectId, createdAt])
   @@index([conversationId, createdAt])
   @@map("runs")
+}
+
+model RunKnowledgeHit {
+  id String @id
+  runId String
+  chunkId String?
+  citationKey String
+  rank Int
+  lexicalScore Float?
+  finalScore Float
+  titleSnapshot String
+  locatorSnapshot Json
+  textSnapshot String
+  createdAt DateTime @default(now())
+  run Run @relation(fields:[runId], references:[id], onDelete:Cascade)
+  @@unique([runId, citationKey])
+  @@map("run_knowledge_hits")
 }
 
 model RunEvent {

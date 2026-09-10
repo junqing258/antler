@@ -48,8 +48,9 @@ export function useAntlerRuntime(
       async *run({ messages, abortSignal }) {
         const message = getText(messages.at(-1)!);
         if (!message.trim()) return;
-        let cancel: (() => void) | undefined;
-        const content: ThreadAssistantMessagePart[] = [];
+      let cancel: (() => void) | undefined;
+      const content: ThreadAssistantMessagePart[] = [];
+      let knowledgeHits: { citationKey: string; title: string; snippet: string }[] = [];
         try {
           const server = await getServerInfo();
           const headers = {
@@ -157,12 +158,25 @@ export function useAntlerRuntime(
                 result?: unknown;
                 summary?: string;
                 isError?: boolean;
-                error?: { message?: string };
+              error?: { message?: string };
+              hits?: { citationKey: string; title: string; snippet: string }[];
               };
               if (event === "run.failed") {
                 throw new Error(payload.error?.message ?? "任务执行失败");
               }
-              if (event === "run.cancelled") return;
+            if (event === "run.cancelled") return;
+            if (event === "knowledge.retrieved") {
+              knowledgeHits = payload.hits ?? [];
+              continue;
+            }
+            if (event === "run.completed" && knowledgeHits.length) {
+              const references = knowledgeHits
+                .map((hit) => `**[${hit.citationKey}] ${hit.title}**\n${hit.snippet}`)
+                .join("\n\n");
+              content.push({ type: "text", text: `\n\n---\n参考资料\n\n${references}` });
+              yield snapshot();
+              continue;
+            }
               if (event === "assistant.delta" && payload.delta) {
                 appendText(payload.delta);
                 reasoningPartIndex = undefined;

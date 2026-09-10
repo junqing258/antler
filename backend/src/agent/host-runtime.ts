@@ -197,6 +197,7 @@ export class AntlerHostRuntime {
         input: run.input,
         policy: active.knowledgePolicy,
       });
+      await this.runStore?.saveKnowledgeHits(run.id, knowledgeContext.hits);
       await this.emit(active, "knowledge.retrieved", {
         mode: knowledgeContext.mode,
         hits: knowledgeContext.hits.map(

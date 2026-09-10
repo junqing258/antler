@@ -4,6 +4,7 @@ export type KnowledgePolicy =
   | { mode: "selected"; knowledgeBaseIds: string[] };
 
 export type KnowledgeHit = {
+  chunkId?: string;
   citationKey: string;
   title: string;
   locator: Record<string, unknown>;

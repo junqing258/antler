@@ -1,0 +1,2 @@
+CREATE TABLE "run_knowledge_hits" ("id" TEXT PRIMARY KEY NOT NULL,"runId" TEXT NOT NULL,"chunkId" TEXT,"citationKey" TEXT NOT NULL,"rank" INTEGER NOT NULL,"lexicalScore" REAL,"finalScore" REAL NOT NULL,"titleSnapshot" TEXT NOT NULL,"locatorSnapshot" JSONB NOT NULL,"textSnapshot" TEXT NOT NULL,"createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,CONSTRAINT "run_knowledge_hits_runId_fkey" FOREIGN KEY ("runId") REFERENCES "runs"("id") ON DELETE CASCADE);
+CREATE UNIQUE INDEX "run_knowledge_hits_runId_citationKey_key" ON "run_knowledge_hits"("runId","citationKey");

@@ -40,6 +40,7 @@ export class LexicalKnowledgeRetriever implements KnowledgeContextPort {
       ...ids,
     );
     const hits = rows.map((row, i) => ({
+      chunkId: row.chunkId,
       citationKey: `S${i + 1}`,
       title: row.title,
       locator: {},

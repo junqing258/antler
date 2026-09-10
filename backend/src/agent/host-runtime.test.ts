@@ -18,6 +18,7 @@ describe("AntlerHostRuntime knowledge contract", () => {
       get: vi.fn(async () => undefined),
       getEvents: vi.fn(async () => []),
       recoverInterrupted: vi.fn(async () => undefined),
+      saveKnowledgeHits: vi.fn(async () => undefined),
     };
     const adapter = {
       run: vi.fn(async () => undefined),

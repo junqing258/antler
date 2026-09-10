@@ -154,6 +154,33 @@ function KnowledgeDialog({
   onClose: () => void;
 }) {
   const [enabled, setEnabled] = useState(project.knowledgePolicy === "auto");
+  const [bases, setBases] = useState<{ id: string; name: string; _count?: { sources: number } }[]>([]);
+  const [name, setName] = useState("");
+  const [sourceType, setSourceType] = useState<"text" | "file" | "directory">("text");
+  const [sourceValue, setSourceValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const load = useCallback(async () => {
+    try {
+      const server = await serverInfo();
+      const response = await fetch(`${server.baseUrl}/api/projects/${encodeURIComponent(project.id)}/knowledge-bases`, { headers: { "x-antler-token": server.token } });
+      if (!response.ok) throw new Error("无法读取知识库列表");
+      setBases(await response.json());
+    } catch {
+      setError("本地后端未连接。请先启动 Antler 服务（pnpm dev:server 或 pnpm dev）。");
+    }
+  }, [project.id]);
+  useEffect(() => { void load(); }, [load]);
+  const createBase = async () => {
+    if (!name.trim()) return;
+    setBusy(true); setError("");
+    try { const server = await serverInfo(); const response = await fetch(`${server.baseUrl}/api/projects/${encodeURIComponent(project.id)}/knowledge-bases`, { method: "POST", headers: { "content-type": "application/json", "x-antler-token": server.token }, body: JSON.stringify({ name: name.trim() }) }); if (!response.ok) throw new Error("无法创建知识库"); setName(""); await load(); } catch (e) { setError(e instanceof Error ? e.message : "操作失败"); } finally { setBusy(false); }
+  };
+  const addSource = async (baseId: string) => {
+    if (!sourceValue.trim()) return;
+    setBusy(true); setError("");
+    try { const server = await serverInfo(); const body = sourceType === "text" ? { type: "text", text: sourceValue } : { type: sourceType, path: sourceValue }; const response = await fetch(`${server.baseUrl}/api/knowledge-bases/${baseId}/sources`, { method: "POST", headers: { "content-type": "application/json", "x-antler-token": server.token }, body: JSON.stringify(body) }); if (!response.ok) throw new Error("无法添加资料来源"); setSourceValue(""); await load(); } catch (e) { setError(e instanceof Error ? e.message : "操作失败"); } finally { setBusy(false); }
+  };
   return (
     <div className="project-backdrop" role="presentation" onMouseDown={onClose}>
       <section
@@ -170,13 +197,7 @@ function KnowledgeDialog({
             <XIcon />
           </button>
         </div>
-        <div className="knowledge-status">
-          <BookOpenIcon aria-hidden="true" />
-          <div>
-            <strong>No sources yet</strong>
-            <span>Add files and folders once indexing is available.</span>
-          </div>
-        </div>
+        <div className="knowledge-manage"><div className="knowledge-create"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="知识库名称" /><button type="button" onClick={() => void createBase()} disabled={busy || !name.trim()}>新建</button></div>{bases.map((base) => <div className="knowledge-base" key={base.id}><strong>{base.name}</strong><small>{base._count?.sources ?? 0} 个来源</small><div className="knowledge-source"><select value={sourceType} onChange={(e) => setSourceType(e.target.value as typeof sourceType)}><option value="text">粘贴文本</option><option value="file">文件路径</option><option value="directory">目录路径</option></select><input value={sourceValue} onChange={(e) => setSourceValue(e.target.value)} placeholder={sourceType === "text" ? "粘贴资料内容" : "工作区内路径"} /><button type="button" onClick={() => void addSource(base.id)} disabled={busy || !sourceValue.trim()}>添加</button></div></div>)}{!bases.length && <div className="knowledge-status"><BookOpenIcon /><div><strong>还没有知识库</strong><span>创建一个知识库后，再添加文本、文件或目录。</span></div></div>}{error && <small className="knowledge-error">{error}</small>}</div>
         <label className="knowledge-toggle">
           <input
             type="checkbox"
