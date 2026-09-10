@@ -1,6 +1,4 @@
 @import "tailwindcss";
-@import "./styles/sidebar.css";
-@import "./styles/settings.css";
 @import "./styles/chat.css";
 
 @custom-variant dark (&:is(.dark *));

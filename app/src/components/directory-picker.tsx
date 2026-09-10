@@ -62,41 +62,42 @@ export function DirectoryPicker({
   };
 
   return (
-    <div className="directory-picker">
-      <div className="directory-picker-control">
+    <div className="relative font-normal">
+      <div className="flex h-10 w-full overflow-hidden rounded-lg border border-[#ddd] bg-white focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15">
         <button
-          className="directory-picker-trigger"
+          className="flex min-w-0 flex-1 items-center gap-2.5 border-0 bg-transparent px-[11px] text-left text-[#333]"
           type="button"
           onClick={showBrowser}
           aria-haspopup="dialog"
           aria-expanded={open}
         >
-          <FolderOpenIcon />
-          <span className={value ? undefined : "directory-picker-placeholder"}>
+          <FolderOpenIcon className="size-4 shrink-0" />
+          <span className={`min-w-0 overflow-hidden truncate text-[13px] ${value ? "text-[#333]" : "text-[#999]"}`}>
             {value || "Server default (./workspace)"}
           </span>
         </button>
         {value && (
           <button
-            className="directory-picker-clear"
+            className="grid w-[38px] shrink-0 place-items-center border-0 border-l border-[#eee] bg-transparent text-[#888] hover:bg-[#f6f6f6] hover:text-[#333]"
             type="button"
             onClick={() => onChange("")}
             aria-label="Use server default directory"
             title="Use server default"
           >
-            <XIcon />
+            <XIcon className="size-4" />
           </button>
         )}
       </div>
 
       {open && (
         <div
-          className="directory-browser"
+          className="absolute left-0 right-0 z-10 mt-2 grid overflow-hidden rounded-[9px] border border-[#ddd] bg-white shadow-[0_12px_32px_rgb(0_0_0_/_12%)]"
           role="dialog"
           aria-label="Choose working directory"
         >
-          <div className="directory-browser-toolbar">
+          <div className="flex items-center gap-2 border-b border-[#eee] bg-[#fafafa] p-2">
             <button
+              className="grid size-[30px] shrink-0 place-items-center rounded-md border border-[#ddd] bg-white text-[#555] disabled:cursor-default disabled:opacity-40"
               type="button"
               onClick={() => {
                 if (listing?.parent !== null && listing?.parent !== undefined) {
@@ -107,51 +108,52 @@ export function DirectoryPicker({
               aria-label="Parent directory"
               title="Parent directory"
             >
-              <ArrowUpIcon />
+              <ArrowUpIcon className="size-[15px]" />
             </button>
-            <span title={listing?.workingDirectory}>
+            <span className="min-w-0 overflow-hidden truncate font-mono text-[11px] text-[#666]" title={listing?.workingDirectory}>
               {listing?.workingDirectory ?? "Loading workspace…"}
             </span>
           </div>
 
-          <div className="directory-browser-list">
+          <div className="min-h-24 max-h-[210px] overflow-y-auto p-[5px]">
             {loading && (
-              <div className="directory-browser-message">
-                <LoaderCircleIcon className="directory-browser-spinner" />
+              <div className="flex min-h-[86px] items-center justify-center gap-2 text-xs text-[#888]">
+                <LoaderCircleIcon className="size-4 animate-spin" />
                 Loading…
               </div>
             )}
             {!loading && error && (
-              <div className="directory-browser-message directory-browser-error">
+              <div className="flex min-h-[86px] flex-col items-center justify-center gap-2 text-center text-xs text-[#b42318]">
                 {error}
-                <button type="button" onClick={() => void load(listing?.path)}>
+                <button className="border-0 bg-transparent text-primary" type="button" onClick={() => void load(listing?.path)}>
                   Retry
                 </button>
               </div>
             )}
             {!loading && !error && listing?.directories.length === 0 && (
-              <div className="directory-browser-message">No subdirectories</div>
+              <div className="flex min-h-[86px] items-center justify-center text-xs text-[#888]">No subdirectories</div>
             )}
             {!loading &&
               !error &&
               listing?.directories.map((directory) => (
                 <button
+                  className="flex w-full items-center gap-2.5 rounded-md border-0 bg-transparent p-[9px] text-left text-[13px] text-[#333] hover:bg-[#f1f8f6] hover:text-[#087d61]"
                   key={directory.path}
                   type="button"
                   onClick={() => void load(directory.path)}
                 >
-                  <FolderIcon />
-                  <span>{directory.name}</span>
+                  <FolderIcon className="size-[17px] shrink-0" />
+                  <span className="truncate">{directory.name}</span>
                 </button>
               ))}
           </div>
 
-          <div className="directory-browser-actions">
-            <button type="button" onClick={() => setOpen(false)}>
+          <div className="flex justify-end gap-1.5 border-t border-[#eee] bg-[#fafafa] p-2">
+            <button className="flex h-[31px] items-center gap-1.5 rounded-md border border-[#ddd] bg-white px-2.5 text-xs text-[#444] hover:bg-[#f6f6f6]" type="button" onClick={() => setOpen(false)}>
               Cancel
             </button>
             <button
-              className="directory-browser-select"
+              className="flex h-[31px] items-center gap-1.5 rounded-md border border-primary bg-primary px-2.5 text-xs text-white disabled:cursor-not-allowed disabled:opacity-45"
               type="button"
               disabled={!listing || loading || !!error}
               onClick={() => {
@@ -160,7 +162,7 @@ export function DirectoryPicker({
                 setOpen(false);
               }}
             >
-              <CheckIcon />
+              <CheckIcon className="size-3.5" />
               Use this folder
             </button>
           </div>

@@ -38,7 +38,24 @@ export class KnowledgeService {
   async list(projectId: string) {
     return this.prisma.knowledgeBase.findMany({
       where: { projectId, archivedAt: null },
-      include: { _count: { select: { sources: true } } },
+      include: {
+        _count: {
+          select: { sources: { where: { archivedAt: null } } },
+        },
+        sources: {
+          where: { archivedAt: null },
+          select: {
+            id: true,
+            displayName: true,
+            type: true,
+            status: true,
+            lastIndexedAt: true,
+            errorCode: true,
+            updatedAt: true,
+          },
+          orderBy: { updatedAt: "desc" },
+        },
+      },
       orderBy: { updatedAt: "desc" },
     });
   }
@@ -170,6 +187,10 @@ export class KnowledgeService {
     });
   }
   private async queue(sourceId: string) {
+    await this.prisma.knowledgeSource.update({
+      where: { id: sourceId },
+      data: { status: "pending", errorCode: null },
+    });
     const job = await this.prisma.knowledgeIngestionJob.create({
       data: { id: randomUUID(), sourceId },
     });
@@ -187,11 +208,17 @@ export class KnowledgeService {
       listener({ seq, type, payload });
   }
   private async ingest(jobId: string) {
+    let sourceId: string | undefined;
     try {
       const job = await this.job(jobId);
       if (!job) return;
       const source = await this.prisma.knowledgeSource.findUniqueOrThrow({
         where: { id: job.sourceId },
+      });
+      sourceId = source.id;
+      await this.prisma.knowledgeSource.update({
+        where: { id: source.id },
+        data: { status: "indexing", errorCode: null },
       });
       await this.prisma.knowledgeIngestionJob.update({
         where: { id: jobId },
@@ -237,6 +264,11 @@ export class KnowledgeService {
           errorCode: "ingestion_failed",
         },
       });
+      if (sourceId)
+        await this.prisma.knowledgeSource.update({
+          where: { id: sourceId },
+          data: { status: "failed", errorCode: "ingestion_failed" },
+        });
       await this.emit(jobId, "knowledge.job.failed", {
         error: "ingestion_failed",
       });
@@ -297,7 +329,7 @@ export class KnowledgeService {
   }
   private async safePath(path: string) {
     const root = await fs.realpath(this.workspaceRoot);
-    const target = await fs.realpath(resolve(path));
+    const target = await fs.realpath(resolve(root, path));
     if (target !== root && !target.startsWith(`${root}/`))
       throw new Error("path_outside_workspace");
     return target;

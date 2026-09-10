@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "predev": "pnpm db:generate",
+    "predev": "pnpm db:generate && node --import tsx scripts/prepare-dev-db.ts",
     "dev": "tsx watch src/index.ts",
     "prebuild": "pnpm db:generate",
     "build": "tsc",

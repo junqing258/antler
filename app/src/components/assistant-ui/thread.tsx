@@ -40,16 +40,16 @@ function MarkdownText() {
 
 function Reasoning({ text, status }: ReasoningMessagePartProps) {
   return (
-    <details className="agent-activity" open={status.type === "running"}>
-      <summary>
-        <LightbulbIcon aria-hidden="true" />
+    <details className="group mb-2.5 w-full rounded-[10px] border border-[#e9e9e9] bg-[#fcfcfc] text-[13px] text-[#656565]" open={status.type === "running"}>
+      <summary className="flex min-h-[38px] cursor-pointer list-none items-center gap-2 px-3 font-medium text-[#4c4c4c] [&::-webkit-details-marker]:hidden">
+        <LightbulbIcon className="size-[15px] text-[#777]" aria-hidden="true" />
         <span>{status.type === "running" ? "正在思考" : "思考过程"}</span>
         <ChevronRightIcon
-          className="agent-activity-chevron"
+          className="ml-auto size-3.5 transition-transform duration-150 group-open:rotate-90"
           aria-hidden="true"
         />
       </summary>
-      <div className="agent-activity-content whitespace-pre-wrap">{text}</div>
+      <div className="max-h-[260px] overflow-auto whitespace-pre-wrap border-t border-[#eee] px-3 pb-3 pt-2.5 text-xs leading-[1.65] text-[#686868]">{text}</div>
     </details>
   );
 }
@@ -66,12 +66,12 @@ function ToolCall({
       ? String(args.query ?? "")
       : "";
   return (
-    <details className="agent-activity agent-tool-call" open={isRunning}>
-      <summary>
+    <details className="group mb-2.5 w-full rounded-[10px] border border-[#e9e9e9] bg-[#fcfcfc] text-[13px] text-[#656565]" open={isRunning}>
+      <summary className="flex min-h-[38px] cursor-pointer list-none items-center gap-2 px-3 font-medium text-[#4c4c4c] [&::-webkit-details-marker]:hidden">
         {toolName.toLowerCase().includes("search") ? (
-          <SearchIcon aria-hidden="true" />
+          <SearchIcon className="size-[15px] text-[#777]" aria-hidden="true" />
         ) : (
-          <WrenchIcon aria-hidden="true" />
+          <WrenchIcon className="size-[15px] text-[#777]" aria-hidden="true" />
         )}
         <span>
           {isRunning
@@ -81,11 +81,11 @@ function ToolCall({
               : `${toolName} 调用完成`}
         </span>
         <ChevronRightIcon
-          className="agent-activity-chevron"
+          className="ml-auto size-3.5 transition-transform duration-150 group-open:rotate-90"
           aria-hidden="true"
         />
       </summary>
-      <div className="agent-activity-content">
+      <div className="max-h-[260px] overflow-auto border-t border-[#eee] px-3 pb-3 pt-2.5 text-xs leading-[1.65] text-[#686868] [&_pre]:m-0 [&_pre]:whitespace-pre-wrap [&_pre]:break-words">
         {query && <p className="m-0">查询：{query}</p>}
         {!query && <pre>{JSON.stringify(args, null, 2)}</pre>}
       </div>
@@ -106,7 +106,7 @@ function AssistantMessage() {
       <ActionBarPrimitive.Root
         hideWhenRunning
         autohide="not-last"
-        className="aui-action-bar absolute bottom-0 left-4 flex items-center gap-1 text-muted-foreground md:left-6"
+        className="absolute bottom-0 left-4 flex items-center gap-1 text-muted-foreground md:left-6"
       >
         <ActionBarPrimitive.Copy
           aria-label="复制回复"
@@ -150,36 +150,36 @@ export function ModelPicker({
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
-          className="model-picker"
+          className="group flex items-center gap-[7px] border-0 bg-transparent p-0 text-xs font-semibold text-[#222] outline-none focus-visible:rounded focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-3"
           type="button"
           aria-label={`选择模型，当前模型 ${model}`}
         >
-          <BotIcon />
+          <BotIcon className="size-3.5 stroke-[2.1]" />
           <span>{model}</span>
-          <ChevronDownIcon />
+          <ChevronDownIcon className="ml-px size-3 text-[#898989] transition-transform duration-150 group-data-[state=open]:rotate-180" />
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
-          className="model-picker-content"
+          className="z-50 max-h-[min(280px,var(--radix-dropdown-menu-content-available-height))] min-w-[190px] max-w-[min(320px,calc(100vw-16px))] overflow-y-auto rounded-[10px] border border-[#e5e5e5] bg-background p-1.5 shadow-[0_10px_32px_rgb(0_0_0_/_12%)]"
           side="top"
           align="start"
           sideOffset={8}
           collisionPadding={8}
         >
-          <DropdownMenu.Label className="model-picker-label">
+          <DropdownMenu.Label className="px-[9px] pb-[7px] pt-1.5 text-[11px] font-semibold text-[#8a8a8a]">
             选择模型
           </DropdownMenu.Label>
           <DropdownMenu.RadioGroup value={model} onValueChange={onModelChange}>
             {models.map((candidate) => (
               <DropdownMenu.RadioItem
-                className="model-picker-item"
+                className="flex min-h-8 items-center justify-between gap-4 rounded-md px-[9px] py-1.5 text-xs font-medium text-[#282828] outline-none select-none data-[highlighted]:bg-muted"
                 key={candidate}
                 value={candidate}
               >
                 <span>{candidate}</span>
-                <DropdownMenu.ItemIndicator className="model-picker-indicator">
-                  <CheckIcon aria-hidden="true" />
+                <DropdownMenu.ItemIndicator className="grid shrink-0 place-items-center text-primary">
+                  <CheckIcon className="size-3.5 stroke-[2.4]" aria-hidden="true" />
                 </DropdownMenu.ItemIndicator>
               </DropdownMenu.RadioItem>
             ))}
@@ -201,17 +201,17 @@ function Composer(props: ModelPickerProps) {
       <div className="mt-1 flex items-center justify-between gap-2">
         <div className="flex items-center gap-4">
           <button
-            className="composer-icon-button"
+            className="grid size-[18px] place-items-center border-0 bg-transparent p-0 text-[#777] hover:text-[#222]"
             aria-label="添加附件"
             type="button"
           >
-            <PlusIcon />
+            <PlusIcon className="size-[15px] stroke-2" />
           </button>
           <ModelPicker {...props} />
         </div>
         <div className="flex items-center gap-3">
           {/* <button
-            className="composer-icon-button text-[#888]"
+            className="grid size-[18px] place-items-center border-0 bg-transparent p-0 text-[#888] hover:text-[#222]"
             aria-label="语音输入"
             type="button"
           >
@@ -261,7 +261,7 @@ function Welcome(props: ModelPickerProps) {
 
 function Suggestion({ icon, label }: { icon: ReactNode; label: string }) {
   return (
-    <button className="suggestion-chip" type="button">
+    <button className="inline-flex min-h-[34px] items-center gap-1.5 border border-[#ebebeb] px-3.5" type="button">
       {icon}
       <span>{label}</span>
     </button>
@@ -276,11 +276,11 @@ export function AssistantThread({
 }: ModelPickerProps & { title: string }) {
   return (
     <ThreadPrimitive.Root className="aui-thread-root flex h-full min-h-0 flex-col bg-background">
-      <header className="chat-header">
-        <PanelsTopLeftIcon />
+      <header className="flex h-[47px] items-center px-5 pl-[25px] text-sm font-semibold tracking-[-0.2px] text-[#202020] max-[800px]:pl-4">
+        <PanelsTopLeftIcon className="mr-[17px] size-4 stroke-[2.25]" />
         <span>{title}</span>
-        <button type="button" aria-label="分享对话">
-          <ShareIcon />
+        <button className="ml-auto grid size-[23px] place-items-center border-0 bg-transparent p-0 text-[#929292] hover:text-[#222]" type="button" aria-label="分享对话">
+          <ShareIcon className="size-[15px] stroke-[1.9]" />
         </button>
       </header>
       <ThreadPrimitive.Viewport className="aui-thread-viewport flex min-h-0 flex-1 flex-col overflow-y-auto">
