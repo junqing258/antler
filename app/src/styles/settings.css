@@ -314,6 +314,31 @@
   cursor: not-allowed;
   opacity: 0.45;
 }
+.knowledge-dialog { gap: 18px; }
+.knowledge-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px;
+  border: 1px solid #e3eee9;
+  border-radius: 9px;
+  background: #f5faf8;
+}
+.knowledge-status svg { width: 19px; height: 19px; color: var(--primary); }
+.knowledge-status div { display: grid; gap: 3px; }
+.knowledge-status strong { color: #285347; font-size: 13px; }
+.knowledge-status span { color: #6e7e78; font-size: 12px; line-height: 1.45; }
+.knowledge-toggle {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 10px !important;
+  padding: 4px 1px;
+  cursor: pointer;
+}
+.knowledge-toggle input { width: 16px !important; height: 16px !important; margin: 1px 0 0; accent-color: var(--primary); }
+.knowledge-toggle span { display: grid; gap: 3px; }
+.knowledge-toggle strong { color: #333; font-size: 13px; }
+.knowledge-toggle small { color: #777; font-size: 12px; font-weight: 400; line-height: 1.45; }
 .settings-dialog {
   display: flex;
   width: min(100%, 940px);

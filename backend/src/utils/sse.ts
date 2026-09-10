@@ -13,14 +13,14 @@ function write(
   reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
 }
 
-export function streamRun(
+export async function streamRun(
   runtime: AntlerHostRuntime,
   runId: string,
   reply: FastifyReply,
   afterEventId = 0,
   legacy = false,
 ) {
-  const run = runtime.getRun(runId);
+  const run = await runtime.getRun(runId);
   if (!run) return false;
   reply.hijack();
   // Fastify's CORS/auth hooks have already placed headers on the reply. Passing
@@ -45,7 +45,7 @@ export function streamRun(
               : undefined;
     if (type) write(reply, type, { taskId: runId, ...event.payload }, event.id);
   };
-  for (const event of runtime.getEvents(runId, afterEventId)) send(event);
+  for (const event of await runtime.getEvents(runId, afterEventId)) send(event);
   if (isTerminalRunStatus(run.status)) {
     reply.raw.end();
     return true;

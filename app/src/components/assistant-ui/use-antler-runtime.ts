@@ -36,6 +36,8 @@ function getText(
 export function useAntlerRuntime(
   getServerInfo: () => Promise<ServerInfo>,
   conversationId: string,
+  projectId: string,
+  knowledgePolicy: "disabled" | "auto",
   workingDirectory: string,
   getProviderConfig: () => ProviderConfig,
   initialMessages: ThreadMessageLike[],
@@ -62,6 +64,8 @@ export function useAntlerRuntime(
           body: JSON.stringify({
             message,
             conversationId,
+            projectId,
+            knowledgePolicy: { mode: knowledgePolicy },
             ...(workingDirectory.trim() ? { workingDirectory } : {}),
             // Keep the existing environment-variable setup usable until the
             // user has saved a local provider key.
@@ -213,14 +217,16 @@ export function useAntlerRuntime(
         if (cancel) abortSignal.removeEventListener("abort", cancel);
       }
     },
-  }), [conversationId, getProviderConfig, getServerInfo, workingDirectory]);
+  }), [conversationId, getProviderConfig, getServerInfo, knowledgePolicy, projectId, workingDirectory]);
   const runtime = useLocalRuntime(adapter, { initialMessages });
 
   useEffect(() => {
     let timeout: number | undefined;
     const persist = () => {
       const messages = runtime.thread.getState().messages as ThreadMessageLike[];
-      void saveConversationMessages(conversationId, messages).then(onConversationSaved);
+      void saveConversationMessages(conversationId, messages).then((conversation) => {
+        if (conversation) onConversationSaved();
+      });
     };
     const schedulePersist = () => {
       window.clearTimeout(timeout);

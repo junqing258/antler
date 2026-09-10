@@ -21,17 +21,19 @@ import {
   createProject,
   DEFAULT_PROJECT_ID,
   deleteConversation,
-  ensureConversation,
+  getConversation,
   listConversations,
   listProjects,
   renameConversation,
   updateProject,
+  updateProjectKnowledgePolicy,
   type Conversation,
   type Project,
 } from "@/lib/conversation-store";
 import type { ThreadMessageLike } from "@assistant-ui/react";
 import {
   CircleHelpIcon,
+  BookOpenIcon,
   FolderCogIcon,
   FolderIcon,
   FolderPlusIcon,
@@ -131,6 +133,47 @@ function ProjectDialog({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function KnowledgeDialog({
+  project,
+  onSave,
+  onClose,
+}: {
+  project: Project;
+  onSave: (policy: "disabled" | "auto") => void;
+  onClose: () => void;
+}) {
+  const [enabled, setEnabled] = useState(project.knowledgePolicy === "auto");
+  return (
+    <div className="project-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="project-dialog knowledge-dialog"
+        aria-labelledby="knowledge-dialog-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="project-dialog-heading">
+          <div>
+            <h2 id="knowledge-dialog-title">Knowledge</h2>
+            <p>Configure retrieval for {project.name}.</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close"><XIcon /></button>
+        </div>
+        <div className="knowledge-status">
+          <BookOpenIcon aria-hidden="true" />
+          <div><strong>No sources yet</strong><span>Add files and folders once indexing is available.</span></div>
+        </div>
+        <label className="knowledge-toggle">
+          <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
+          <span><strong>Automatically search this project</strong><small>When sources are indexed, relevant snippets will be attached to new chat runs.</small></span>
+        </label>
+        <div className="project-dialog-actions">
+          <button type="button" onClick={onClose}>Cancel</button>
+          <button className="project-dialog-save" type="button" onClick={() => onSave(enabled ? "auto" : "disabled")}>Save</button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -412,6 +455,7 @@ function Chat({
   providerConfig,
   onModelChange,
   onOpenSettings,
+  onOpenKnowledge,
   onConversationSaved,
 }: {
   conversationId: string;
@@ -430,11 +474,14 @@ function Chat({
   providerConfig: ProviderConfig;
   onModelChange: (model: string) => void;
   onOpenSettings: (tab?: SettingsTab) => void;
+  onOpenKnowledge: () => void;
   onConversationSaved: () => void;
 }) {
   const runtime = useAntlerRuntime(
     serverInfo,
     conversationId,
+    activeProject.id,
+    activeProject.knowledgePolicy ?? "disabled",
     activeProject.workingDirectory,
     () => providerConfig,
     initialMessages,
@@ -452,6 +499,11 @@ function Chat({
           <button className="new-thread !rounded-full" type="button" onClick={onNewThread}>
             <PlusIcon aria-hidden="true" />
             New Thread
+          </button>
+          <button className="knowledge-entry" type="button" onClick={onOpenKnowledge}>
+            <BookOpenIcon aria-hidden="true" />
+            <span>Knowledge</span>
+            <small>{activeProject.knowledgePolicy === "auto" ? "Auto" : "Off"}</small>
           </button>
           <nav className="project-history" aria-label="Projects and chat history">
             <div className="project-history-title">
@@ -580,6 +632,7 @@ function App() {
   const [projectDialog, setProjectDialog] = useState<
     { project?: Project } | undefined
   >();
+  const [knowledgeProject, setKnowledgeProject] = useState<Project>();
   const [providerConfig, setProviderConfig] = useState(loadProviderConfig);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("provider");
@@ -597,17 +650,17 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     setInitialMessages(null);
-    void ensureConversation(conversationId, activeProjectId)
+    void getConversation(conversationId)
       .then(async (conversation) => {
         const [nextProjects, nextConversations] = await Promise.all([
           listProjects(),
           listConversations(),
         ]);
         if (cancelled) return;
-        setActiveProjectId(conversation.projectId);
+        if (conversation) setActiveProjectId(conversation.projectId);
         setProjects(nextProjects);
         setConversations(nextConversations);
-        setInitialMessages(conversation.messages);
+        setInitialMessages(conversation?.messages ?? []);
       })
       // IndexedDB can be disabled by a browser policy. Keep chat usable even
       // though persistence is unavailable in that environment.
@@ -723,6 +776,7 @@ function App() {
           providerConfig={providerConfig}
           onModelChange={selectModel}
           onOpenSettings={openSettings}
+          onOpenKnowledge={() => setKnowledgeProject(activeProject)}
           onConversationSaved={refreshLibrary}
         />
       )}
@@ -739,6 +793,18 @@ function App() {
           project={projectDialog.project}
           onSave={saveProject}
           onClose={() => setProjectDialog(undefined)}
+        />
+      )}
+      {knowledgeProject && (
+        <KnowledgeDialog
+          project={knowledgeProject}
+          onSave={(policy) => {
+            void updateProjectKnowledgePolicy(knowledgeProject.id, policy).then(() => {
+              setKnowledgeProject(undefined);
+              refreshLibrary();
+            });
+          }}
+          onClose={() => setKnowledgeProject(undefined)}
         />
       )}
     </>

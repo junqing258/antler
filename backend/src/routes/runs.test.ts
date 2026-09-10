@@ -6,6 +6,7 @@ import { registerRunRoutes } from "./runs.js";
 function testRuntime() {
   const run: Run = {
     id: "run-1",
+    projectId: "project-1",
     conversationId: "conversation-1",
     input: "hello",
     status: "queued",
@@ -27,6 +28,7 @@ describe("POST /api/runs workingDirectory", () => {
       url: "/api/runs",
       payload: {
         message: "hello",
+        projectId: "project-1",
         conversationId: "conversation-1",
         workingDirectory: process.cwd(),
       },
@@ -34,8 +36,9 @@ describe("POST /api/runs workingDirectory", () => {
 
     expect(response.statusCode).toBe(202);
     expect(runtime.createRunWithSkills).toHaveBeenCalledWith("hello", {
-      conversationId: "conversation-1", provider: undefined,
+      projectId: "project-1", conversationId: "conversation-1", provider: undefined,
       workingDirectory: process.cwd(), skillPolicy: { mode: "disabled" },
+      knowledgePolicy: { mode: "disabled" },
     });
     await app.close();
   });
@@ -55,12 +58,33 @@ describe("POST /api/runs workingDirectory", () => {
     const response = await app.inject({
       method: "POST",
       url: "/api/runs",
-      payload: { message: "hello", conversationId: "conversation-1", workingDirectory },
+      payload: { message: "hello", projectId: "project-1", conversationId: "conversation-1", workingDirectory },
     });
 
     expect(response.statusCode).toBe(400);
     expect(response.json()).toEqual({ error });
     expect(runtime.createRunWithSkills).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("requires a project ID and rejects unreleased knowledge policies", async () => {
+    const app = Fastify();
+    const runtime = testRuntime();
+    registerRunRoutes(app, runtime as unknown as AntlerHostRuntime);
+
+    const missingProject = await app.inject({
+      method: "POST", url: "/api/runs", payload: { message: "hello", conversationId: "conversation-1" },
+    });
+    expect(missingProject.statusCode).toBe(400);
+
+    const invalidKnowledge = await app.inject({
+      method: "POST", url: "/api/runs", payload: {
+        message: "hello", projectId: "project-1", conversationId: "conversation-1",
+        knowledgePolicy: { mode: "selected", knowledgeBaseIds: ["kb-1"] },
+      },
+    });
+    expect(invalidKnowledge.statusCode).toBe(400);
+    expect(invalidKnowledge.json()).toEqual({ error: "Knowledge policy 无效。" });
     await app.close();
   });
 });

@@ -11,6 +11,12 @@ import type { SkillPolicy, SkillSnapshot } from "../skills/types.js";
 import { DISABLED_SKILL_SNAPSHOT } from "../skills/types.js";
 import { SkillRegistry } from "../skills/skill-registry.js";
 import { createSkillSnapshot } from "../skills/skill-policy.js";
+import {
+  EmptyKnowledgeContext,
+  type KnowledgeContextPort,
+  type KnowledgePolicy,
+} from "../knowledge/types.js";
+import type { RunStore } from "../runs/run-store.js";
 
 export type ProviderRunConfig = {
   protocol: "openai-responses" | "anthropic-messages";
@@ -21,6 +27,7 @@ export type ProviderRunConfig = {
 
 export type Run = {
   id: string;
+  projectId: string;
   conversationId: string;
   input: string;
   status: RunStatus;
@@ -37,6 +44,7 @@ type ActiveRun = {
   timeout?: NodeJS.Timeout;
   adapter: PiAgentAdapter;
   skillSnapshot: SkillSnapshot;
+  knowledgePolicy: KnowledgePolicy;
 };
 export class ConversationBusyError extends Error {}
 export class ConversationSkillContextMismatchError extends Error {
@@ -45,11 +53,13 @@ export class ConversationSkillContextMismatchError extends Error {
   }
 }
 export type CreateRunOptions = {
+  projectId: string;
   conversationId?: string;
   provider?: ProviderRunConfig;
   workingDirectory?: string;
   skillPolicy?: SkillPolicy;
   skillSnapshot?: SkillSnapshot;
+  knowledgePolicy?: KnowledgePolicy;
 };
 export type HostRuntimeConfig = { maxRunDurationMs: number; maxEvents: number };
 export class AntlerHostRuntime {
@@ -66,8 +76,10 @@ export class AntlerHostRuntime {
     ) => PiAgentAdapter,
     private readonly config: HostRuntimeConfig,
     private readonly skills?: SkillRegistry,
+    private readonly runStore?: RunStore,
+    private readonly knowledge: KnowledgeContextPort = new EmptyKnowledgeContext(),
   ) {}
-  createRun(input: string, options: CreateRunOptions = {}): Run {
+  async createRun(input: string, options: CreateRunOptions): Promise<Run> {
     const conversationId = options.conversationId ?? randomUUID();
     if (this.activeConversations.has(conversationId))
       throw new ConversationBusyError("conversation_busy");
@@ -96,11 +108,13 @@ export class AntlerHostRuntime {
     const now = new Date().toISOString();
     const run: Run = {
       id: randomUUID(),
+      projectId: options.projectId,
       conversationId,
       input,
       status: "queued",
       createdAt: now,
     };
+    await this.runStore?.create(run);
     const active: ActiveRun = {
       run,
       controller: new AbortController(),
@@ -108,6 +122,7 @@ export class AntlerHostRuntime {
       listeners: new Set(),
       adapter: this.createAdapter(options.provider, options.workingDirectory),
       skillSnapshot: snapshot,
+      knowledgePolicy: options.knowledgePolicy ?? { mode: "disabled" },
     };
     this.runs.set(run.id, active);
     this.activeConversations.set(conversationId, run.id);
@@ -137,7 +152,7 @@ export class AntlerHostRuntime {
       throw new ConversationSkillContextMismatchError();
     if (this.activeConversations.has(id))
       throw new ConversationBusyError("conversation_busy");
-    const run = this.createRun(input, {
+    const run = await this.createRun(input, {
       ...options,
       conversationId: id,
       skillPolicy: policy,
@@ -145,14 +160,12 @@ export class AntlerHostRuntime {
     });
     return { run, skillDiagnostics: snapshot.diagnostics };
   }
-  getRun(runId: string) {
-    return this.runs.get(runId)?.run;
+  async getRun(runId: string) {
+    return this.runs.get(runId)?.run ?? (await this.runStore?.get(runId));
   }
-  getEvents(runId: string, afterEventId = 0) {
-    return (
-      this.runs.get(runId)?.events.filter((event) => event.id > afterEventId) ??
-      []
-    );
+  async getEvents(runId: string, afterEventId = 0) {
+    return this.runs.get(runId)?.events.filter((event) => event.id > afterEventId) ??
+      (await this.runStore?.getEvents(runId, afterEventId)) ?? [];
   }
   subscribe(runId: string, listener: (event: RunEvent) => void) {
     const active = this.runs.get(runId);
@@ -160,41 +173,55 @@ export class AntlerHostRuntime {
     active.listeners.add(listener);
     return () => active.listeners.delete(listener);
   }
-  cancel(runId: string) {
+  async cancel(runId: string) {
     const active = this.runs.get(runId);
     if (!active) return undefined;
     if (!isTerminalRunStatus(active.run.status)) active.controller.abort();
     return active.run;
   }
+  async recoverInterrupted() {
+    await this.runStore?.recoverInterrupted();
+  }
   private async execute(active: ActiveRun) {
     const { run } = active;
     if (active.controller.signal.aborted)
-      return this.finish(active, "cancelled");
+      return await this.finish(active, "cancelled");
     run.status = "running";
     run.startedAt = new Date().toISOString();
-    this.emit(active, "run.started", { runId: run.id, status: run.status });
-    active.timeout = setTimeout(
-      () => active.controller.abort(),
-      this.config.maxRunDurationMs,
-    );
     try {
+      const knowledgeContext = await this.knowledge.retrieve({
+        projectId: run.projectId,
+        input: run.input,
+        policy: active.knowledgePolicy,
+      });
+      await this.emit(active, "knowledge.retrieved", {
+        mode: knowledgeContext.mode,
+        hits: knowledgeContext.hits.map(({ citationKey, title, locator, snippet, score }) => ({
+          citationKey, title, locator, snippet, score,
+        })),
+      });
+      await this.emit(active, "run.started", { runId: run.id, status: run.status }, true);
+      active.timeout = setTimeout(
+        () => active.controller.abort(),
+        this.config.maxRunDurationMs,
+      );
       await active.adapter.run(
-        run.input,
+        knowledgeContext.prompt ? `${knowledgeContext.prompt}\n\nUser question: ${run.input}` : run.input,
         run.conversationId,
         active.skillSnapshot,
         active.controller.signal,
         (event) => this.mapPiEvent(active, event),
       );
-      this.finish(
+      await this.finish(
         active,
         active.controller.signal.aborted ? "cancelled" : "succeeded",
       );
     } catch (error) {
-      if (active.controller.signal.aborted) this.finish(active, "cancelled");
+      if (active.controller.signal.aborted) await this.finish(active, "cancelled");
       else {
         const code =
           error instanceof PiAdapterError ? error.code : "provider_error";
-        this.finish(
+        await this.finish(
           active,
           "failed",
           code,
@@ -203,13 +230,13 @@ export class AntlerHostRuntime {
       }
     }
   }
-  private mapPiEvent(active: ActiveRun, event: AgentEvent) {
+  private async mapPiEvent(active: ActiveRun, event: AgentEvent) {
     const runId = active.run.id;
     if (
       event.type === "message_update" &&
       event.assistantMessageEvent.type === "text_delta"
     )
-      this.emit(active, "assistant.delta", {
+      await this.emit(active, "assistant.delta", {
         runId,
         delta: event.assistantMessageEvent.delta,
       });
@@ -217,24 +244,24 @@ export class AntlerHostRuntime {
       event.type === "message_update" &&
       event.assistantMessageEvent.type === "thinking_delta"
     )
-      this.emit(active, "assistant.thinking.delta", {
+      await this.emit(active, "assistant.thinking.delta", {
         runId,
         delta: event.assistantMessageEvent.delta,
       });
     else if (event.type === "turn_start")
-      this.emit(active, "step.started", {
+      await this.emit(active, "step.started", {
         runId,
         stepId: `turn-${active.events.length + 1}`,
         kind: "model",
       });
     else if (event.type === "turn_end")
-      this.emit(active, "step.completed", {
+      await this.emit(active, "step.completed", {
         runId,
         stepId: `turn-${active.events.length}`,
         kind: "model",
       });
     else if (event.type === "tool_execution_start")
-      this.emit(active, "step.started", {
+      await this.emit(active, "step.started", {
         runId,
         stepId: event.toolCallId,
         kind: "tool",
@@ -248,7 +275,7 @@ export class AntlerHostRuntime {
       const details = (
         event.result as { details?: Record<string, unknown> } | undefined
       )?.details;
-      this.emit(active, "tool.completed", {
+      await this.emit(active, "tool.completed", {
         runId,
         stepId: event.toolCallId,
         tool: event.toolName,
@@ -262,7 +289,7 @@ export class AntlerHostRuntime {
       });
     }
   }
-  private finish(
+  private async finish(
     active: ActiveRun,
     status: Extract<RunStatus, "succeeded" | "failed" | "cancelled">,
     errorCode?: string,
@@ -280,16 +307,17 @@ export class AntlerHostRuntime {
         : status === "cancelled"
           ? "run.cancelled"
           : "run.failed";
-    this.emit(active, type, {
+    await this.emit(active, type, {
       runId: active.run.id,
       status,
       ...(error ? { error: { code: errorCode, message: error } } : {}),
-    });
+    }, true);
   }
-  private emit(
+  private async emit(
     active: ActiveRun,
     type: RunEventType,
     payload: Record<string, unknown>,
+    isStateTransition = false,
   ) {
     if (
       active.events.length >= this.config.maxEvents &&
@@ -304,6 +332,8 @@ export class AntlerHostRuntime {
       createdAt: new Date().toISOString(),
     };
     active.events.push(event);
+    if (isStateTransition) await this.runStore?.transition(active.run, event);
+    else await this.runStore?.appendEvent(event);
     for (const listener of active.listeners) listener(event);
   }
 }

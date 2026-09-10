@@ -15,8 +15,13 @@
     "dev:app": "pnpm --filter @antler/app tauri dev",
     "build:app": "pnpm --filter @antler/server build && pnpm --filter @antler/app tauri build",
     "check": "pnpm --filter @antler/app check && pnpm --filter @antler/server check",
+    "lint": "pnpm check",
+    "format": "prettier --write \"app/src/**/*.{ts,tsx,css}\" \"backend/src/**/*.ts\"",
     "test": "pnpm --filter @antler/app test && pnpm --filter @antler/server test",
     "test:watch": "pnpm --parallel --stream --filter @antler/app --filter @antler/server test:watch",
     "test:coverage": "pnpm --filter @antler/app test:coverage && pnpm --filter @antler/server test:coverage"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
   }
 }

@@ -16,6 +16,10 @@ import { registerSkillRoutes } from './routes/skills.js';
 import { registerDirectoryRoutes } from './routes/directories.js';
 import { mkdirSync } from 'node:fs';
 import { registerDatabase } from './plugins/database.js';
+import { PrismaRunStore } from './runs/run-store.js';
+import { KnowledgeService } from './knowledge/service.js';
+import { registerKnowledgeRoutes } from './routes/knowledge.js';
+import { LexicalKnowledgeRetriever } from './knowledge/retriever.js';
 
 export function createApp(config: AppConfig) {
   mkdirSync(config.workspaceRoot, { recursive: true });
@@ -50,7 +54,17 @@ export function createApp(config: AppConfig) {
     return adapter;
   };
   const skillRegistry = new SkillRegistry(config.agentsDir);
-  const runtime = new AntlerHostRuntime(createAdapter, { maxRunDurationMs: config.maxRunDurationMs, maxEvents: 10_000 }, skillRegistry);
+  const runtime = new AntlerHostRuntime(
+    createAdapter,
+    { maxRunDurationMs: config.maxRunDurationMs, maxEvents: 10_000 },
+    skillRegistry,
+    new PrismaRunStore(app.prisma),
+    new LexicalKnowledgeRetriever(app.prisma),
+  );
+  // Test-only in-memory apps do not run migrations. Normal server startup has
+  // a configured SQLite file and marks any process-interrupted run terminal
+  // before serving replay requests.
+  if (config.databaseUrl) app.addHook("onReady", () => runtime.recoverInterrupted());
   const taskService = new TaskService(runtime);
 
   registerHttpHooks(app, config);
@@ -59,6 +73,9 @@ export function createApp(config: AppConfig) {
   registerRunRoutes(app, runtime);
   registerSkillRoutes(app, skillRegistry);
   registerDirectoryRoutes(app, config.workspaceRoot);
+  const knowledge = new KnowledgeService(app.prisma, config.workspaceRoot);
+  registerKnowledgeRoutes(app, knowledge);
+  if (config.databaseUrl) app.addHook("onReady", () => knowledge.recover());
 
   if (config.staticDir) {
     app.register(fastifyStatic, {

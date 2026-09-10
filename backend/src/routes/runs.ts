@@ -41,25 +41,36 @@ export function registerRunRoutes(
   runtime: AntlerHostRuntime,
 ) {
   app.post("/api/runs", async (request, reply) => {
-    const { message, conversationId, provider, workingDirectory, skillPolicy } = (request.body ?? {}) as {
+    const { message, projectId, conversationId, provider, workingDirectory, skillPolicy, knowledgePolicy } = (request.body ?? {}) as {
       message?: unknown;
+      projectId?: unknown;
       conversationId?: unknown;
       provider?: unknown;
       workingDirectory?: unknown;
       skillPolicy?: unknown;
+      knowledgePolicy?: unknown;
     };
     if (
       typeof message !== "string" ||
       !message.trim() ||
+      typeof projectId !== "string" ||
+      !projectId.trim() ||
       typeof conversationId !== "string" ||
       !conversationId
     )
       return reply
         .code(400)
-        .send({ error: "message 和 conversationId 均不能为空。" });
+        .send({ error: "message、projectId 和 conversationId 均不能为空。" });
     try {
       const parsedPolicy = parseSkillPolicy(skillPolicy);
-      const outcome = await runtime.createRunWithSkills(message.trim(), { conversationId, provider: parseProvider(provider), workingDirectory: parseWorkingDirectory(workingDirectory), skillPolicy: parsedPolicy });
+      const outcome = await runtime.createRunWithSkills(message.trim(), {
+        projectId: projectId.trim(),
+        conversationId,
+        provider: parseProvider(provider),
+        workingDirectory: parseWorkingDirectory(workingDirectory),
+        skillPolicy: parsedPolicy,
+        knowledgePolicy: parseKnowledgePolicy(knowledgePolicy),
+      });
       const run = outcome.run;
       return reply
         .code(202)
@@ -71,7 +82,9 @@ export function registerRunRoutes(
       if (error instanceof (await import("../skills/skill-policy.js")).SkillPolicyError) return reply.code(400).send({ error: error.code });
       if (
         error instanceof Error &&
-        (error.message.startsWith("供应商配置") || error.message.startsWith("工作目录"))
+        (error.message.startsWith("供应商配置") ||
+          error.message.startsWith("工作目录") ||
+          error.message.startsWith("Knowledge policy"))
       )
         return reply.code(400).send({ error: error.message });
       throw error;
@@ -87,18 +100,29 @@ export function registerRunRoutes(
     );
     if (!Number.isSafeInteger(afterEventId) || afterEventId < 0)
       return reply.code(400).send({ error: "afterEventId 无效。" });
-    if (!streamRun(runtime, request.params.runId, reply, afterEventId))
+    if (!(await streamRun(runtime, request.params.runId, reply, afterEventId)))
       return reply.code(404).send({ error: "run 不存在。" });
   });
 
   app.post<{ Params: { runId: string } }>(
     "/api/runs/:runId/cancel",
     async (request, reply) => {
-      const run = runtime.cancel(request.params.runId);
+      const run = await runtime.cancel(request.params.runId);
       if (!run) return reply.code(404).send({ error: "run 不存在。" });
       return reply.code(202).send({ runId: run.id, status: run.status });
     },
   );
+}
+
+function parseKnowledgePolicy(value: unknown): import("../knowledge/types.js").KnowledgePolicy {
+  if (value === undefined) return { mode: "disabled" };
+  if (!value || typeof value !== "object") throw new Error("Knowledge policy 无效。");
+  const policy = value as { mode?: unknown; knowledgeBaseIds?: unknown };
+  if (
+    (policy.mode === "disabled" || policy.mode === "auto") &&
+    policy.knowledgeBaseIds === undefined
+  ) return { mode: policy.mode };
+  throw new Error("Knowledge policy 无效。");
 }
 
 function parseSkillPolicy(value: unknown): import("../skills/types.js").SkillPolicy {
