@@ -1,70 +1,54 @@
 # Antler
 
-桌面自主型 Agent 的 M0 骨架。Tauri/React 前端通过 HTTP（REST）创建任务，通过 SSE 接收流式输出；Node.js 服务仅监听 `127.0.0.1`，由 Tauri 在桌面模式下启动、退出时回收。Tauri 开发模式依赖系统已安装的 Node.js；正式分发前需将 Node 运行时与服务入口构建为对应平台的 sidecar 二进制。
+Antler 是一个 Web Agent 项目。前端使用 React + Vite，后端使用 Fastify；浏览器通过 HTTP API 创建任务，并通过 SSE 接收流式输出。后端使用 Prisma + SQLite 保存运行记录和知识库数据。
 
-## 开发
+## 本地开发
+
+需要 Node.js、pnpm 10。安装依赖并同时启动前后端：
 
 ```bash
 pnpm install
-pnpm dev:server # 浏览器模式下的本地服务
-pnpm dev:app    # 浏览器模式下的 React 前端
-# 或在 app/ 中执行 pnpm tauri dev，体验 Tauri 拉起 Node 伴生服务
+pnpm dev
 ```
 
-服务已接入 Pi Agent Core 的最小运行时。当前首个 provider 为 OpenAI：设置 `OPENAI_API_KEY`（可选 `ANTLER_MODEL`，默认 `gpt-4.1-mini`）后，`/api/tasks` 会返回真实的流式模型输出；未配置密钥时会以结构化 `task.failed` 结束，而不会回退到占位回复。运行时为每个会话限制一个 active run，并支持 `POST /api/runs/:runId/cancel` 取消。
+在浏览器打开 <http://127.0.0.1:1420>。Vite 开发服务器使用 `1420` 端口，后端 API 默认监听 `127.0.0.1:3210`。也可以分别运行 `pnpm dev:web` 和 `pnpm dev:server`。
 
-后端使用 Prisma + SQLite，数据库默认位于 `workspace/antler.db`，可通过 `DATABASE_URL` 覆盖。修改 `backend/prisma/schema.prisma` 后，在仓库根目录运行：
+在页面的“供应商配置”中填写模型密钥，或在仓库根目录的 `.env` 中设置服务端密钥，例如：
+
+```dotenv
+OPENAI_API_KEY=your-api-key
+# ANTLER_MODEL=gpt-4.1-mini
+```
+
+服务端也支持 `ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_MODEL` 等配置。未配置可用密钥时，任务会以 `task.failed` 结束。浏览器中填写的供应商配置保存在当前浏览器的本地存储中。
+
+后端数据默认写入 `workspace/antler.db`；可通过 `DATABASE_URL` 和 `ANTLER_WORKSPACE_ROOT` 调整。修改 `backend/prisma/schema.prisma` 后，运行：
 
 ```bash
 pnpm --filter @antler/server db:migrate -- --name <migration-name>
 pnpm --filter @antler/server db:generate
 ```
 
-## Docker 一键部署
+## 部署 Web 版
 
-部署只包含一个 backend 容器：镜像构建阶段同时编译 React Web，运行时由 Fastify 直接提供静态资源、SPA 回退、API 与 SSE，不依赖 Nginx。远端工作区持久化在部署目录下的 `workspace/`。
+Docker 镜像会编译前端，并由 Fastify 在同一个端口提供网页、API 和 SSE；远端数据保存在部署目录的 `workspace/`。本地需要 Docker（含 buildx）、SSH 和 SCP，远端需要 Docker Compose。
 
 ```bash
+touch .env
 cp .env.deploy.example .env.deploy
 # 编辑 .env.deploy 中的 SSH 目标、端口和可选模型配置
 scripts/deploy-apps-ssh.sh
 ```
 
-脚本会自动探测远端的 amd64/arm64 架构，在本机构建包含 Web 的 backend 镜像，通过 SSH 传输镜像和配置，并执行 Compose 健康检查。默认部署到 `root@47.100.210.56:/opt/antler`，默认访问地址为 `http://47.100.210.56:3210/`。所有默认值均可通过脚本 `--help` 中列出的 `DEPLOY_*` 环境变量覆盖。
+脚本合并 `.env` 与 `.env.deploy`，后者的同名配置优先；它会探测远端 amd64/arm64 架构、构建并传输镜像，然后启动容器并等待健康检查。示例配置默认部署到 `root@47.100.210.56:/opt/antler`，访问地址为 <http://47.100.210.56:3210/>。目标和端口可在环境文件中修改；运行 `scripts/deploy-apps-ssh.sh --help` 可查看其他选项。
 
-Docker Web 模式会直接公开 backend 端口，不启用桌面伴生服务使用的 `ANTLER_ACCESS_TOKEN`。公网部署应通过云安全组或主机防火墙限制 `ANTLER_WEB_PORT` 的来源；如需用户级认证，应在外部认证网关实现。
+部署其他环境时，可使用 `.env.<环境>` 覆盖 `.env`，例如 `scripts/deploy-apps-ssh.sh test`；此时 `.env.test` 必须存在。
 
-部署其他环境时，可使用 `.env.<环境>` 覆盖 `.env`：
+Web 部署会直接公开后端端口。公网部署请通过防火墙限制访问来源，或在外部网关配置用户认证。
 
-```bash
-scripts/deploy-apps-ssh.sh test
-```
-
-这种情况下 `.env.test` 必须存在。模型密钥既可以放在部署环境文件中，也可以由用户在 Web 页面的“供应商配置”中保存到当前浏览器。
-
-## macOS：应用无法启动
-
-若双击 `Antler.app` 后立即退出，且崩溃报告中包含 `SIGABRT`、`RegisterApplication` 或 LaunchServices 错误 `-10822`，则问题出在 macOS 的 LaunchServices 用户服务，而非应用代码。`-10822` 表示无法与维护应用注册数据库的系统服务通信。
-
-先重启当前用户的 LaunchServices 服务，再重新打开应用：
+## 检查
 
 ```bash
-killall -u "$USER" lsd
-open app/src-tauri/target/release/bundle/macos/Antler.app
+pnpm check
+pnpm test
 ```
-
-`lsd` 会由 macOS 自动重新拉起。可用下列命令确认应用包可被 LaunchServices 正常解析：
-
-```bash
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
-  -lint app/src-tauri/target/release/bundle/macos/Antler.app
-```
-
-如果验证签名时提示 `code has no resources but signature indicates they must be present`，可为本机开发构建重新进行 ad-hoc 签名：
-
-```bash
-codesign --force --deep --sign - app/src-tauri/target/release/bundle/macos/Antler.app
-codesign --verify --deep --strict --verbose=2 app/src-tauri/target/release/bundle/macos/Antler.app
-```
-
-正式分发时应使用 Developer ID 证书签名并完成公证，不能使用 ad-hoc 签名。
