@@ -13,9 +13,10 @@ afterEach(async () => {
   );
 });
 
-async function testApp(ragUrl?: string) {
-  const workspaceRoot = await mkdtemp(join(tmpdir(), "antler-config-"));
-  workspaces.push(workspaceRoot);
+async function testApp(ragUrl?: string, ragKey?: string, root?: string) {
+  const workspaceRoot =
+    root ?? (await mkdtemp(join(tmpdir(), "antler-config-")));
+  if (!root) workspaces.push(workspaceRoot);
   return createApp({
     host: "127.0.0.1",
     port: 3210,
@@ -23,6 +24,7 @@ async function testApp(ragUrl?: string) {
     accessToken: "test-token",
     openAiApiKey: "secret-provider-key",
     ragUrl,
+    ragKey,
     workspaceRoot,
     model: "test-model",
     maxRunDurationMs: 1_000,
@@ -30,8 +32,153 @@ async function testApp(ragUrl?: string) {
 }
 
 describe("RAG configuration", () => {
+  it("persists overrides across restarts, retains a blank draft key, and restores defaults", async () => {
+    const headers = { "x-antler-token": "test-token" };
+    let app = await testApp("https://default.example.com", "default-key");
+    const root = workspaces[workspaces.length - 1];
+    try {
+      const saved = await app.inject({
+        method: "PUT",
+        url: "/api/config/rag",
+        headers,
+        payload: {
+          ragUrl: " https://custom.example.com/ ",
+          ragKey: " custom-key ",
+        },
+      });
+      expect(saved.statusCode).toBe(200);
+      expect(saved.json()).toEqual({
+        ragUrl: "https://custom.example.com/",
+        ragKeyConfigured: true,
+        ragConfigOverridden: true,
+      });
+      expect(saved.body).not.toContain("custom-key");
+      await app.close();
+      app = await testApp(
+        "https://changed-default.example.com",
+        "changed-default-key",
+        root,
+      );
+      const reloaded = await app.inject({
+        method: "GET",
+        url: "/api/config",
+        headers,
+      });
+      expect(reloaded.json()).toEqual(saved.json());
+      const retained = await app.inject({
+        method: "PUT",
+        url: "/api/config/rag",
+        headers,
+        payload: { ragUrl: "http://localhost:8001" },
+      });
+      expect(retained.json()).toMatchObject({
+        ragUrl: "http://localhost:8001/",
+        ragKeyConfigured: true,
+      });
+      const cleared = await app.inject({
+        method: "PUT",
+        url: "/api/config/rag",
+        headers,
+        payload: { ragUrl: "", ragKey: "" },
+      });
+      expect(cleared.json()).toEqual({
+        ragUrl: null,
+        ragKeyConfigured: false,
+        ragConfigOverridden: true,
+      });
+      const reset = await app.inject({
+        method: "DELETE",
+        url: "/api/config/rag",
+        headers,
+      });
+      expect(reset.statusCode).toBe(200);
+      expect(reset.json()).toEqual({
+        ragUrl: "https://changed-default.example.com/",
+        ragKeyConfigured: true,
+        ragConfigOverridden: false,
+      });
+      await app.close();
+      app = await testApp("https://default.example.com", "default-key", root);
+      const afterReset = await app.inject({
+        method: "GET",
+        url: "/api/config",
+        headers,
+      });
+      expect(afterReset.json()).toMatchObject({
+        ragUrl: "https://default.example.com/",
+        ragConfigOverridden: false,
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("requires authorization for writes and supports their browser preflight", async () => {
+    const app = await testApp();
+    try {
+      for (const method of ["PUT", "DELETE"] as const) {
+        expect(
+          (await app.inject({ method, url: "/api/config/rag" })).statusCode,
+        ).toBe(401);
+      }
+      const preflight = await app.inject({
+        method: "OPTIONS",
+        url: "/api/config/rag",
+      });
+      expect(preflight.statusCode).toBe(204);
+      expect(preflight.headers["access-control-allow-methods"]).toContain(
+        "PUT",
+      );
+      expect(preflight.headers["access-control-allow-methods"]).toContain(
+        "DELETE",
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it.each([
+    { ragUrl: "not a URL" },
+    { ragUrl: "javascript:alert(1)" },
+    { ragUrl: "https://user:password@rag.example.com" },
+    { ragUrl: "https://rag.example.com/api" },
+    { ragUrl: "https://rag.example.com?key=secret" },
+    { ragUrl: "https://rag.example.com#fragment" },
+    { ragUrl: "http://rag.example.com" },
+    { ragUrl: 42 },
+    { ragKey: 42 },
+    ["invalid"],
+  ])(
+    "rejects invalid overrides without changing the effective configuration: %j",
+    async (payload) => {
+      const app = await testApp("https://default.example.com", "default-key");
+      try {
+        const headers = { "x-antler-token": "test-token" };
+        const response = await app.inject({
+          method: "PUT",
+          url: "/api/config/rag",
+          headers,
+          payload,
+        });
+        expect(response.statusCode).toBe(400);
+        const config = await app.inject({
+          method: "GET",
+          url: "/api/config",
+          headers,
+        });
+        expect(config.json()).toEqual({
+          ragUrl: "https://default.example.com/",
+          ragKeyConfigured: true,
+          ragConfigOverridden: false,
+        });
+      } finally {
+        await app.close();
+      }
+    },
+  );
+
   it("returns only the configured public URL and requires the backend token", async () => {
-    const app = await testApp(" https://rag.example.com ");
+    const app = await testApp(" https://rag.example.com ", "secret-rag-key");
     try {
       const unauthorized = await app.inject({
         method: "GET",
@@ -44,7 +191,12 @@ describe("RAG configuration", () => {
         headers: { "x-antler-token": "test-token" },
       });
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toEqual({ ragUrl: "https://rag.example.com/" });
+      expect(response.json()).toEqual({
+        ragUrl: "https://rag.example.com/",
+        ragKeyConfigured: true,
+        ragConfigOverridden: false,
+      });
+      expect(response.body).not.toContain("secret-rag-key");
       expect(response.headers["cache-control"]).toBe("no-store");
     } finally {
       await app.close();
@@ -66,7 +218,7 @@ describe("RAG configuration", () => {
         url: "/api/config",
         headers: { "x-antler-token": "test-token" },
       });
-      expect(response.json()).toEqual({ ragUrl: null });
+      expect(response.json()).toMatchObject({ ragUrl: null });
     } finally {
       await app.close();
     }
@@ -81,7 +233,7 @@ describe("RAG configuration", () => {
         url: "/api/config",
         headers,
       });
-      expect(config.json()).toEqual({ ragUrl: "http://localhost:8001/" });
+      expect(config.json()).toMatchObject({ ragUrl: "http://localhost:8001/" });
       for (const url of [
         "/api/projects/example/knowledge-bases",
         "/api/knowledge-bases/example",

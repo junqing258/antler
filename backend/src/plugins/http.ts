@@ -11,7 +11,7 @@ function setCorsHeaders(reply: FastifyReply) {
   // The service only binds to loopback. The token protects requests from other local processes.
   reply
     .header("access-control-allow-origin", "*")
-    .header("access-control-allow-methods", "GET, POST, OPTIONS")
+    .header("access-control-allow-methods", "GET, POST, PUT, DELETE, OPTIONS")
     .header("access-control-allow-headers", "content-type, x-antler-token");
 }
 

@@ -5,7 +5,7 @@ description: 检索 Antler 内部知识库的原文片段、Agentic 问答或知
 
 # Antler RAG 知识库
 
-这是 backend 内置技能，可供所有 Web Agent 工作空间加载。需要 POSIX shell 和 Python 3.9+；Docker 镜像已包含 Python。服务地址与个人 API Key 分别通过 backend 进程环境中的 `ANTLER_RAG_URL`、`ANTLER_RAG_KEY` 注入。Key 只由脚本从环境变量读取；不要打印、写入代码、放入命令参数或任何可见输出。
+这是 backend 内置技能，可供所有 Web Agent 工作空间加载。需要 POSIX shell 和 Python 3.9+；Docker 镜像已包含 Python。服务地址与 API Key 在前端“知识库配置”中设置，backend 环境变量作为默认值。backend 将当前有效配置通过工具进程环境中的 `ANTLER_RAG_URL`、`ANTLER_RAG_KEY` 注入。Key 只由脚本从环境变量读取；不要打印、写入代码、放入命令参数或任何可见输出。
 
 ## 准备客户端
 

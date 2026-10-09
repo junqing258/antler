@@ -17,6 +17,7 @@ export type PiAgentAdapterConfig = {
   anthropicAuthToken?: string;
   anthropicBaseUrl?: string;
   tavilyApiKey?: string;
+  getToolEnvironment?: () => NodeJS.ProcessEnv;
   workspaceRoot: string;
   systemPrompt: string;
   requestTimeoutMs: number;
@@ -37,7 +38,10 @@ export class PiAgentAdapter {
   constructor(private readonly config: PiAgentAdapterConfig) {}
   private tools(snapshot: SkillSnapshot) {
     return [
-      ...createWorkspaceTools(this.config.workspaceRoot),
+      ...createWorkspaceTools(
+        this.config.workspaceRoot,
+        this.config.getToolEnvironment,
+      ),
       ...(this.config.tavilyApiKey
         ? [createTavilySearchTool(this.config.tavilyApiKey)]
         : []),

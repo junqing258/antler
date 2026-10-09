@@ -18,9 +18,11 @@ import { mkdirSync } from "node:fs";
 import { registerDatabase } from "./plugins/database.js";
 import { PrismaRunStore } from "./runs/run-store.js";
 import { registerConfigRoutes } from "./routes/config.js";
+import { RagConfigStore } from "./config/rag-config.js";
 
 export function createApp(config: AppConfig) {
   mkdirSync(config.workspaceRoot, { recursive: true });
+  const ragConfig = new RagConfigStore(config, config.workspaceRoot);
   const app = Fastify({ logger: false });
   registerDatabase(app, config.databaseUrl);
   const adapters = new Map<string, PiAgentAdapter>();
@@ -67,6 +69,7 @@ export function createApp(config: AppConfig) {
       adapter = new PiAgentAdapter({
         ...runtimeConfig,
         tavilyApiKey: config.tavilyApiKey,
+        getToolEnvironment: () => ragConfig.environment(),
         workspaceRoot,
         requestTimeoutMs: config.maxRunDurationMs,
         systemPrompt: DEFAULT_SYSTEM_PROMPT,
@@ -95,7 +98,7 @@ export function createApp(config: AppConfig) {
   registerRunRoutes(app, runtime);
   registerSkillRoutes(app, skillRegistry);
   registerDirectoryRoutes(app, config.workspaceRoot);
-  registerConfigRoutes(app, config);
+  registerConfigRoutes(app, ragConfig);
 
   if (config.staticDir) {
     app.register(fastifyStatic, {

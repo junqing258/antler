@@ -35,14 +35,16 @@ pnpm --filter @antler/server db:generate
 
 技能优先级为工作空间的 `.agents/skills/`、用户级 `~/.agents/skills/`（可通过 `ANTLER_AGENTS_DIR` 调整）、backend 内置技能。同名技能只保留优先级最高的版本。`GET /api/skills` 返回内置技能的 `scope: "bundled"`；Web 使用的 `POST /api/runs` 默认采用 `skillPolicy: { "mode": "auto" }`，Agent 根据名称和描述选择技能，再调用 `load_skill` 加载完整说明。请求仍可显式指定 `disabled` 或 `selected`。
 
-使用 `antler-rag` 检索前，在 backend 的环境中配置：
+使用 `antler-rag` 检索前，点击侧栏“知识库配置”，填写 RAG 服务地址和 API Key，保存后即时生效，无需重启 backend。配置保存在当前 backend 工作空间的 `.antler/rag-config.json`，重启后保留；同一 backend 的客户端共享该配置。密钥不会通过配置接口返回，留空保存会保留现有密钥，也可以单独清除。
+
+backend 环境变量作为默认值（界面配置优先）：
 
 ```dotenv
 ANTLER_RAG_URL=https://rag.example.com
 ANTLER_RAG_KEY=your-rag-api-key
 ```
 
-侧栏的“知识库配置”会在新页面打开 `ANTLER_RAG_URL` 指向的管理页面。未配置地址时会提示设置该环境变量；修改后需重启 backend。Antler 不再提供本地知识库管理、索引和自动检索。
+在配置界面点击“恢复环境默认值”可移除界面覆盖，重新使用 `ANTLER_RAG_URL`、`ANTLER_RAG_KEY`。环境变量修改仍需重启 backend。RAG 地址必须是服务 origin，不含路径或查询参数；除本机外须使用 HTTPS。配置界面提供“打开知识库管理页面”链接。Antler 不再提供本地知识库管理、索引和自动检索。
 
 本地可填写仓库根目录的 `.env`；Docker 部署可填写 `.env.deploy`，部署脚本会合并并传入容器。密钥不会写入技能或镜像。Docker 镜像包含技能文件和 Python 3；本地调用技能需安装 Python 3.9+。Agent 通过 `read_skill_resource` 获取随技能打包的客户端脚本，并在当前工作空间临时执行，无需知道服务器的安装路径。
 

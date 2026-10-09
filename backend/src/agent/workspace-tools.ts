@@ -132,7 +132,10 @@ type WriteInput = { path: string; content: string };
 type EditInput = { path: string; oldText: string; newText: string };
 type BashInput = { command: string; timeoutMs?: number };
 
-export function createWorkspaceTools(workspaceRoot: string) {
+export function createWorkspaceTools(
+  workspaceRoot: string,
+  getEnvironment?: () => NodeJS.ProcessEnv,
+) {
   const root = resolve(workspaceRoot);
   const tools = [
     {
@@ -220,6 +223,7 @@ export function createWorkspaceTools(workspaceRoot: string) {
       ) {
         const result = await execFileAsync("bash", ["-lc", command], {
           cwd: root,
+          env: { ...process.env, ...getEnvironment?.() },
           timeout: timeoutMs,
           maxBuffer: MAX_COMMAND_OUTPUT,
           signal,
