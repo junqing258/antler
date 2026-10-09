@@ -17,6 +17,14 @@ DEPLOY_BACKEND_IMAGE_REF="${DEPLOY_BACKEND_IMAGE_REPO}:${DEPLOY_IMAGE_TAG}"
 DEPLOY_PLATFORM="${DEPLOY_PLATFORM:-}"
 DEPLOY_DEBUG="${DEPLOY_DEBUG:-0}"
 
+# macOS bsdtar 默认把扩展属性和 AppleDouble 元数据写进归档，远端 GNU tar 解包时
+# 会生成多余的 `._*` 文件并输出未知 keyword 警告。GNU tar 默认不写这些元数据，
+# 也不需要（不支持）这个开关。
+DEPLOY_TAR_METADATA_FLAG=""
+if tar --version 2>/dev/null | grep -q bsdtar; then
+  DEPLOY_TAR_METADATA_FLAG="--no-mac-metadata --no-xattrs"
+fi
+
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   cat <<EOF
 用法：scripts/deploy-apps-ssh.sh [环境]
@@ -137,6 +145,8 @@ require_command docker
 require_command ssh
 require_command scp
 require_command gzip
+require_command git
+require_command tar
 require_file "$DEPLOY_ENV_FILE"
 require_file "$DEPLOY_COMPOSE_FILE"
 if [[ "$DEPLOY_ENVIRONMENT" != "deploy" ]]; then
@@ -193,11 +203,19 @@ remote_sh "mkdir -p $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR")/workspace"
 scp "$DEPLOY_COMPOSE_FILE" "$DEPLOY_SSH_TARGET:$DEPLOY_REMOTE_DIR/docker-compose.remote.yml"
 scp "$tmp_env_file" "$DEPLOY_SSH_TARGET:$DEPLOY_REMOTE_DIR/.env"
 
+log_step "上传工作区种子目录（仅补充远端缺失的文件）"
+(cd "$ROOT_DIR" && git ls-files -z -- workspace/ | tar --null -T - -czf - $DEPLOY_TAR_METADATA_FLAG) \
+  | remote_sh "tar -xzf - --skip-old-files -C $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR")"
+
 log_step "传输镜像"
 docker save "$DEPLOY_BACKEND_IMAGE_REF" | gzip | remote_sh "gunzip | docker load"
 
 log_step "启动服务、移除旧 Web 容器并等待健康检查"
-remote_sh "cd $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR") && docker compose -f docker-compose.remote.yml --env-file .env up -d --force-recreate --remove-orphans --wait --wait-timeout 180"
+if ! remote_sh "cd $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR") && docker compose -f docker-compose.remote.yml --env-file .env up -d --force-recreate --remove-orphans --wait --wait-timeout 300"; then
+  echo "服务启动失败，输出容器状态、健康检查和最近日志：" >&2
+  remote_sh "cd $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR") && docker compose -f docker-compose.remote.yml --env-file .env ps -a && docker inspect antler-backend --format '{{json .State}}' && docker compose -f docker-compose.remote.yml --env-file .env logs --tail 100 backend" || true
+  exit 1
+fi
 
 log_step "远端服务状态"
 remote_sh "cd $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR") && docker compose -f docker-compose.remote.yml --env-file .env ps"

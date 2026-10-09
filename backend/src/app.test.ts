@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gunzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
 import { createApp } from "./app.js";
 
@@ -90,6 +91,37 @@ describe("backend Web hosting", () => {
     const missingApi = await app.inject({ method: "GET", url: "/api/missing" });
     expect(missingApi.statusCode).toBe(404);
     expect(missingApi.json()).toEqual({ error: "路由不存在。" });
+    await app.close();
+  });
+
+  it("compresses static assets when the client requests it", async () => {
+    const directory = await staticDirectory();
+    await writeFile(
+      join(directory, "assets", "large.js"),
+      `const data = ${JSON.stringify("antler".repeat(500))};`,
+    );
+    const app = createApp({
+      host: "127.0.0.1",
+      port: 3210,
+      provider: "openai",
+      workspaceRoot: process.cwd(),
+      staticDir: directory,
+      model: "test-model",
+      maxRunDurationMs: 1_000,
+    });
+
+    const plain = await app.inject({ method: "GET", url: "/assets/large.js" });
+    expect(plain.statusCode).toBe(200);
+    expect(plain.headers["content-encoding"]).toBeUndefined();
+
+    const compressed = await app.inject({
+      method: "GET",
+      url: "/assets/large.js",
+      headers: { "accept-encoding": "gzip" },
+    });
+    expect(compressed.statusCode).toBe(200);
+    expect(compressed.headers["content-encoding"]).toBe("gzip");
+    expect(gunzipSync(compressed.rawPayload).toString()).toContain("antler");
     await app.close();
   });
 });

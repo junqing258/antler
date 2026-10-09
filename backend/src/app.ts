@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import fastifyCompress from "@fastify/compress";
 import fastifyStatic from "@fastify/static";
 import type { AppConfig } from "./config/env.js";
 import { registerHttpHooks } from "./plugins/http.js";
@@ -101,6 +102,7 @@ export function createApp(config: AppConfig) {
   registerConfigRoutes(app, ragConfig);
 
   if (config.staticDir) {
+    app.register(fastifyCompress);
     app.register(fastifyStatic, {
       root: config.staticDir,
       prefix: "/",
