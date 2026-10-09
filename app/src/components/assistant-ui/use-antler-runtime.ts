@@ -239,7 +239,7 @@ export function useAntlerRuntime(
     const persist = () => {
       const messages = runtime.thread.getState()
         .messages as ThreadMessageLike[];
-      void saveConversationMessages(conversationId, messages).then(
+      void saveConversationMessages(conversationId, messages, projectId).then(
         (conversation) => {
           if (conversation) onConversationSaved();
         },
@@ -255,7 +255,7 @@ export function useAntlerRuntime(
       unsubscribe();
       persist();
     };
-  }, [conversationId, onConversationSaved, runtime]);
+  }, [conversationId, onConversationSaved, projectId, runtime]);
 
   return runtime;
 }

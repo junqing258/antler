@@ -54,9 +54,6 @@ body {
     "Segoe UI",
     sans-serif;
 }
-button {
-  font: inherit;
-}
 .app-shell {
   display: flex;
   height: 100svh;

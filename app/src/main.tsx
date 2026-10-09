@@ -520,7 +520,7 @@ function Chat({
                       <FolderCogIcon className="size-[15px]" />
                     </button>
                   </div>
-                  <div className="mt-[3px] grid gap-0.5 pb-1 pl-3">
+                  <div className="mt-[3px] grid w-full min-w-0 grid-cols-1 gap-0.5 pb-1 pl-3">
                     {projectConversations.length === 0 && (
                       <button
                         className="w-full border-0 bg-transparent px-3 py-1.5 text-left text-xs text-[#999] hover:text-[#666]"
@@ -532,12 +532,13 @@ function Chat({
                     )}
                     {projectConversations.map((conversation) => (
                       <div
-                        className="group flex items-center rounded-full px-2.5 py-px hover:bg-[#f1f1f1] has-[[aria-current=page]]:bg-[#f1f1f1]"
+                        className="group flex w-full min-w-0 items-center rounded-lg px-2.5 py-px hover:bg-[#f1f1f1] has-[[aria-current=page]]:bg-[#f1f1f1]"
                         key={conversation.id}
                       >
                         <button
-                          className="min-w-0 flex-1 overflow-hidden border-0 bg-transparent px-0.5 py-1 text-left text-sm leading-6 text-[#222] text-ellipsis whitespace-nowrap"
+                          className="min-w-0 flex-1 truncate border-0 bg-transparent px-0.5 py-1 text-left text-[13px] leading-6 text-[#222]"
                           type="button"
+                          title={conversation.title}
                           aria-current={
                             conversation.id === conversationId
                               ? "page"
@@ -547,7 +548,7 @@ function Chat({
                         >
                           {conversation.title}
                         </button>
-                        <div className="flex gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+                        <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                           <button
                             className="grid size-[26px] place-items-center rounded border-0 bg-transparent text-[#777] hover:bg-[#ddd] hover:text-[#333]"
                             type="button"

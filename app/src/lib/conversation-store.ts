@@ -262,6 +262,7 @@ export async function getConversation(
 export async function saveConversationMessages(
   id: string,
   messages: ThreadMessageLike[],
+  projectId = DEFAULT_PROJECT_ID,
 ): Promise<Conversation | undefined> {
   if (deletedConversationIds.has(id)) return undefined;
   const current = await getConversation(id);
@@ -272,7 +273,7 @@ export async function saveConversationMessages(
   const now = Date.now();
   const conversation: Conversation = {
     id,
-    projectId: current?.projectId ?? DEFAULT_PROJECT_ID,
+    projectId: current?.projectId ?? projectId,
     title: getTitle(
       messages,
       current?.title ?? "New Chat",
