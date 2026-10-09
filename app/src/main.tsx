@@ -51,6 +51,7 @@ import {
 import "./styles.css";
 import { createUuid } from "@/lib/utils";
 import { DirectoryPicker } from "@/components/directory-picker";
+import { initializeWorkspaceProjects } from "@/lib/workspace-projects";
 
 type ServerInfo = { baseUrl: string; token: string };
 
@@ -867,6 +868,15 @@ function App() {
         setConversations([]);
       });
   }, []);
+  useEffect(() => {
+    let cancelled = false;
+    void initializeWorkspaceProjects(serverInfo).then((project) => {
+      if (project && !cancelled) refreshLibrary();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshLibrary]);
   useEffect(() => {
     let cancelled = false;
     setInitialMessages(null);

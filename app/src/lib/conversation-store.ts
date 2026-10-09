@@ -158,6 +158,44 @@ export async function createProject(
   return project;
 }
 
+export async function ensureWorkspaceProject(
+  name: string,
+  workingDirectory: string,
+): Promise<Project> {
+  const id = `workspace:${name}`;
+  const database = await openDatabase();
+  try {
+    return await new Promise<Project>((resolve, reject) => {
+      // Check and insert in one transaction, including concurrent startup calls.
+      const transaction = database.transaction(PROJECTS_STORE, "readwrite");
+      const store = transaction.objectStore(PROJECTS_STORE);
+      const request = store.getAll();
+      let project: Project;
+      request.onsuccess = () => {
+        const existing = (request.result as Project[]).find(
+          (item) => item.id === id || item.workingDirectory === workingDirectory,
+        );
+        const now = Date.now();
+        project = existing ?? {
+          id,
+          name,
+          workingDirectory,
+          createdAt: now,
+          updatedAt: now,
+        };
+        if (!existing) store.put(project);
+      };
+      transaction.oncomplete = () => resolve(project);
+      transaction.onerror = () =>
+        reject(transaction.error ?? new Error("无法初始化工作目录项目"));
+      transaction.onabort = () =>
+        reject(transaction.error ?? new Error("项目初始化已中止"));
+    });
+  } finally {
+    database.close();
+  }
+}
+
 export async function updateProject(
   id: string,
   changes: Pick<Project, "name" | "workingDirectory">,

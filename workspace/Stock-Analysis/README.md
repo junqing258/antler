@@ -4,7 +4,7 @@
 
 ## 在 Antler 中使用
 
-1. 在工作目录选择器中选择 `Stock-Analysis`（本地路径为 `workspace/Stock-Analysis`）。
+1. 启动后在前端 **Projects** 列表中选择自动加载的 `Stock-Analysis` 项目（本地路径为 `workspace/Stock-Analysis`）。已有同目录项目会直接复用，重复启动不会创建副本或覆盖项目设置。
 2. 将 Skill 模式设为自动，或选择需要的 Skill。
 3. 输入任务，例如“分析上证指数和 TSLA，并生成 HTML 报告”。
 
