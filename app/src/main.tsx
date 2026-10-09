@@ -433,7 +433,7 @@ function Chat({
   conversations: Conversation[];
   projects: Project[];
   activeProject: Project;
-  onNewThread: () => void;
+  onNewThread: (projectId?: string) => void;
   onNewProject: () => void;
   onSelectProject: (project: Project) => void;
   onEditProject: (project: Project) => void;
@@ -467,9 +467,9 @@ function Chat({
             </div>
           </div>
           <button
-            className="mt-[26px] flex w-full items-center gap-2 rounded-full border-0 bg-[#f2f2f2] px-3 py-1 text-left text-sm text-[#222] hover:bg-[#eaeaea]"
+            className="mt-[26px] flex w-full items-center gap-2 rounded-lg border-0 bg-[#f2f2f2] px-3 py-1 text-left text-sm text-[#222] hover:bg-[#eaeaea]"
             type="button"
-            onClick={onNewThread}
+            onClick={() => onNewThread()}
           >
             <PlusIcon className="size-3.5" aria-hidden="true" />
             New Thread
@@ -510,6 +510,15 @@ function Chat({
                     >
                       <FolderIcon className="size-[15px] shrink-0 text-[#777]" aria-hidden="true" />
                       <span className="truncate">{project.name}</span>
+                    </button>
+                    <button
+                      className="grid size-[26px] shrink-0 place-items-center rounded-md border-0 bg-transparent text-[#777] hover:bg-[#eaeaea] hover:text-[#333]"
+                      type="button"
+                      onClick={() => onNewThread(project.id)}
+                      aria-label={`New Thread in ${project.name}`}
+                      title="New Thread"
+                    >
+                      <PlusIcon className="size-[15px]" aria-hidden="true" />
                     </button>
                     <button
                       className="mr-[3px] grid size-[26px] shrink-0 place-items-center rounded-md border-0 bg-transparent text-[#777] opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 data-[active=true]:opacity-100 hover:bg-[#eaeaea] hover:text-[#333]"
@@ -611,9 +620,10 @@ function App() {
   const [conversationId, setConversationId] = useState(
     () => searchParams.get("conversationId") ?? newConversationId(),
   );
-  const [initialMessages, setInitialMessages] = useState<
-    ThreadMessageLike[] | null
-  >(null);
+  const [loadedConversation, setLoadedConversation] = useState<{
+    id: string;
+    messages: ThreadMessageLike[];
+  } | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState(DEFAULT_PROJECT_ID);
@@ -645,7 +655,7 @@ function App() {
   }, [refreshLibrary]);
   useEffect(() => {
     let cancelled = false;
-    setInitialMessages(null);
+    setLoadedConversation(null);
     void getConversation(conversationId)
       .then(async (conversation) => {
         const [nextProjects, nextConversations] = await Promise.all([
@@ -656,12 +666,15 @@ function App() {
         if (conversation) setActiveProjectId(conversation.projectId);
         setProjects(nextProjects);
         setConversations(nextConversations);
-        setInitialMessages(conversation?.messages ?? []);
+        setLoadedConversation({
+          id: conversationId,
+          messages: conversation?.messages ?? [],
+        });
       })
       // IndexedDB can be disabled by a browser policy. Keep chat usable even
       // though persistence is unavailable in that environment.
       .catch(() => {
-        if (!cancelled) setInitialMessages([]);
+        if (!cancelled) setLoadedConversation({ id: conversationId, messages: [] });
       });
     return () => {
       cancelled = true;
@@ -757,16 +770,17 @@ function App() {
     } satisfies Project);
   return (
     <>
-      {initialMessages && (
+      {/* Never seed a new runtime with messages loaded for another thread. */}
+      {loadedConversation?.id === conversationId && (
         <Chat
           key={conversationId}
           conversationId={conversationId}
-          initialMessages={initialMessages}
+          initialMessages={loadedConversation.messages}
           title={activeConversation?.title ?? "New Chat"}
           conversations={conversations}
           projects={projects.length ? projects : [activeProject]}
           activeProject={activeProject}
-          onNewThread={() => startNewThread()}
+          onNewThread={startNewThread}
           onNewProject={() => setProjectDialog({})}
           onSelectProject={selectProject}
           onEditProject={(project) => setProjectDialog({ project })}
