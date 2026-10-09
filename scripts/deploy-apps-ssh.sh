@@ -16,6 +16,7 @@ DEPLOY_BACKEND_IMAGE_REPO="${DEPLOY_BACKEND_IMAGE_REPO:-antler/backend}"
 DEPLOY_BACKEND_IMAGE_REF="${DEPLOY_BACKEND_IMAGE_REPO}:${DEPLOY_IMAGE_TAG}"
 DEPLOY_PLATFORM="${DEPLOY_PLATFORM:-}"
 DEPLOY_DEBUG="${DEPLOY_DEBUG:-0}"
+DEPLOY_GZIP_LEVEL="${DEPLOY_GZIP_LEVEL:-1}"
 
 # macOS bsdtar 默认把扩展属性和 AppleDouble 元数据写进归档，远端 GNU tar 解包时
 # 会生成多余的 `._*` 文件并输出未知 keyword 警告。GNU tar 默认不写这些元数据，
@@ -31,6 +32,8 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
 
 在本地构建包含 Antler Web 静态资源的 backend Docker 镜像，经 SSH 传输到远端主机，
 上传 Compose 与合并后的环境配置，然后重建容器并等待健康检查通过。
+镜像传输使用 pv 显示实时进度、吞吐率与 ETA（按镜像层大小估算）。
+本地需安装 pv（macOS：brew install pv）。
 
 环境默认为 deploy：脚本合并 .env 和可选的 .env.deploy，后者覆盖同名变量。
 传入 test 时则要求 .env.test 存在。
@@ -47,6 +50,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   DEPLOY_BACKEND_IMAGE_REPO backend 镜像名；默认 antler/backend
   DEPLOY_PLATFORM           目标平台；为空时从远端 uname 自动识别
   DEPLOY_DEBUG              设为 1 输出调试命令
+  DEPLOY_GZIP_LEVEL         gzip 压缩级别（1-9）；默认 1，以传输速度优先
 
 示例：
   cp .env.deploy.example .env.deploy
@@ -80,6 +84,10 @@ log_step() {
   printf '%s\n' "==> $1"
 }
 
+format_mib() {
+  awk -v bytes="$1" 'BEGIN { printf "%.1f MiB", bytes / 1024 / 1024 }'
+}
+
 quote_for_remote_sh() {
   printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
 }
@@ -87,6 +95,10 @@ quote_for_remote_sh() {
 remote_sh() {
   local cmd="$1"
   ssh "$DEPLOY_SSH_TARGET" "sh -lc $(quote_for_remote_sh "$cmd")"
+}
+
+transfer_image() {
+  docker save "$DEPLOY_BACKEND_IMAGE_REF" | pv -f -p -t -e -r -b -s "$image_size_bytes" | gzip "-$DEPLOY_GZIP_LEVEL" | remote_sh "gunzip | docker load"
 }
 
 read_env_file_value() {
@@ -145,6 +157,7 @@ require_command docker
 require_command ssh
 require_command scp
 require_command gzip
+require_command pv
 require_command git
 require_command tar
 require_file "$DEPLOY_ENV_FILE"
@@ -154,6 +167,10 @@ if [[ "$DEPLOY_ENVIRONMENT" != "deploy" ]]; then
 fi
 if ! docker buildx version >/dev/null 2>&1; then
   echo "构建目标平台镜像需要 docker buildx" >&2
+  exit 1
+fi
+if [[ ! "$DEPLOY_GZIP_LEVEL" =~ ^[1-9]$ ]]; then
+  echo "DEPLOY_GZIP_LEVEL 必须是 1 到 9 之间的整数：$DEPLOY_GZIP_LEVEL" >&2
   exit 1
 fi
 
@@ -213,7 +230,9 @@ log_step "上传工作区种子目录（仅补充远端缺失的文件）"
   | remote_sh "tar -xzf - --skip-old-files -C $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR")"
 
 log_step "传输镜像"
-docker save "$DEPLOY_BACKEND_IMAGE_REF" | gzip | remote_sh "gunzip | docker load"
+image_size_bytes="$(docker image inspect --format '{{.Size}}' "$DEPLOY_BACKEND_IMAGE_REF")"
+log_step "镜像层大小约 $(format_mib "$image_size_bytes")；流式压缩、传输并导入远端 Docker"
+transfer_image
 
 log_step "启动服务、移除旧 Web 容器并等待健康检查"
 if ! remote_sh "cd $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR") && docker compose -f docker-compose.remote.yml --env-file .env up -d --force-recreate --remove-orphans --wait --wait-timeout 300"; then
