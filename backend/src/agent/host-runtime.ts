@@ -133,7 +133,7 @@ export class AntlerHostRuntime {
     input: string,
     options: CreateRunOptions,
   ): Promise<{ run: Run; skillDiagnostics: SkillSnapshot["diagnostics"] }> {
-    const policy = options.skillPolicy ?? { mode: "disabled" as const };
+    const policy = options.skillPolicy ?? { mode: "auto" as const };
     const workspaceRoot = options.workingDirectory ?? "";
     const catalog =
       policy.mode === "disabled"

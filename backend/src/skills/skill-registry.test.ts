@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createSkillSnapshot } from "./skill-policy.js";
 import { SkillRegistry } from "./skill-registry.js";
 import { createSkillTools } from "./skill-tools.js";
+import { createWorkspaceTools } from "../agent/workspace-tools.js";
+import { composeSkillPrompt } from "./skill-prompt.js";
 
 const temporaryDirectories: string[] = [];
 const content = "---\nname: example\ndescription: Example skill.\n---\n\n# Instructions\n";
@@ -25,7 +27,10 @@ async function setupSkill() {
   const file = join(directory, "SKILL.md");
   await writeFile(file, content);
   await writeFile(join(directory, "reference.md"), "Reference content.");
-  const catalog = await new SkillRegistry(join(root, "user-agents")).list(root);
+  const catalog = await new SkillRegistry(
+    join(root, "user-agents"),
+    join(root, "bundled-skills"),
+  ).list(root);
   expect(catalog.diagnostics).toEqual([]);
   expect(catalog.skills.map((skill) => skill.id)).toEqual(["example"]);
   const snapshot = createSkillSnapshot(root, { mode: "auto" }, catalog);
@@ -59,6 +64,88 @@ describe("SkillRegistry fingerprints", () => {
       await expect(
         tool.execute("changed", { skillId: "example", path: "reference.md" }),
       ).rejects.toThrow("skill_snapshot_changed");
+    }
+  });
+});
+
+describe("backend bundled skills", () => {
+  it("discovers and loads antler-rag independently of workspace and user skills", async () => {
+    const root = await mkdtemp(join(tmpdir(), "antler-bundled-skills-"));
+    temporaryDirectories.push(root);
+    const registry = new SkillRegistry(join(root, "user-agents"));
+
+    for (const workspace of [undefined, root, join(root, "other-workspace")]) {
+      const catalog = await registry.list(workspace);
+      expect(catalog.diagnostics).toEqual([]);
+      expect(catalog.skills).toEqual([
+        expect.objectContaining({ id: "antler-rag", scope: "bundled" }),
+      ]);
+      const snapshot = createSkillSnapshot(
+        workspace ?? "",
+        { mode: "auto" },
+        catalog,
+      );
+      expect(composeSkillPrompt("Base prompt", snapshot)).toContain(
+        'id="antler-rag"',
+      );
+      const tools = createSkillTools(snapshot);
+      const invocation = await tools[0].execute("load", { skillId: "antler-rag" });
+      expect(invocation.content).toEqual([
+        expect.objectContaining({ text: expect.stringContaining("ANTLER_RAG_URL") }),
+      ]);
+    }
+
+    const snapshot = createSkillSnapshot(root, { mode: "auto" }, await registry.list(root));
+    const resource = await createSkillTools(snapshot)[1].execute("resource", {
+      skillId: "antler-rag",
+      path: "scripts/rag.py",
+    });
+    const script = resource.content[0];
+    if (script.type !== "text") throw new Error("Expected Python script text.");
+    const workspaceTools = createWorkspaceTools(root);
+    await workspaceTools
+      .find((tool) => tool.name === "write")!
+      .execute("write", {
+        path: "rag.py",
+        content: script.text,
+      });
+    const help = await workspaceTools
+      .find((tool) => tool.name === "bash")!
+      .execute("help", {
+        command: "python3 rag.py --help",
+      });
+    expect(help.content).toEqual([
+      expect.objectContaining({ text: expect.stringContaining("list-kbs") }),
+    ]);
+  });
+
+  it("allows workspace and user skills to override a bundled skill", async () => {
+    const root = await mkdtemp(join(tmpdir(), "antler-skill-precedence-"));
+    temporaryDirectories.push(root);
+    const agentsDir = join(root, "user-agents");
+    const registry = new SkillRegistry(agentsDir);
+    for (const scope of ["user", "workspace"] as const) {
+      const directory = join(
+        scope === "user" ? agentsDir : join(root, ".agents"),
+        "skills",
+        "antler-rag",
+      );
+      await mkdir(directory, { recursive: true });
+      await writeFile(
+        join(directory, "SKILL.md"),
+        content.replace("example", "antler-rag"),
+      );
+      const catalog = await registry.list(root);
+      expect(catalog.skills).toEqual([
+        expect.objectContaining({ id: "antler-rag", scope }),
+      ]);
+      expect(catalog.diagnostics).toContainEqual(
+        expect.objectContaining({
+          code: "skill_shadowed",
+          name: "antler-rag",
+          scope: "bundled",
+        }),
+      );
     }
   });
 });

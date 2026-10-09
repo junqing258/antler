@@ -19,6 +19,7 @@ export type AppConfig = {
   anthropicAuthToken?: string;
   anthropicBaseUrl?: string;
   tavilyApiKey?: string;
+  ragUrl?: string;
   workspaceRoot: string;
   staticDir?: string;
   model: string;
@@ -42,6 +43,7 @@ export const config: AppConfig = {
   anthropicAuthToken: process.env.ANTHROPIC_AUTH_TOKEN,
   anthropicBaseUrl: process.env.ANTHROPIC_BASE_URL,
   tavilyApiKey: process.env.TAVILY_API_KEY,
+  ragUrl: process.env.ANTLER_RAG_URL,
   workspaceRoot,
   staticDir: process.env.ANTLER_STATIC_DIR
     ? resolve(projectRoot, process.env.ANTLER_STATIC_DIR)

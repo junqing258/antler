@@ -1,6 +1,6 @@
 import type { Skill } from "@earendil-works/pi-agent-core";
 
-export type SkillScope = "workspace" | "user";
+export type SkillScope = "workspace" | "user" | "bundled";
 export type LoadedSkill = {
   id: string;
   skill: Skill;

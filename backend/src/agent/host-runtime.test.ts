@@ -2,8 +2,44 @@ import { describe, expect, it, vi } from "vitest";
 import { AntlerHostRuntime } from "./host-runtime.js";
 import type { PiAgentAdapter } from "./pi-agent-adapter.js";
 import type { RunStore } from "../runs/run-store.js";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { SkillRegistry } from "../skills/skill-registry.js";
 
 describe("AntlerHostRuntime knowledge contract", () => {
+  it("makes bundled skills available to a Web run by default", async () => {
+    const root = await mkdtemp(join(tmpdir(), "antler-web-skills-"));
+    const runAdapter = vi.fn(async () => undefined);
+    const runtime = new AntlerHostRuntime(
+      () => ({ run: runAdapter }) as unknown as PiAgentAdapter,
+      { maxRunDurationMs: 1_000, maxEvents: 10 },
+      new SkillRegistry(join(root, "user-agents")),
+    );
+    try {
+      const { run } = await runtime.createRunWithSkills("查询知识库", {
+        projectId: "project-1",
+        workingDirectory: root,
+      });
+      await vi.waitFor(() =>
+        expect(runAdapter).toHaveBeenCalledWith(
+          "查询知识库",
+          run.conversationId,
+          expect.objectContaining({
+            policy: { mode: "auto" },
+            skills: [
+              expect.objectContaining({ id: "antler-rag", scope: "bundled" }),
+            ],
+          }),
+          expect.any(AbortSignal),
+          expect.any(Function),
+        ),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("emits an empty knowledge result before model execution and persists its event", async () => {
     const events: { id: number; type: string }[] = [];
     const store: RunStore = {

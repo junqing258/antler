@@ -40,9 +40,31 @@ describe("POST /api/runs workingDirectory", () => {
       conversationId: "conversation-1",
       provider: undefined,
       workingDirectory: process.cwd(),
-      skillPolicy: { mode: "disabled" },
+      skillPolicy: { mode: "auto" },
       knowledgePolicy: { mode: "disabled" },
     });
+    await app.close();
+  });
+
+  it("preserves an explicit disabled skill policy", async () => {
+    const app = Fastify();
+    const runtime = testRuntime();
+    registerRunRoutes(app, runtime as unknown as AntlerHostRuntime);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/runs",
+      payload: {
+        message: "hello",
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        skillPolicy: { mode: "disabled" },
+      },
+    });
+    expect(response.statusCode).toBe(202);
+    expect(runtime.createRunWithSkills).toHaveBeenCalledWith(
+      "hello",
+      expect.objectContaining({ skillPolicy: { mode: "disabled" } }),
+    );
     await app.close();
   });
 

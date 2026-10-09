@@ -37,7 +37,6 @@ export function useAntlerRuntime(
   getServerInfo: () => Promise<ServerInfo>,
   conversationId: string,
   projectId: string,
-  knowledgePolicy: "disabled" | "auto",
   workingDirectory: string,
   getProviderConfig: () => ProviderConfig,
   initialMessages: ThreadMessageLike[],
@@ -50,7 +49,6 @@ export function useAntlerRuntime(
         if (!message.trim()) return;
       let cancel: (() => void) | undefined;
       const content: ThreadAssistantMessagePart[] = [];
-      let knowledgeHits: { citationKey: string; title: string; snippet: string }[] = [];
         try {
           const server = await getServerInfo();
           const headers = {
@@ -67,7 +65,6 @@ export function useAntlerRuntime(
               message,
               conversationId,
               projectId,
-              knowledgePolicy: { mode: knowledgePolicy },
               ...(workingDirectory.trim() ? { workingDirectory } : {}),
               // Keep the existing environment-variable setup usable until the
               // user has saved a local provider key.
@@ -159,24 +156,11 @@ export function useAntlerRuntime(
                 summary?: string;
                 isError?: boolean;
               error?: { message?: string };
-              hits?: { citationKey: string; title: string; snippet: string }[];
               };
               if (event === "run.failed") {
                 throw new Error(payload.error?.message ?? "任务执行失败");
               }
             if (event === "run.cancelled") return;
-            if (event === "knowledge.retrieved") {
-              knowledgeHits = payload.hits ?? [];
-              continue;
-            }
-            if (event === "run.completed" && knowledgeHits.length) {
-              const references = knowledgeHits
-                .map((hit) => `**[${hit.citationKey}] ${hit.title}**\n${hit.snippet}`)
-                .join("\n\n");
-              content.push({ type: "text", text: `\n\n---\n参考资料\n\n${references}` });
-              yield snapshot();
-              continue;
-            }
               if (event === "assistant.delta" && payload.delta) {
                 appendText(payload.delta);
                 reasoningPartIndex = undefined;
@@ -244,7 +228,6 @@ export function useAntlerRuntime(
       conversationId,
       getProviderConfig,
       getServerInfo,
-      knowledgePolicy,
       projectId,
       workingDirectory,
     ],

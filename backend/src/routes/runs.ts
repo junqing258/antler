@@ -166,7 +166,7 @@ function parseKnowledgePolicy(
 function parseSkillPolicy(
   value: unknown,
 ): import("../skills/types.js").SkillPolicy {
-  if (value === undefined) return { mode: "disabled" as const };
+  if (value === undefined) return { mode: "auto" as const };
   if (!value || typeof value !== "object")
     throw new Error("Skill policy 无效。");
   const policy = value as { mode?: unknown; skillIds?: unknown };

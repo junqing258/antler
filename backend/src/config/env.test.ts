@@ -25,4 +25,10 @@ describe("backend workspace configuration", () => {
 
     expect(config.workspaceRoot).toBe(resolve(projectRoot, "custom-workspace"));
   });
+
+  it("reads the RAG configuration page URL from the backend environment", async () => {
+    vi.stubEnv("ANTLER_RAG_URL", "https://rag.example.com");
+    const { config } = await import("./env.js");
+    expect(config.ragUrl).toBe("https://rag.example.com");
+  });
 });

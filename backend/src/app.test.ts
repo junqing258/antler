@@ -27,6 +27,34 @@ afterEach(async () => {
 });
 
 describe("backend Web hosting", () => {
+  it("exposes the bundled RAG skill for Web workspaces without a user installation", async () => {
+    const workspaceRoot = await staticDirectory();
+    const app = createApp({
+      host: "127.0.0.1",
+      port: 3210,
+      provider: "openai",
+      workspaceRoot,
+      agentsDir: join(workspaceRoot, "no-user-skills"),
+      model: "test-model",
+      maxRunDurationMs: 1_000,
+    });
+    try {
+      for (const url of [
+        "/api/skills",
+        `/api/skills?workingDirectory=${encodeURIComponent(workspaceRoot)}`,
+      ]) {
+        const response = await app.inject({ method: "GET", url });
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toMatchObject({
+          skills: [{ id: "antler-rag", scope: "bundled" }],
+          diagnostics: [],
+        });
+      }
+    } finally {
+      await app.close();
+    }
+  });
+
   it("serves the Web build, SPA fallback, health and API 404s directly", async () => {
     const app = createApp({
       host: "127.0.0.1",

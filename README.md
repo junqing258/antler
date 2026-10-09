@@ -1,6 +1,6 @@
 # Antler
 
-Antler 是一个 Web Agent 项目。前端使用 React + Vite，后端使用 Fastify；浏览器通过 HTTP API 创建任务，并通过 SSE 接收流式输出。后端使用 Prisma + SQLite 保存运行记录和知识库数据。
+Antler 是一个 Web Agent 项目。前端使用 React + Vite，后端使用 Fastify；浏览器通过 HTTP API 创建任务，并通过 SSE 接收流式输出。后端使用 Prisma + SQLite 保存运行记录；知识库由外部 Antler RAG 服务管理。
 
 ## 本地开发
 
@@ -41,6 +41,8 @@ pnpm --filter @antler/server db:generate
 ANTLER_RAG_URL=https://rag.example.com
 ANTLER_RAG_KEY=your-rag-api-key
 ```
+
+侧栏的“知识库配置”会在新页面打开 `ANTLER_RAG_URL` 指向的管理页面。未配置地址时会提示设置该环境变量；修改后需重启 backend。Antler 不再提供本地知识库管理、索引和自动检索。
 
 本地可填写仓库根目录的 `.env`；Docker 部署可填写 `.env.deploy`，部署脚本会合并并传入容器。密钥不会写入技能或镜像。Docker 镜像包含技能文件和 Python 3；本地调用技能需安装 Python 3.9+。Agent 通过 `read_skill_resource` 获取随技能打包的客户端脚本，并在当前工作空间临时执行，无需知道服务器的安装路径。
 

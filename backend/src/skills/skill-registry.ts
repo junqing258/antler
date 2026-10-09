@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { basename, join, relative, resolve, sep } from "node:path";
 import {
   FileError,
@@ -165,10 +166,14 @@ export class SkillRegistry {
   constructor(
     private readonly agentsDir = process.env.ANTLER_AGENTS_DIR ??
       join(homedir(), ".agents"),
+    private readonly bundledSkillsDir = fileURLToPath(
+      new URL("../../skills/", import.meta.url),
+    ),
   ) {}
   async list(workspaceRoot?: string) {
     const roots: Array<{ scope: SkillScope; root: string }> = [
       { scope: "user", root: join(this.agentsDir, "skills") },
+      { scope: "bundled", root: this.bundledSkillsDir },
     ];
     if (workspaceRoot)
       roots.unshift({
@@ -263,7 +268,7 @@ export class SkillRegistry {
           });
     }
     const byId = new Map<string, LoadedSkill>();
-    // Sources are scanned workspace first, then user; first writer is active.
+    // Workspace and user skills override bundled defaults; first writer is active.
     for (const skill of all) {
       const old = byId.get(skill.id);
       if (old)
@@ -271,7 +276,7 @@ export class SkillRegistry {
           code: "skill_shadowed",
           name: skill.id,
           scope: skill.scope,
-          message: "同名 Skill 已被工作区版本覆盖。",
+          message: "同名 Skill 已被更高优先级的版本覆盖。",
         });
       else byId.set(skill.id, skill);
     }

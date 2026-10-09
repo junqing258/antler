@@ -2,7 +2,6 @@ import {
   StrictMode,
   useCallback,
   useEffect,
-  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -27,22 +26,17 @@ import {
   listProjects,
   renameConversation,
   updateProject,
-  updateProjectKnowledgePolicy,
   type Conversation,
   type Project,
 } from "@/lib/conversation-store";
 import type { ThreadMessageLike } from "@assistant-ui/react";
 import {
   CircleHelpIcon,
-  BookOpenIcon,
-  ChevronDownIcon,
-  FileTextIcon,
   FolderCogIcon,
   FolderIcon,
   FolderPlusIcon,
   PencilIcon,
   PlusIcon,
-  RefreshCwIcon,
   SettingsIcon,
   Trash2Icon,
   UserRoundIcon,
@@ -52,6 +46,7 @@ import "./styles.css";
 import { createUuid } from "@/lib/utils";
 import { DirectoryPicker } from "@/components/directory-picker";
 import { initializeWorkspaceProjects } from "@/lib/workspace-projects";
+import { KnowledgeConfigurationLink } from "@/components/knowledge-configuration-link";
 
 type ServerInfo = { baseUrl: string; token: string };
 
@@ -72,30 +67,6 @@ function newConversationId() {
 }
 
 type SettingsTab = "provider" | "profile" | "about";
-
-type KnowledgeSourceSummary = {
-  id: string;
-  displayName: string;
-  type: "text" | "file" | "directory";
-  status: "pending" | "indexing" | "ready" | "degraded" | "failed";
-  lastIndexedAt: string | null;
-  errorCode: string | null;
-};
-
-type KnowledgeBaseSummary = {
-  id: string;
-  name: string;
-  _count?: { sources: number };
-  sources: KnowledgeSourceSummary[];
-};
-
-const knowledgeStatusLabel: Record<KnowledgeSourceSummary["status"], string> = {
-  pending: "等待索引",
-  indexing: "正在索引",
-  ready: "已就绪",
-  degraded: "需重新索引",
-  failed: "索引失败",
-};
 
 function ProjectDialog({
   project,
@@ -169,204 +140,6 @@ function ProjectDialog({
           </button>
         </div>
       </form>
-    </div>
-  );
-}
-
-function KnowledgeDialog({
-  project,
-  onSave,
-  onClose,
-}: {
-  project: Project;
-  onSave: (policy: "disabled" | "auto") => void;
-  onClose: () => void;
-}) {
-  const [enabled, setEnabled] = useState(project.knowledgePolicy === "auto");
-  const [bases, setBases] = useState<KnowledgeBaseSummary[]>([]);
-  const [collapsedBaseIds, setCollapsedBaseIds] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const hasLoadedBases = useRef(false);
-  const [name, setName] = useState("");
-  const [sourceType, setSourceType] = useState<"text" | "file" | "directory">("text");
-  const [sourceValue, setSourceValue] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const load = useCallback(async () => {
-    try {
-      const server = await serverInfo();
-      const response = await fetch(`${server.baseUrl}/api/projects/${encodeURIComponent(project.id)}/knowledge-bases`, { headers: { "x-antler-token": server.token } });
-      if (!response.ok) throw new Error("无法读取知识库列表");
-      const nextBases = (await response.json()) as KnowledgeBaseSummary[];
-      setBases(nextBases);
-      if (!hasLoadedBases.current) {
-        setCollapsedBaseIds(new Set(nextBases.map((base) => base.id)));
-        hasLoadedBases.current = true;
-      }
-    } catch {
-      setError("本地后端未连接。请先启动 Antler 服务（pnpm dev:server 或 pnpm dev）。");
-    }
-  }, [project.id]);
-  useEffect(() => { void load(); }, [load]);
-  useEffect(() => {
-    if (!bases.some((base) => base.sources.some((source) => source.status === "pending" || source.status === "indexing"))) return;
-    const timer = window.setInterval(() => void load(), 1_200);
-    return () => window.clearInterval(timer);
-  }, [bases, load]);
-  const createBase = async () => {
-    if (!name.trim()) return;
-    setBusy(true); setError("");
-    try { const server = await serverInfo(); const response = await fetch(`${server.baseUrl}/api/projects/${encodeURIComponent(project.id)}/knowledge-bases`, { method: "POST", headers: { "content-type": "application/json", "x-antler-token": server.token }, body: JSON.stringify({ name: name.trim() }) }); if (!response.ok) throw new Error("无法创建知识库"); setName(""); await load(); } catch (e) { setError(e instanceof Error ? e.message : "操作失败"); } finally { setBusy(false); }
-  };
-  const addSource = async (baseId: string) => {
-    if (!sourceValue.trim()) return;
-    setBusy(true); setError("");
-    try { const server = await serverInfo(); const body = sourceType === "text" ? { type: "text", text: sourceValue } : { type: sourceType, path: sourceValue }; const response = await fetch(`${server.baseUrl}/api/knowledge-bases/${baseId}/sources`, { method: "POST", headers: { "content-type": "application/json", "x-antler-token": server.token }, body: JSON.stringify(body) }); if (!response.ok) throw new Error("无法添加资料来源"); setSourceValue(""); await load(); } catch (e) { setError(e instanceof Error ? e.message : "操作失败"); } finally { setBusy(false); }
-  };
-  const manageSource = async (sourceId: string, action: "reindex" | "delete") => {
-    setBusy(true); setError("");
-    try {
-      const server = await serverInfo();
-      const response = await fetch(
-        `${server.baseUrl}/api/knowledge-sources/${sourceId}${action === "reindex" ? "/reindex" : ""}`,
-        { method: action === "reindex" ? "POST" : "DELETE", headers: { "x-antler-token": server.token } },
-      );
-      if (!response.ok) throw new Error(action === "reindex" ? "无法重新索引资料" : "无法删除资料");
-      await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "操作失败"); } finally { setBusy(false); }
-  };
-  const toggleBase = (baseId: string) => {
-    setCollapsedBaseIds((current) => {
-      const next = new Set(current);
-      if (next.has(baseId)) next.delete(baseId);
-      else next.add(baseId);
-      return next;
-    });
-  };
-  return (
-    <div className="fixed inset-0 z-30 grid place-items-center bg-black/38 p-6" role="presentation" onMouseDown={onClose}>
-      <section
-        className="grid max-h-[calc(100svh-48px)] w-full max-w-[620px] gap-[18px] overflow-y-auto rounded-[14px] border border-[#e4e4e4] bg-white p-[26px] shadow-[0_24px_70px_rgb(0_0_0_/_20%)]"
-        aria-labelledby="knowledge-dialog-title"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-5">
-          <div>
-            <h2 className="m-0 text-xl text-[#252525]" id="knowledge-dialog-title">知识库</h2>
-            <p className="m-0 mt-1.5 text-xs leading-6 text-[#777]">为 {project.name} 配置知识检索。</p>
-          </div>
-          <button className="grid size-[30px] shrink-0 place-items-center rounded-[7px] border-0 bg-transparent text-[#777] hover:bg-[#f0f0f0] hover:text-[#222]" type="button" onClick={onClose} aria-label="Close">
-            <XIcon />
-          </button>
-        </div>
-        <div className="grid gap-4">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2.5">
-            <label className="grid gap-1.5 text-xs font-semibold text-[#4b4b4b]">
-              知识库名称
-              <input className="h-10 w-full rounded-lg border border-[#ddd] px-[11px] text-[13px] font-normal text-[#222] outline-none focus:border-primary focus:ring-4 focus:ring-primary/15" value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：项目文档" />
-            </label>
-            <button className="h-9 rounded-[7px] border border-primary bg-primary px-[13px] text-[13px] text-white disabled:cursor-not-allowed disabled:opacity-45" type="button" onClick={() => void createBase()} disabled={busy || !name.trim()}>新建</button>
-          </div>
-          {bases.map((base) => (
-            <div className="grid min-w-0 gap-4 rounded-[10px] border border-[#e5e7e6] bg-[#fafcfb] p-4" key={base.id}>
-              <div className="flex items-center gap-2">
-                <BookOpenIcon className="size-[17px] shrink-0 text-[#16876c]" aria-hidden="true" />
-                <strong className="min-w-0 flex-1 truncate">{base.name}</strong>
-                <small className="text-[11px] font-normal leading-6 text-[#888]">{base._count?.sources ?? 0} 个来源</small>
-                <button
-                  className="grid size-7 place-items-center rounded-md border-0 bg-transparent text-[#777] hover:bg-[#e8f3ef] hover:text-[#16876c]"
-                  type="button"
-                  aria-expanded={!collapsedBaseIds.has(base.id)}
-                  aria-controls={`knowledge-base-${base.id}`}
-                  aria-label={`${collapsedBaseIds.has(base.id) ? "展开" : "折叠"} ${base.name}`}
-                  onClick={() => toggleBase(base.id)}
-                >
-                  <ChevronDownIcon className="size-4" aria-hidden="true" />
-                </button>
-              </div>
-              {!collapsedBaseIds.has(base.id) && (
-                <div id={`knowledge-base-${base.id}`} className="grid gap-4">
-              {base.sources.length > 0 && (
-                <div className="grid gap-1.5" aria-label={`${base.name} 的资料来源`}>
-                  {base.sources.map((source) => (
-                    <div className="flex min-w-0 items-center gap-2 rounded-lg border border-[#edf0ef] bg-white p-2.5" key={source.id}>
-                      {source.type === "directory" ? <FolderIcon className="size-4 shrink-0 text-[#777]" aria-hidden="true" /> : <FileTextIcon className="size-4 shrink-0 text-[#777]" aria-hidden="true" />}
-                      <div className="min-w-0 flex-1">
-                        <strong className="block truncate text-[13px]">{source.displayName}</strong>
-                        <span className="text-xs text-[#16876c]" data-status={source.status}>{knowledgeStatusLabel[source.status]}</span>
-                        {source.errorCode && <small className="block text-[11px] text-[#b42318]">请检查资料路径或内容后重新索引。</small>}
-                      </div>
-                      <div className="flex gap-1">
-                        <button className="grid size-7 place-items-center rounded-md border-0 bg-transparent text-[#777] hover:bg-[#eaeaea] hover:text-[#333] disabled:cursor-not-allowed disabled:opacity-45" type="button" title="重新索引" aria-label={`重新索引 ${source.displayName}`} onClick={() => void manageSource(source.id, "reindex")} disabled={busy || source.status === "indexing"}>
-                          <RefreshCwIcon className="size-3.5" aria-hidden="true" />
-                        </button>
-                        <button className="grid size-7 place-items-center rounded-md border-0 bg-transparent text-[#777] hover:bg-[#eaeaea] hover:text-[#333] disabled:cursor-not-allowed disabled:opacity-45" type="button" title="删除资料" aria-label={`删除 ${source.displayName}`} onClick={() => void manageSource(source.id, "delete")} disabled={busy}>
-                          <Trash2Icon className="size-3.5" aria-hidden="true" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="grid gap-2.5 rounded-lg border border-dashed border-[#dfe7e4] bg-white p-3">
-                <label className="grid gap-1.5 text-xs font-semibold text-[#4b4b4b]">
-                  资料类型
-                  <select className="h-9 rounded-lg border border-[#ddd] bg-white px-2.5 text-[13px] font-normal text-[#222] outline-none focus:border-primary focus:ring-4 focus:ring-primary/15" value={sourceType} onChange={(e) => setSourceType(e.target.value as typeof sourceType)}>
-                    <option value="text">粘贴文本</option>
-                    <option value="file">文件路径</option>
-                    <option value="directory">目录路径</option>
-                  </select>
-                </label>
-                <label className="grid gap-1.5 text-xs font-semibold text-[#4b4b4b]">
-                  {sourceType === "text" ? "资料内容" : "工作区内路径"}
-                  {sourceType === "text" ? (
-                    <textarea className="w-full resize-y rounded-lg border border-[#ddd] p-2.5 text-[13px] font-normal text-[#222] outline-none focus:border-primary focus:ring-4 focus:ring-primary/15" rows={4} value={sourceValue} onChange={(e) => setSourceValue(e.target.value)} placeholder="在此粘贴资料内容，支持多行文本" />
-                  ) : (
-                    <input className="h-10 w-full rounded-lg border border-[#ddd] px-[11px] text-[13px] font-normal text-[#222] outline-none focus:border-primary focus:ring-4 focus:ring-primary/15" value={sourceValue} onChange={(e) => setSourceValue(e.target.value)} placeholder="例如：docs/architecture.md" />
-                  )}
-                </label>
-                <button className="h-9 w-fit rounded-[7px] border border-primary bg-primary px-[13px] text-[13px] text-white disabled:cursor-not-allowed disabled:opacity-45" type="button" onClick={() => void addSource(base.id)} disabled={busy || !sourceValue.trim()}>添加资料</button>
-              </div>
-                </div>
-              )}
-            </div>
-          ))}
-          {!bases.length && (
-            <div className="flex items-center gap-3 rounded-lg border border-dashed border-[#dfe7e4] p-5 text-[#888]">
-              <BookOpenIcon className="size-5" aria-hidden="true" />
-              <div><strong className="block text-sm text-[#444]">还没有知识库</strong><span className="text-xs">创建一个知识库后，再添加文本、文件或目录。</span></div>
-            </div>
-          )}
-          {error && <p className="m-0 text-xs text-[#b42318]" role="alert">{error}</p>}
-        </div>
-        <label className="flex items-start gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={enabled}
-            onChange={(event) => setEnabled(event.target.checked)}
-          />
-          <span>
-            <strong className="block">Automatically search this project</strong>
-            <small className="mt-1 block text-xs font-normal text-[#888]">
-              When sources are indexed, relevant snippets will be attached to
-              new chat runs.
-            </small>
-          </span>
-        </label>
-        <div className="flex justify-end gap-2">
-          <button className="h-9 rounded-[7px] border border-[#ddd] bg-white px-[13px] text-[13px] text-[#333] hover:bg-[#f6f6f6]" type="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            className="h-9 rounded-[7px] border border-primary bg-primary px-[13px] text-[13px] text-white"
-            type="button"
-            onClick={() => onSave(enabled ? "auto" : "disabled")}
-          >
-            Save
-          </button>
-        </div>
-      </section>
     </div>
   );
 }
@@ -652,7 +425,6 @@ function Chat({
   providerConfig,
   onModelChange,
   onOpenSettings,
-  onOpenKnowledge,
   onConversationSaved,
 }: {
   conversationId: string;
@@ -671,14 +443,12 @@ function Chat({
   providerConfig: ProviderConfig;
   onModelChange: (model: string) => void;
   onOpenSettings: (tab?: SettingsTab) => void;
-  onOpenKnowledge: () => void;
   onConversationSaved: () => void;
 }) {
   const runtime = useAntlerRuntime(
     serverInfo,
     conversationId,
     activeProject.id,
-    activeProject.knowledgePolicy ?? "disabled",
     activeProject.workingDirectory,
     () => providerConfig,
     initialMessages,
@@ -701,17 +471,7 @@ function Chat({
             <PlusIcon className="size-3.5" aria-hidden="true" />
             New Thread
           </button>
-          <button
-            className="mt-1.5 flex w-full items-center gap-2 rounded-lg border-0 bg-transparent px-3 py-1.5 text-left text-[13px] text-[#4b4b4b] hover:bg-[#f0f0f0] hover:text-[#222]"
-            type="button"
-            onClick={onOpenKnowledge}
-          >
-            <BookOpenIcon className="size-[15px]" aria-hidden="true" />
-            <span>知识库</span>
-            <small className="ml-auto text-[11px] text-[#888]">
-              {activeProject.knowledgePolicy === "auto" ? "Auto" : "Off"}
-            </small>
-          </button>
+          <KnowledgeConfigurationLink getServerInfo={serverInfo} />
           <nav
             className="mt-3.5 min-h-0 overflow-y-auto pb-2"
             aria-label="Projects and chat history"
@@ -856,7 +616,6 @@ function App() {
   const [projectDialog, setProjectDialog] = useState<
     { project?: Project } | undefined
   >();
-  const [knowledgeProject, setKnowledgeProject] = useState<Project>();
   const [providerConfig, setProviderConfig] = useState(loadProviderConfig);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("provider");
@@ -1013,7 +772,6 @@ function App() {
           providerConfig={providerConfig}
           onModelChange={selectModel}
           onOpenSettings={openSettings}
-          onOpenKnowledge={() => setKnowledgeProject(activeProject)}
           onConversationSaved={refreshLibrary}
         />
       )}
@@ -1030,20 +788,6 @@ function App() {
           project={projectDialog.project}
           onSave={saveProject}
           onClose={() => setProjectDialog(undefined)}
-        />
-      )}
-      {knowledgeProject && (
-        <KnowledgeDialog
-          project={knowledgeProject}
-          onSave={(policy) => {
-            void updateProjectKnowledgePolicy(knowledgeProject.id, policy).then(
-              () => {
-                setKnowledgeProject(undefined);
-                refreshLibrary();
-              },
-            );
-          }}
-          onClose={() => setKnowledgeProject(undefined)}
         />
       )}
     </>
