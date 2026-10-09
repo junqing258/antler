@@ -459,9 +459,12 @@ function Chat({
     <AssistantRuntimeProvider runtime={runtime}>
       <main className="flex h-[100svh] min-h-[560px] overflow-hidden bg-white">
         <aside className="flex w-[250px] shrink-0 flex-col bg-[#fbfbfb] px-3 pb-3.5 pl-[5px] pt-2 max-[800px]:w-[190px] max-[620px]:hidden">
-          <div className="flex items-center gap-1.5 px-1 text-sm font-semibold tracking-[-0.4px] text-[#191919]">
-            <img className="size-[30px] rounded-full object-contain" src="/favicon.png" alt="" />
-            <span>Antler</span>
+          <div className="relative -mt-2 flex h-[76px] shrink-0 items-center gap-3 px-[15px] text-primary after:pointer-events-none after:absolute after:right-[-12px] after:bottom-0 after:left-[-5px] after:h-px after:bg-[#f1f5f9] after:content-['']">
+            <img className="size-10 shrink-0 object-contain" src="/antler-logo.svg" width="40" height="40" alt="" />
+            <div className="flex min-w-0 flex-col">
+              <strong className="text-[15px] font-bold leading-normal whitespace-nowrap">Antler Agent</strong>
+              <span className="font-mono text-[10px] leading-normal tracking-[0.08em]">V0.1.0</span>
+            </div>
           </div>
           <button
             className="mt-[26px] flex w-full items-center gap-2 rounded-full border-0 bg-[#f2f2f2] px-3 py-1 text-left text-sm text-[#222] hover:bg-[#eaeaea]"

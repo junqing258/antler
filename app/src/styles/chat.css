@@ -71,7 +71,7 @@
 .aui-assistant-message .aui-md a {
   color: var(--primary);
   text-decoration: underline;
-  text-decoration-color: rgb(22 187 145 / 35%);
+  text-decoration-color: color-mix(in srgb, var(--primary) 35%, transparent);
   text-underline-offset: 3px;
 }
 .aui-assistant-message .aui-md a:hover {
