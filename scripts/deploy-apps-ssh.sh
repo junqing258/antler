@@ -198,6 +198,11 @@ docker buildx build --load --platform "$DEPLOY_PLATFORM" \
   --file "$ROOT_DIR/backend/Dockerfile" \
   --tag "$DEPLOY_BACKEND_IMAGE_REF" "$ROOT_DIR"
 
+log_step "检查镜像中的 Python 工具和 Tushare SDK"
+docker run --rm --network none --platform "$DEPLOY_PLATFORM" \
+  --entrypoint sh "$DEPLOY_BACKEND_IMAGE_REF" -ec \
+  'python3 --version; python3 -m pip --version; pip --version; uv --version; python3 -m pip check; python3 -c "import tushare; print(\"tushare\", tushare.__version__)"'
+
 log_step "创建远端目录并上传部署文件"
 remote_sh "mkdir -p $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR")/workspace"
 scp "$DEPLOY_COMPOSE_FILE" "$DEPLOY_SSH_TARGET:$DEPLOY_REMOTE_DIR/docker-compose.remote.yml"

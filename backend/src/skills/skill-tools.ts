@@ -6,6 +6,7 @@ import {
 } from "@earendil-works/pi-agent-core";
 import { Type } from "typebox";
 import type { LoadedSkill, SkillSnapshot } from "./types.js";
+import { assertSafeFilePath, SecretGuard } from "../agent/secret-guard.js";
 const MAX_RESOURCE_BYTES = 256 * 1024,
   MAX_OUTPUT = 32 * 1024;
 const inside = (root: string, path: string) =>
@@ -18,6 +19,7 @@ async function entry(snapshot: SkillSnapshot, id: string) {
   const skill = snapshot.skills.find((item) => item.id === id);
   if (!skill) throw new Error("skill_not_found");
   const actual = await realpath(join(skill.directory, "SKILL.md"));
+  assertSafeFilePath(actual);
   if (!inside(skill.directory, actual)) throw new Error("skill_path_escape");
   const content = await readFile(actual, "utf8");
   if (
@@ -29,7 +31,10 @@ async function entry(snapshot: SkillSnapshot, id: string) {
     );
   return skill;
 }
-export function createSkillTools(snapshot: SkillSnapshot): AgentTool[] {
+export function createSkillTools(
+  snapshot: SkillSnapshot,
+  guard = new SecretGuard(snapshot.workspaceRoot),
+): AgentTool[] {
   if (snapshot.policy.mode === "disabled") return [];
   const load: AgentTool = {
     name: "load_skill",
@@ -76,7 +81,9 @@ export function createSkillTools(snapshot: SkillSnapshot): AgentTool[] {
       )
         throw new Error("skill_path_escape");
       const candidate = resolve(item.directory, args.path);
+      assertSafeFilePath(candidate);
       const actual = await realpath(candidate);
+      assertSafeFilePath(actual);
       if (!inside(item.directory, actual)) throw new Error("skill_path_escape");
       const info = await stat(actual);
       if (info.isDirectory())
@@ -86,7 +93,7 @@ export function createSkillTools(snapshot: SkillSnapshot): AgentTool[] {
         });
       if (!info.isFile()) throw new Error("skill_path_escape");
       if (info.size > MAX_RESOURCE_BYTES) throw new Error("skill_too_large");
-      const lines = (await readFile(actual, "utf8")).split(/\r?\n/);
+      const lines = guard.redact(await readFile(actual, "utf8")).split(/\r?\n/);
       const start = Math.max(1, args.startLine ?? 1),
         end = Math.max(start, args.endLine ?? lines.length);
       const text = lines.slice(start - 1, end).join("\n");
@@ -96,5 +103,19 @@ export function createSkillTools(snapshot: SkillSnapshot): AgentTool[] {
       });
     },
   };
-  return [load, resource];
+  return [load, resource].map((tool): AgentTool => ({
+    ...tool,
+    async execute(id, args, signal, onUpdate) {
+      try {
+        await guard.refresh();
+        return guard.sanitize(await tool.execute(id, args, signal, onUpdate));
+      } catch (error) {
+        throw new Error(
+          guard.redact(
+            error instanceof Error ? error.message : "Skill execution failed.",
+          ),
+        );
+      }
+    },
+  }));
 }

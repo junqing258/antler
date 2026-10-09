@@ -17,6 +17,7 @@ import {
   type KnowledgePolicy,
 } from "../knowledge/types.js";
 import type { RunStore } from "../runs/run-store.js";
+import { SecretGuard } from "./secret-guard.js";
 
 export type ProviderRunConfig = {
   protocol: "openai-responses" | "anthropic-messages";
@@ -45,6 +46,14 @@ type ActiveRun = {
   adapter: PiAgentAdapter;
   skillSnapshot: SkillSnapshot;
   knowledgePolicy: KnowledgePolicy;
+  secretGuard: SecretGuard;
+  streams: Map<
+    string,
+    {
+      type: "assistant.delta" | "assistant.thinking.delta";
+      stream: ReturnType<SecretGuard["stream"]>;
+    }
+  >;
 };
 export class ConversationBusyError extends Error {}
 export class ConversationSkillContextMismatchError extends Error {
@@ -115,12 +124,22 @@ export class AntlerHostRuntime {
       createdAt: now,
     };
     await this.runStore?.create(run);
+    const adapter = this.createAdapter(
+      options.provider,
+      options.workingDirectory,
+    );
     const active: ActiveRun = {
       run,
       controller: new AbortController(),
       events: [],
       listeners: new Set(),
-      adapter: this.createAdapter(options.provider, options.workingDirectory),
+      adapter,
+      secretGuard:
+        adapter.secretGuard ??
+        new SecretGuard(options.workingDirectory, undefined, [
+          options.provider?.apiKey,
+        ]),
+      streams: new Map(),
       skillSnapshot: snapshot,
       knowledgePolicy: options.knowledgePolicy ?? { mode: "disabled" },
     };
@@ -192,12 +211,16 @@ export class AntlerHostRuntime {
     run.status = "running";
     run.startedAt = new Date().toISOString();
     try {
+      await active.secretGuard.refresh();
       const knowledgeContext = await this.knowledge.retrieve({
         projectId: run.projectId,
         input: run.input,
         policy: active.knowledgePolicy,
       });
-      await this.runStore?.saveKnowledgeHits(run.id, knowledgeContext.hits);
+      await this.runStore?.saveKnowledgeHits(
+        run.id,
+        active.secretGuard.sanitize(knowledgeContext.hits),
+      );
       await this.emit(active, "knowledge.retrieved", {
         mode: knowledgeContext.mode,
         hits: knowledgeContext.hits.map(
@@ -249,33 +272,38 @@ export class AntlerHostRuntime {
     }
   }
   private async mapPiEvent(active: ActiveRun, event: AgentEvent) {
+    active.secretGuard.captureEnvironment();
     const runId = active.run.id;
     if (
       event.type === "message_update" &&
-      event.assistantMessageEvent.type === "text_delta"
-    )
-      await this.emit(active, "assistant.delta", {
-        runId,
-        delta: event.assistantMessageEvent.delta,
-      });
-    else if (
-      event.type === "message_update" &&
-      event.assistantMessageEvent.type === "thinking_delta"
-    )
-      await this.emit(active, "assistant.thinking.delta", {
-        runId,
-        delta: event.assistantMessageEvent.delta,
-      });
-    else if (event.type === "turn_start")
+      (event.assistantMessageEvent.type === "text_delta" ||
+        event.assistantMessageEvent.type === "thinking_delta")
+    ) {
+      const update = event.assistantMessageEvent;
+      const type =
+        update.type === "text_delta"
+          ? "assistant.delta"
+          : "assistant.thinking.delta";
+      const key = `${type}:${update.contentIndex}`;
+      let buffered = active.streams.get(key);
+      if (!buffered) {
+        buffered = { type, stream: active.secretGuard.stream() };
+        active.streams.set(key, buffered);
+      }
+      const delta = buffered.stream.push(update.delta);
+      if (delta) await this.emit(active, type, { runId, delta });
+    } else if (event.type === "message_end" || event.type === "turn_end") {
+      await this.flushStreams(active);
+      if (event.type === "turn_end")
+        await this.emit(active, "step.completed", {
+          runId,
+          stepId: `turn-${active.events.length}`,
+          kind: "model",
+        });
+    } else if (event.type === "turn_start")
       await this.emit(active, "step.started", {
         runId,
         stepId: `turn-${active.events.length + 1}`,
-        kind: "model",
-      });
-    else if (event.type === "turn_end")
-      await this.emit(active, "step.completed", {
-        runId,
-        stepId: `turn-${active.events.length}`,
         kind: "model",
       });
     else if (event.type === "tool_execution_start")
@@ -307,6 +335,14 @@ export class AntlerHostRuntime {
       });
     }
   }
+  private async flushStreams(active: ActiveRun) {
+    const streams = [...active.streams.values()];
+    active.streams.clear();
+    for (const { type, stream } of streams) {
+      const delta = stream.finish();
+      if (delta) await this.emit(active, type, { runId: active.run.id, delta });
+    }
+  }
   private async finish(
     active: ActiveRun,
     status: Extract<RunStatus, "succeeded" | "failed" | "cancelled">,
@@ -314,6 +350,7 @@ export class AntlerHostRuntime {
     error?: string,
   ) {
     if (isTerminalRunStatus(active.run.status)) return;
+    await this.flushStreams(active);
     if (active.timeout) clearTimeout(active.timeout);
     active.run.status = status;
     active.run.errorCode = errorCode;
@@ -342,6 +379,16 @@ export class AntlerHostRuntime {
     payload: Record<string, unknown>,
     isStateTransition = false,
   ) {
+    active.secretGuard.captureEnvironment();
+    const { runId, stepId, kind, tool, status, ...content } = payload;
+    const safePayload = {
+      ...active.secretGuard.sanitize(content),
+      ...(runId !== undefined ? { runId } : {}),
+      ...(stepId !== undefined ? { stepId } : {}),
+      ...(kind !== undefined ? { kind } : {}),
+      ...(tool !== undefined ? { tool } : {}),
+      ...(status !== undefined ? { status } : {}),
+    };
     if (
       active.events.length >= this.config.maxEvents &&
       !isTerminalRunStatus(active.run.status)
@@ -351,7 +398,7 @@ export class AntlerHostRuntime {
       id: active.events.length + 1,
       runId: active.run.id,
       type,
-      payload,
+      payload: safePayload,
       createdAt: new Date().toISOString(),
     };
     active.events.push(event);

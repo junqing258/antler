@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,7 +9,8 @@ import { createWorkspaceTools } from "../agent/workspace-tools.js";
 import { composeSkillPrompt } from "./skill-prompt.js";
 
 const temporaryDirectories: string[] = [];
-const content = "---\nname: example\ndescription: Example skill.\n---\n\n# Instructions\n";
+const content =
+  "---\nname: example\ndescription: Example skill.\n---\n\n# Instructions\n";
 
 afterEach(async () => {
   await Promise.all(
@@ -39,11 +40,24 @@ async function setupSkill() {
 }
 
 describe("SkillRegistry fingerprints", () => {
+  it("denies environment resources and their symlink aliases", async () => {
+    const { file, tools } = await setupSkill();
+    const directory = join(file, "..");
+    await writeFile(join(directory, ".env"), "SECRET=skill-private-value\n");
+    await symlink(join(directory, ".env"), join(directory, "alias.md"));
+    for (const path of [".env", "alias.md"]) {
+      await expect(
+        tools[1].execute("resource", { skillId: "example", path }),
+      ).rejects.toThrow("secret_access_denied");
+    }
+  });
   it("loads an unchanged skill with frontmatter and reads its resources", async () => {
     const { tools } = await setupSkill();
     const invocation = await tools[0].execute("load", { skillId: "example" });
     expect(invocation.content).toEqual([
-      expect.objectContaining({ text: expect.stringContaining("# Instructions") }),
+      expect.objectContaining({
+        text: expect.stringContaining("# Instructions"),
+      }),
     ]);
     const resource = await tools[1].execute("resource", {
       skillId: "example",
@@ -89,13 +103,21 @@ describe("backend bundled skills", () => {
         'id="antler-rag"',
       );
       const tools = createSkillTools(snapshot);
-      const invocation = await tools[0].execute("load", { skillId: "antler-rag" });
+      const invocation = await tools[0].execute("load", {
+        skillId: "antler-rag",
+      });
       expect(invocation.content).toEqual([
-        expect.objectContaining({ text: expect.stringContaining("ANTLER_RAG_URL") }),
+        expect.objectContaining({
+          text: expect.stringContaining("ANTLER_RAG_URL"),
+        }),
       ]);
     }
 
-    const snapshot = createSkillSnapshot(root, { mode: "auto" }, await registry.list(root));
+    const snapshot = createSkillSnapshot(
+      root,
+      { mode: "auto" },
+      await registry.list(root),
+    );
     const resource = await createSkillTools(snapshot)[1].execute("resource", {
       skillId: "antler-rag",
       path: "scripts/rag.py",

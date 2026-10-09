@@ -34,14 +34,14 @@ describe("effective RAG configuration", () => {
       return result.content;
     };
     expect(await run()).toEqual([
-      { type: "text", text: "https://default.example.com\ndefault-key" },
+      { type: "text", text: "https://default.example.com\n[REDACTED]" },
     ]);
     config.update({
       ragUrl: "https://custom.example.com/",
       ragKey: "custom-key",
     });
     expect(await run()).toEqual([
-      { type: "text", text: "https://custom.example.com\ncustom-key" },
+      { type: "text", text: "https://custom.example.com\n[REDACTED]" },
     ]);
     config.update({ ragUrl: "http://localhost:8001" });
     expect(new RagConfigStore(defaults, root).environment()).toEqual({
@@ -62,7 +62,7 @@ describe("effective RAG configuration", () => {
     expect(await run()).toEqual([{ type: "text", text: "\n" }]);
     config.reset();
     expect(await run()).toEqual([
-      { type: "text", text: "https://default.example.com\ndefault-key" },
+      { type: "text", text: "https://default.example.com\n[REDACTED]" },
     ]);
     expect(process.env.ANTLER_RAG_URL).toBe("https://inherited.example.com");
     expect(process.env.ANTLER_RAG_KEY).toBe("inherited-key");

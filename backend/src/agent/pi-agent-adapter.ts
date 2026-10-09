@@ -8,6 +8,7 @@ import { createWorkspaceTools } from "./workspace-tools.js";
 import type { SkillSnapshot } from "../skills/types.js";
 import { createSkillTools } from "../skills/skill-tools.js";
 import { composeSkillPrompt } from "../skills/skill-prompt.js";
+import { SecretGuard } from "./secret-guard.js";
 
 export type PiAgentAdapterConfig = {
   provider: "anthropic" | "openai";
@@ -31,22 +32,52 @@ export class PiAdapterError extends Error {
   }
 }
 export class PiAgentAdapter {
+  readonly secretGuard: SecretGuard;
   private readonly agents = new Map<
     string,
     { agent: Agent; fingerprint: string }
   >();
-  constructor(private readonly config: PiAgentAdapterConfig) {}
+  constructor(private readonly config: PiAgentAdapterConfig) {
+    this.secretGuard = new SecretGuard(
+      config.workspaceRoot,
+      config.getToolEnvironment,
+      [config.openAiApiKey, config.anthropicAuthToken, config.tavilyApiKey],
+    );
+  }
   private tools(snapshot: SkillSnapshot) {
     return [
       ...createWorkspaceTools(
         this.config.workspaceRoot,
         this.config.getToolEnvironment,
+        this.secretGuard,
       ),
       ...(this.config.tavilyApiKey
-        ? [createTavilySearchTool(this.config.tavilyApiKey)]
+        ? [
+            this.protectSearchTool(
+              createTavilySearchTool(this.config.tavilyApiKey),
+            ),
+          ]
         : []),
-      ...createSkillTools(snapshot),
+      ...createSkillTools(snapshot, this.secretGuard),
     ];
+  }
+  private protectSearchTool(
+    tool: ReturnType<typeof createTavilySearchTool>,
+  ): ReturnType<typeof createTavilySearchTool> {
+    return {
+      ...tool,
+      execute: async (...args) => {
+        try {
+          return this.secretGuard.sanitize(await tool.execute(...args));
+        } catch (error) {
+          throw new Error(
+            this.secretGuard.redact(
+              error instanceof Error ? error.message : "Search failed.",
+            ),
+          );
+        }
+      },
+    };
   }
   async run(
     input: string,
@@ -55,6 +86,7 @@ export class PiAgentAdapter {
     signal: AbortSignal,
     onEvent: (event: AgentEvent) => void | Promise<void>,
   ) {
+    await this.secretGuard.refresh();
     if (this.config.provider === "anthropic") {
       return this.runAnthropic(
         input,
@@ -91,9 +123,8 @@ export class PiAgentAdapter {
       const agent = new Agent({
         initialState: {
           model: model as Model<any>,
-          systemPrompt: composeSkillPrompt(
-            this.config.systemPrompt,
-            skillSnapshot,
+          systemPrompt: this.secretGuard.redact(
+            composeSkillPrompt(this.config.systemPrompt, skillSnapshot),
           ),
           thinkingLevel: "low",
           messages: [],
@@ -119,7 +150,7 @@ export class PiAgentAdapter {
     const abort = () => agent.abort();
     signal.addEventListener("abort", abort, { once: true });
     try {
-      await agent.prompt(input);
+      await agent.prompt(this.secretGuard.redact(input));
       if (agent.state.errorMessage) throw new Error(agent.state.errorMessage);
       return agent.state.messages as AgentMessage[];
     } finally {
@@ -173,9 +204,8 @@ export class PiAgentAdapter {
       const agent = new Agent({
         initialState: {
           model: model as Model<any>,
-          systemPrompt: composeSkillPrompt(
-            this.config.systemPrompt,
-            skillSnapshot,
+          systemPrompt: this.secretGuard.redact(
+            composeSkillPrompt(this.config.systemPrompt, skillSnapshot),
           ),
           thinkingLevel: "low",
           messages: [],
@@ -204,7 +234,7 @@ export class PiAgentAdapter {
     const abort = () => agent.abort();
     signal.addEventListener("abort", abort, { once: true });
     try {
-      await agent.prompt(input);
+      await agent.prompt(this.secretGuard.redact(input));
       if (agent.state.errorMessage) throw new Error(agent.state.errorMessage);
       return agent.state.messages as AgentMessage[];
     } finally {

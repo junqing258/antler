@@ -1,0 +1,3 @@
+# Shared Python tools and Tushare SDK available to container shell commands.
+uv==0.12.24
+tushare==1.4.29

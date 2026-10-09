@@ -1,12 +1,14 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
+import { registerProtectedEnvFile } from "./protected-env.js";
 
 const projectRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const envFile = resolve(projectRoot, ".env");
 
 if (existsSync(envFile)) {
   process.loadEnvFile(envFile);
+  registerProtectedEnvFile(envFile);
 }
 
 export type AppConfig = {

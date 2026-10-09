@@ -11,6 +11,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "typebox";
+import { assertSafeFilePath, SecretGuard } from "./secret-guard.js";
 
 const execFileAsync = promisify(execFile);
 const MAX_FILE_BYTES = 256 * 1024;
@@ -34,6 +35,7 @@ async function workspacePath(
 ) {
   if (!path.trim()) throw new Error("Path must not be empty.");
   const candidate = resolve(workspaceRoot, path);
+  assertSafeFilePath(candidate);
   if (
     isAbsolute(path) ||
     relative(workspaceRoot, candidate).startsWith("..") ||
@@ -46,6 +48,7 @@ async function workspacePath(
     ? await nearestExistingPath(candidate)
     : candidate;
   const actual = await realpath(existing);
+  assertSafeFilePath(actual);
   const root = await realpath(workspaceRoot);
   if (actual !== root && !actual.startsWith(`${root}/`)) {
     throw new Error("Path resolves outside the workspace.");
@@ -135,6 +138,7 @@ type BashInput = { command: string; timeoutMs?: number };
 export function createWorkspaceTools(
   workspaceRoot: string,
   getEnvironment?: () => NodeJS.ProcessEnv,
+  guard = new SecretGuard(workspaceRoot, getEnvironment),
 ) {
   const root = resolve(workspaceRoot);
   const tools = [
@@ -162,7 +166,7 @@ export function createWorkspaceTools(
           throw new Error(
             `File exceeds the ${MAX_FILE_BYTES} byte read limit.`,
           );
-        const lines = (await readFile(target, "utf8")).split("\n");
+        const lines = guard.redact(await readFile(target, "utf8")).split("\n");
         const first = (startLine ?? 1) - 1;
         const last = endLine ?? lines.length;
         if (last < first + 1)
@@ -221,13 +225,25 @@ export function createWorkspaceTools(
         { command, timeoutMs = 30_000 }: BashInput,
         signal?: AbortSignal,
       ) {
-        const result = await execFileAsync("bash", ["-lc", command], {
-          cwd: root,
-          env: { ...process.env, ...getEnvironment?.() },
-          timeout: timeoutMs,
-          maxBuffer: MAX_COMMAND_OUTPUT,
-          signal,
-        }).catch((error: unknown) => {
+        if (
+          /\.env(?:\b|[.-])/i.test(command) ||
+          /rag-config\.json/i.test(command)
+        )
+          throw new Error(
+            "secret_access_denied: Commands cannot access environment or credential files.",
+          );
+        const result = await execFileAsync(
+          "bash",
+          ["--noprofile", "--norc", "-c", command],
+          {
+            cwd: root,
+            env: guard.toolEnvironment(),
+            timeout: timeoutMs,
+            maxBuffer: MAX_COMMAND_OUTPUT,
+            signal,
+          },
+        ).catch(async (error: unknown) => {
+          await guard.refresh();
           const failure = error as {
             stdout?: string;
             stderr?: string;
@@ -235,17 +251,20 @@ export function createWorkspaceTools(
           };
           throw new Error(
             truncate(
-              [failure.stdout, failure.stderr, failure.message]
-                .filter(Boolean)
-                .join("\n"),
+              guard.redact(
+                [failure.stdout, failure.stderr, failure.message]
+                  .filter(Boolean)
+                  .join("\n"),
+              ),
             ),
           );
         });
+        await guard.refresh();
         const output = [result.stdout, result.stderr]
           .filter(Boolean)
           .join("\n");
         return textResult(
-          truncate(output) || "Command completed with no output.",
+          truncate(guard.redact(output)) || "Command completed with no output.",
         );
       },
     },
@@ -253,5 +272,19 @@ export function createWorkspaceTools(
   // Pi validates each tool's TypeBox schema before calling execute. The tools
   // intentionally have different parameter schemas, so their heterogeneous
   // tuple is widened here for the Agent's tool registry.
-  return tools as unknown as AgentTool<any>[];
+  return (tools as unknown as AgentTool<any>[]).map((tool): AgentTool<any> => ({
+    ...tool,
+    async execute(id, args, signal, onUpdate) {
+      try {
+        await guard.refresh();
+        return guard.sanitize(await tool.execute(id, args, signal, onUpdate));
+      } catch (error) {
+        throw new Error(
+          guard.redact(
+            error instanceof Error ? error.message : "Tool execution failed.",
+          ),
+        );
+      }
+    },
+  }));
 }
