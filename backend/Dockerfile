@@ -18,7 +18,7 @@ RUN pnpm --filter @antler/app build \
 FROM node:22-bookworm-slim AS runtime
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates git ripgrep \
+  && apt-get install -y --no-install-recommends ca-certificates git ripgrep python3 \
   && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
@@ -32,6 +32,7 @@ COPY --from=build /app/backend/prisma ./prisma
 COPY --from=build /app/backend/prisma.config.ts ./prisma.config.ts
 COPY --from=build /app/backend/src/config ./src/config
 COPY --from=build /app/backend/dist ./dist
+COPY --from=build /app/backend/skills ./skills
 COPY --from=build /app/app/dist /app/public
 
 EXPOSE 3210

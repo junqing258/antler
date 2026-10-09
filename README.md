@@ -29,6 +29,21 @@ pnpm --filter @antler/server db:migrate -- --name <migration-name>
 pnpm --filter @antler/server db:generate
 ```
 
+## backend 共享技能
+
+`backend/skills/` 中的技能随服务端分发，供所有 Web Agent 工作空间使用，目前内置 `antler-rag`。服务端从自身模块的位置定位该目录，本地开发、编译后启动和 Docker 运行使用同一套发现逻辑，无需把技能安装到开发机或各个工作空间的 `.agents` 目录。
+
+技能优先级为工作空间的 `.agents/skills/`、用户级 `~/.agents/skills/`（可通过 `ANTLER_AGENTS_DIR` 调整）、backend 内置技能。同名技能只保留优先级最高的版本。`GET /api/skills` 返回内置技能的 `scope: "bundled"`；Web 使用的 `POST /api/runs` 默认采用 `skillPolicy: { "mode": "auto" }`，Agent 根据名称和描述选择技能，再调用 `load_skill` 加载完整说明。请求仍可显式指定 `disabled` 或 `selected`。
+
+使用 `antler-rag` 检索前，在 backend 的环境中配置：
+
+```dotenv
+ANTLER_RAG_URL=https://rag.example.com
+ANTLER_RAG_KEY=your-rag-api-key
+```
+
+本地可填写仓库根目录的 `.env`；Docker 部署可填写 `.env.deploy`，部署脚本会合并并传入容器。密钥不会写入技能或镜像。Docker 镜像包含技能文件和 Python 3；本地调用技能需安装 Python 3.9+。Agent 通过 `read_skill_resource` 获取随技能打包的客户端脚本，并在当前工作空间临时执行，无需知道服务器的安装路径。
+
 ## 部署 Web 版
 
 Docker 镜像会编译前端，并由 Fastify 在同一个端口提供网页、API 和 SSE；远端数据保存在部署目录的 `workspace/`。本地需要 Docker（含 buildx）、SSH 和 SCP，远端需要 Docker Compose。
