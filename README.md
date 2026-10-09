@@ -61,6 +61,8 @@ scripts/deploy-apps-ssh.sh
 
 脚本合并 `.env` 与 `.env.deploy`，后者的同名配置优先；它会探测远端 amd64/arm64 架构、构建并传输镜像，然后启动容器并等待健康检查。示例配置默认部署到 `root@47.100.210.56:/opt/antler`，访问地址为 <http://47.100.210.56:3210/>。目标和端口可在环境文件中修改；运行 `scripts/deploy-apps-ssh.sh --help` 可查看其他选项。
 
+Docker 构建默认使用 npmmirror 下载 pnpm 和 npm 依赖，使用中科大 Debian 镜像安装系统依赖。apt 下载最多重试 3 次，连接及数据等待超时为 30 秒。手动构建时可通过 `--build-arg DEBIAN_MIRROR=http://其他镜像主机` 更换 Debian 镜像；该主机需同时提供 `/debian` 和 `/debian-security`。
+
 镜像构建时预下载与运行环境匹配的 Prisma 迁移引擎，启动时无需临时下载。健康检查提供 120 秒启动宽限期，部署脚本最多等待 300 秒；启动失败会输出容器状态、健康检查结果和最近日志。
 
 脚本还会把仓库中 git 跟踪的 `workspace/` 内容上传到远端 `workspace/`，补齐远端缺失的种子项目（例如 `workspace/Stock-Analysis`）。解包使用 `--skip-old-files`，远端已存在的文件不会被覆盖，因此远端生成的报告和运行数据会保留；种子目录中后续的技能改动需先删除远端同名文件再重新部署。

@@ -19,7 +19,16 @@ RUN pnpm --filter @antler/app build \
 
 FROM node:22-bookworm-slim AS runtime
 
-RUN apt-get update \
+ARG DEBIAN_MIRROR=http://mirrors.ustc.edu.cn
+# The slim image has no CA certificates yet; keep signed apt downloads on HTTP.
+RUN sed -i "s|http://deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources \
+  && printf '%s\n' \
+    'Acquire::Retries "3";' \
+    'Acquire::http::Timeout "30";' \
+    'Acquire::https::Timeout "30";' \
+    'Acquire::http::Pipeline-Depth "0";' \
+    > /etc/apt/apt.conf.d/80-antler-network \
+  && apt-get update --error-on=any \
   && apt-get install -y --no-install-recommends ca-certificates git ripgrep python3 \
   && rm -rf /var/lib/apt/lists/*
 
