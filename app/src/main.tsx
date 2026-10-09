@@ -427,21 +427,20 @@ function SettingsDialog({
     ];
   return (
     <div
-      className="fixed inset-0 z-20 grid place-items-center bg-black/38 p-8"
+      className="fixed inset-0 z-20 grid place-items-center bg-black/38 p-4 sm:p-8"
       role="presentation"
       onMouseDown={onClose}
     >
       <section
-        className="grid max-h-[calc(100svh-64px)] w-full max-w-[820px] grid-cols-[190px_minmax(0,1fr)] overflow-hidden rounded-[14px] border border-[#e4e4e4] bg-white shadow-[0_24px_70px_rgb(0_0_0_/_20%)]"
+        className="grid max-h-[calc(100svh-32px)] w-full max-w-[820px] grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-[14px] border border-[#e4e4e4] bg-white shadow-[0_24px_70px_rgb(0_0_0_/_20%)] sm:max-h-[calc(100svh-64px)] sm:grid-cols-[190px_minmax(0,1fr)] sm:grid-rows-1"
         aria-labelledby="settings-title"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <aside className="relative flex flex-col border-r border-[#eee] bg-[#fafafa] p-5" aria-label="设置菜单">
+        <aside className="relative flex flex-col border-b border-[#eee] bg-[#fafafa] p-4 sm:border-b-0 sm:border-r sm:p-5" aria-label="设置菜单">
           <h2 className="m-0 text-lg" id="settings-title">设置</h2>
           <div
-            className="mt-5 grid gap-1"
+            className="mt-4 grid grid-cols-3 gap-1 sm:mt-5 sm:grid-cols-1"
             role="tablist"
-            aria-orientation="vertical"
           >
             {tabs.map(({ id, label, icon: Icon }) => (
               <button
@@ -449,10 +448,10 @@ function SettingsDialog({
                 type="button"
                 role="tab"
                 aria-selected={activeTab === id}
-                className={`flex items-center gap-2 rounded-lg border-0 px-3 py-2 text-left text-[13px] ${activeTab === id ? "bg-[#e8f3ef] font-semibold text-[#087d61]" : "bg-transparent text-[#555] hover:bg-[#f0f0f0]"}`}
+                className={`flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border-0 px-2 py-2 text-left text-xs! sm:justify-start sm:gap-2 sm:px-3 sm:text-[13px]! ${activeTab === id ? "bg-[#e8f3ef] font-semibold! text-[#087d61]" : "bg-transparent text-[#555] hover:bg-[#f0f0f0]"}`}
                 onClick={() => setActiveTab(id)}
               >
-                <Icon className="size-4" aria-hidden="true" />
+                <Icon className="size-4 shrink-0" aria-hidden="true" />
                 {label}
               </button>
             ))}
@@ -466,7 +465,7 @@ function SettingsDialog({
             <XIcon />
           </button>
         </aside>
-        <div className="min-w-0 overflow-y-auto p-7">
+        <div className="min-h-0 min-w-0 overflow-y-auto p-5 sm:p-7">
           {activeTab === "provider" && (
             <form
               className="grid max-w-[560px] gap-5"
@@ -604,24 +603,28 @@ function SettingsDialog({
               <div className="border-b border-[#eee] pb-4">
                 <div>
                   <h3 className="m-0 text-lg" id="about-title">关于</h3>
-                  <p className="m-0 mt-1 text-xs text-[#777]">Antler 桌面助手</p>
+                  <p className="m-0 mt-1 text-xs text-[#777]">应用信息与版本</p>
                 </div>
               </div>
-              <div className="grid size-20 place-items-center rounded-2xl bg-[#f5f5f5]">
-                <img className="size-14 rounded-full" src="/favicon.png" alt="Antler" />
+              <div className="flex items-center gap-4 rounded-xl border border-[#e7eeeb] bg-[#f6faf8] p-5">
+                <img className="size-16 shrink-0 rounded-2xl" src="/favicon.png" alt="Antler 应用图标" />
+                <div className="min-w-0">
+                  <h4 className="m-0 text-2xl font-semibold tracking-tight text-[#222]">Antler</h4>
+                  <p className="m-0 mt-1 text-[13px] text-[#68756f]">桌面助手</p>
+                </div>
               </div>
-              <dl>
-                <div>
-                  <dt>应用名称</dt>
-                  <dd>Antler</dd>
+              <dl className="m-0 divide-y divide-[#eee] overflow-hidden rounded-xl border border-[#e8e8e8] px-4 sm:px-5">
+                <div className="flex items-center justify-between gap-4 py-4">
+                  <dt className="shrink-0 text-xs text-[#777]">应用名称</dt>
+                  <dd className="m-0 text-right text-[13px] font-medium text-[#333]">Antler</dd>
                 </div>
-                <div>
-                  <dt>当前版本</dt>
-                  <dd>v0.1.0</dd>
+                <div className="flex items-center justify-between gap-4 py-4">
+                  <dt className="shrink-0 text-xs text-[#777]">当前版本</dt>
+                  <dd className="m-0 rounded-md bg-[#f3f4f4] px-2 py-0.5 text-xs font-medium tabular-nums text-[#555]">v0.1.0</dd>
                 </div>
-                <div>
-                  <dt>运行环境</dt>
-                  <dd>本地桌面应用</dd>
+                <div className="flex items-center justify-between gap-4 py-4">
+                  <dt className="shrink-0 text-xs text-[#777]">运行环境</dt>
+                  <dd className="m-0 text-right text-[13px] font-medium text-[#333]">Web 应用</dd>
                 </div>
               </dl>
             </section>

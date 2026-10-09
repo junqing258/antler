@@ -14,9 +14,8 @@
 | `html-report-generator` | 将分析结果生成移动端适配的 HTML 报告 |
 | `ocr` | 从图片中提取文字 |
 | `tencent-cos` | 上传、下载和管理腾讯云 COS 对象 |
-| `telegram-bot` | 使用 Telegram Bot 发送通知 |
 
-报告输出到 `reports/`。需要发布报告或发送通知时，在任务中明确指定。
+报告输出到 `reports/`。需要发布报告时，在任务中明确指定。
 
 ## Python 依赖
 
@@ -28,7 +27,7 @@ uv sync --project .agents/skills/ocr
 uv sync --project .agents/skills/tencent-cos
 ```
 
-股票分析的增强数据源可通过 `uv sync --project .agents/skills/stock-analysis --extra enhanced` 安装。HTML 报告无需 Python 依赖，Telegram 脚本仅使用 Python 标准库。原目录的虚拟环境与缓存未复制，`uv` 会在本目录下重新创建虚拟环境。
+股票分析的增强数据源可通过 `uv sync --project .agents/skills/stock-analysis --extra enhanced` 安装。HTML 报告无需 Python 依赖。原目录的虚拟环境与缓存未复制，`uv` 会在本目录下重新创建虚拟环境。
 
 例如获取行情和新闻：
 
@@ -40,7 +39,7 @@ uv run --project .agents/skills/stock-analysis \
 
 ## 本地配置
 
-复制 `.env.example` 为本工作目录的 `.env`，按需填写数据源、COS 和 Telegram 配置。脚本优先使用进程环境变量，并读取本工作目录的 `.env`。原项目的私密 `.env` 未复制。
+复制 `.env.example` 为本工作目录的 `.env`，按需填写数据源和 COS 配置。脚本优先使用进程环境变量，并读取本工作目录的 `.env`。原项目的私密 `.env` 未复制。
 
 Antler 的 `web_search` 工具还需要在服务端环境中配置 `TAVILY_API_KEY`；本目录的 `.env` 供 Python 脚本使用。工具不可用且数据脚本未获取新闻时，分析会注明消息面未获取。
 
