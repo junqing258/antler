@@ -1,0 +1,22 @@
+[project]
+name = "stock-analysis-skill"
+version = "1.2.0"
+requires-python = ">=3.10"
+dependencies = [
+    "akshare",
+    "yfinance",
+    "efinance",
+    "python-dotenv",
+    "chinese_calendar",
+    "cos-python-sdk-v5>=1.9.44",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+enhanced = [
+    "tushare",
+    "tavily-python",
+    "google-search-results",
+    "cos-python-sdk-v5",
+    "PySocks",
+]

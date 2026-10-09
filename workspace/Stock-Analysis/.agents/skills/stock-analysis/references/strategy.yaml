@@ -1,0 +1,133 @@
+# ============================================================
+# Strategy DSL — single editable source of truth for scoring & signals
+# ============================================================
+# This file is the authoritative configuration for calc_trend_score():
+#   - composite weights (max points per dimension)
+#   - per-dimension score tables
+#   - signal thresholds (score cutoffs + required MA alignment)
+#   - hard rules (vetoes that downgrade buy signals)
+#
+# At runtime, stock_data_fetcher.py loads THIS file. If PyYAML is missing
+# or this file is unreadable, it falls back to an embedded copy of these
+# same values (see _DEFAULT_STRATEGY in stock_data_fetcher.py) and logs a
+# diagnostic to stderr — the main flow never crashes.
+#
+# To tune the strategy, edit THIS file. Keep _DEFAULT_STRATEGY in sync only
+# so degraded mode (no PyYAML) stays consistent; at runtime YAML wins.
+#
+# IMPORTANT: hard_rules below are product-level guardrails. Weakening them
+# (e.g. raising rsi_overbought / bias threshold) must be a conscious decision
+# synced with analysis-prompt-template.md and README.md.
+
+name: default
+
+# Max points per dimension (sum = 100). Used for documentation/validation;
+# actual points come from the score tables below.
+weights:
+  trend: 30
+  bias: 20
+  volume: 15
+  macd: 15
+  rsi: 10
+  support: 10
+
+# 1. Trend / MA alignment (30 pts) — keyed by ma.alignment_detail
+trend_scores:
+  strong_bullish: 30
+  bullish: 26
+  weak_bullish: 18
+  consolidation: 12
+  weak_bearish: 8
+  bearish: 4
+  strong_bearish: 0
+  insufficient_data: 12
+trend_default: 12
+
+# 2. Bias / 乖离率 (20 pts) — prefer slightly below MA5 (ideal dip).
+#    Bands are evaluated top-to-bottom; first match wins. min is inclusive,
+#    max is exclusive. null = unbounded on that side.
+bias_null_score: 10        # used when bias_ma5 is None
+bias_default_score: 10     # used if no band matches (should not happen)
+bias_bands:
+  - {min: -3, max: 0, score: 20}    # slightly below MA5 = ideal dip
+  - {min: 0, max: 2, score: 18}     # close to MA5
+  - {min: 2, max: 5, score: 14}     # slightly above
+  - {min: 5, max: null, score: 4}   # too far above, don't chase
+  - {min: -5, max: -3, score: 14}   # pulling back more
+  - {min: null, max: -5, score: 6}  # far below
+
+# 3. Volume (15 pts) — keyed by volume.trend
+volume_scores:
+  shrink_pullback: 15
+  heavy_volume_up: 12
+  normal: 10
+  shrink_up: 6
+  heavy_volume_down: 0
+  insufficient_data: 8
+  unknown: 8
+volume_default: 8
+
+# 4. MACD (15 pts) — keyed by macd.signal
+macd_scores:
+  golden_cross_above_zero: 15
+  crossing_above_zero: 13
+  golden_cross: 12
+  bullish: 10
+  neutral: 7
+  bearish: 3
+  death_cross: 0
+  crossing_below_zero: 1
+  insufficient_data: 7
+macd_default: 7
+
+# 5. RSI (10 pts) — keyed by rsi.zone
+rsi_scores:
+  oversold: 10
+  strong: 8
+  neutral: 5
+  weak: 3
+  overbought: 0
+  unknown: 5
+rsi_default: 5
+
+# 6. Support (10 pts) — additive
+support_ma5_points: 5
+support_ma10_points: 5
+
+# Signal generation — evaluated top-to-bottom, first satisfied rule wins.
+#   min_score: total must be >= this (omit = no score constraint)
+#   require_alignment: ma.alignment must be in this list (omit = no constraint)
+# The final rule (no constraints) is the catch-all default.
+signal_rules:
+  - {signal: strong_buy, min_score: 75, require_alignment: [bullish, strong_bullish]}
+  - {signal: buy, min_score: 60, require_alignment: [bullish, strong_bullish, weak_bullish]}
+  - {signal: hold, min_score: 45}
+  - {signal: wait, min_score: 30}
+  - {signal: strong_sell, require_alignment: [bearish, strong_bearish]}
+  - {signal: sell}
+
+# Chinese labels for signals
+signal_cn:
+  strong_buy: 强烈买入
+  buy: 买入
+  hold: 持有
+  wait: 观望
+  sell: 卖出
+  strong_sell: 强烈卖出
+
+# Hard rules — product guardrails. When a signal is in applies_to_signals and
+# any rule fires, the signal is downgraded to downgrade_to and the rule message
+# is recorded in hard_rules_triggered. Each rule's `type` maps to a fixed
+# handler in Python (no eval); adding a NEW type needs a small Python handler.
+hard_rules:
+  applies_to_signals: [strong_buy, buy]
+  downgrade_to: hold
+  rules:
+    - id: rsi_overbought
+      type: rsi_zone_equals       # fires when rsi.zone == value
+      value: overbought
+      message: "RSI > 80 (overbought)"
+    - id: bias_overextended
+      type: bias_ma5_above        # fires when bias_ma5 > threshold
+      threshold: 5
+      message_template: "MA5 乖离 {value:+.2f}% > 5% (overextended)"

@@ -1,0 +1,314 @@
+# 📊 Stock Analysis Skill for Antler
+
+> 一个 Antler 技能插件，输入代码或名称即可自动生成专业级决策看板。支持 A股个股、港股、美股、A股指数、美股指数、公募基金。
+
+![Python](https://img.shields.io/badge/Python-3.9+-blue?logo=python&logoColor=white)
+![Antler](https://img.shields.io/badge/Claude_Code-Skill-blueviolet?logo=anthropic&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
+![Markets](https://img.shields.io/badge/Markets-A股_|_港股_|_美股_|_指数_|_基金-orange)
+
+## 核心特性
+
+| 特性              | 说明                                            |
+| ----------------- | ----------------------------------------------- |
+| **覆盖标的**      | A股个股（600519）、港股（HK00700）、美股（TSLA）、A股指数（sh000001/创业板指）、美股指数（^IXIC/纳指）、公募基金（fund:018358/华富数字经济混合A）|
+| **智能数据源**    | 分级降级策略，支持 Tushare/efinance/akshare/yfinance |
+| **节假日判断**    | 自动识别中国法定节假日和调休工作日，支持交易日查询 |
+| **完整技术分析**  | MA / MACD / RSI / 量能 / 乖离率 / 支撑位        |
+| **100分评分系统** | 6维度综合评分，自动生成买卖信号                 |
+| **AI 深度分析**   | Claude 自身作为分析引擎，综合技术面+消息面      |
+| **职责拆分**      | HTML 报告生成已拆分为独立 Skill，分析 Skill 仅负责产出 Markdown 看板 |
+| **零配置可用**    | 开箱即用免费数据源，配置 API Key 后数据更精准   |
+| **严进策略**      | 不追高（乖离率>5%不买）、偏好缩量回调、精确止损 |
+
+## 快速开始
+
+### 安装
+
+将本项目克隆到 Antler 的 skills 目录（注意目录名必须是 `stock-analysis`，与 SKILL.md 中的 `name` 字段一致）：
+
+```bash
+git clone https://github.com/liusai0820/Stock-Analysis-Skill.git ~/.agents/skills/stock-analysis
+```
+
+若是从 GitHub 下载的 zip 解压（默认目录名为 `Stock-Analysis-Skill-main`），请手动改名：
+
+```bash
+mv Stock-Analysis-Skill-main ~/.agents/skills/stock-analysis
+```
+
+首次使用前请先安装基础 Python 依赖。脚本本身不会自动安装依赖；在 Antler 中触发本 Skill 时，Agent 会按 `SKILL.md` 指引在遇到 ImportError 后尝试补装并重试。
+
+```bash
+# 基础依赖（必装，覆盖 A股个股/港股/美股/指数/基金）
+uv pip install akshare yfinance efinance
+
+# 节假日判断（强烈推荐，用于识别中国法定节假日和调休）
+uv pip install chinese_calendar
+
+# 可选增强（仅在你打算用对应的 API Key 时再装）
+uv pip install tushare              # 配合 TUSHARE_TOKEN，A 股优先级最高
+uv pip install tavily-python        # 配合 TAVILY_API_KEY，新闻搜索优先级最高
+uv pip install google-search-results # 配合 SERPAPI_KEY，新闻搜索备选
+```
+
+> 注意：配置了 API Key 但未装对应库，脚本会**静默降级**到下一档数据源 — 查看 JSON 输出的 `data_sources` 字段可诊断。
+
+### 使用
+
+在 Antler 中直接输入：
+
+```
+/stock-analysis TSLA
+/stock-analysis TSLA,PLTR,RKLB
+/stock-analysis 600519
+/stock-analysis HK00700
+/stock-analysis sh000001
+/stock-analysis 上证指数,创业板指,沪深300
+/stock-analysis ^IXIC
+/stock-analysis fund:018358
+/stock-analysis 华富数字经济混合A
+```
+
+或者用自然语言：
+
+```
+帮我分析下 TSLA
+600519 怎么样？
+看看 PLTR 和 RKLB 的技术面
+上证指数今天怎么样？
+分析下创业板指、沪深300
+华富数字经济混合A 这只基金怎么样？
+```
+
+## 工作原理
+
+```
+用户输入股票代码
+      │
+      ▼
+[STEP 1] 解析输入 → 识别市场（A股个股/港股/美股/A股指数/美股指数/公募基金），标准化代码
+      │
+      ▼
+[STEP 2] Python 脚本获取数据 → 实时行情 + 120日K线 + 技术指标计算
+      │
+      ▼
+[STEP 3] WebSearch 搜索最新新闻 → 2-3条/股
+      │
+      ▼
+[STEP 4] Claude AI 综合分析 → 技术面(60%) + 消息面(30%) + 宏观(10%)
+      │
+      ▼
+[STEP 5] 输出决策看板 → 评分 / 信号 / 目标价 / 止损价
+```
+
+## 输出示例
+
+```
+## 2026-03-04 股票决策看板
+
+1 只股票分析完成 | 买入: 0 | 持有: 0 | 卖出: 1
+
+### Tesla, Inc.(TSLA) — ⚪ 观望
+
+| 指标 | 数值 |
+|------|------|
+| 现价 | $392.43 (-2.70%) |
+| 综合评分 | 31/100 |
+| 信号 | 观望 |
+| 市盈率 | 356.75 |
+| 市净率 | 17.92 |
+
+**技术面**
+- 均线: MA5=404.85 MA10=406.83 MA20=411.03 | 空头排列
+- MACD: DIF=-8.00 DEA=-7.33 柱=-1.33 | 死叉
+- RSI: RSI6=28.45 RSI12=35.84 RSI24=41.54 | 弱势
+- 量能: 量比 1.12 | 正常
+- 乖离率: MA5乖离 -3.07%
+
+**AI 判断**
+TSLA 当前处于明显的空头格局，MA 三线空头排列，MACD 死叉...
+
+**价格目标**
+| 入场价 | 目标价 | 止损价 |
+|--------|--------|--------|
+| $385 | $437 (+13.5%) | $370 (-3.9%) |
+```
+
+## 评分系统
+
+综合评分满分 100 分，由 6 个维度构成：
+
+| 维度           | 满分 | 最佳情况          | 最差情况       |
+| -------------- | ---- | ----------------- | -------------- |
+| 趋势（MA排列） | 30   | 强势多头=30       | 强势空头=0     |
+| 乖离率         | 20   | 略低于MA5=20      | 远超MA5(>5%)=4 |
+| MACD           | 15   | 零轴上金叉=15     | 死叉=0         |
+| 量能           | 15   | 缩量回调=15       | 放量下跌=0     |
+| RSI            | 10   | 超卖=10           | 超买=0         |
+| 支撑           | 10   | MA5+MA10双支撑=10 | 无支撑=0       |
+
+### 信号映射
+
+| 评分 | 条件                       | 信号        |
+| ---- | -------------------------- | ----------- |
+| ≥75  | 多头/强势多头排列          | 🟢 强烈买入 |
+| ≥60  | 多头/弱多排列              | 🔵 买入     |
+| ≥45  | 任意（含高分但非多头排列） | 🟡 持有     |
+| ≥30  | 任意                       | ⚪ 观望     |
+| <30  | 空头排列                   | 🔴 强烈卖出 |
+| <30  | 非空头                     | 🟠 卖出     |
+
+注：高分（≥75）但 MA 处于盘整/弱多头时，仍然只给"持有"——属于"严进策略"的保守设计，避免突破未确认前的提前进场。
+
+## 硬性规则（严进策略）
+
+1. **RSI > 80** → 绝不给买入信号（超买风险）
+2. **乖离率 MA5 > 5%** → 绝不给买入信号（不追高）
+3. **偏好缩量回调** → 最佳买入时机
+4. **必须给精确止损** → 基于 MA20 或近期低点
+5. **必须给精确目标价** → 基于近期压力位或 MA60
+
+## 技术指标详解
+
+### 均线系统 (MA)
+
+- **MA5 / MA10 / MA20 / MA60** — 简单移动平均线
+- 多头排列 (MA5>MA10>MA20) = 上升趋势
+- 空头排列 (MA5<MA10<MA20) = 下降趋势
+
+### MACD (12/26/9)
+
+- **DIF** = EMA12 - EMA26
+- **DEA** = EMA9(DIF)
+- **柱状图** = (DIF - DEA) × 2
+- 金叉（DIF上穿DEA）= 买入信号
+- 死叉（DIF下穿DEA）= 卖出信号
+
+### RSI (6/12/24)
+
+- Wilder's RSI 算法
+- <20 超卖（反弹机会）| 20-40 弱势 | 40-60 中性 | 60-80 强势 | >80 超买（回调风险）
+
+### 量能分析
+
+- 量比 = 当日成交量 / 前5日均量
+- 放量上涨 (>1.5x + 涨) | 缩量回调 (<0.7x + 跌) | 放量下跌 (>1.5x + 跌)
+
+## 数据源配置（可选增强）
+
+脚本采用**分级降级策略**，零配置即可运行，配置 API Key 后数据更精准：
+
+| 环境变量 | 用途 | 获取方式 | 免费额度 |
+| -------- | ---- | -------- | -------- |
+| `TUSHARE_TOKEN` | A股专业数据（优先级最高） | [tushare.pro](https://tushare.pro) 注册 | 基础接口免费 |
+| `TAVILY_API_KEY` | 新闻搜索（优先级最高） | [tavily.com](https://tavily.com) 注册 | 1000次/月 |
+| `SERPAPI_KEY` | 新闻搜索（备选） | [serpapi.com](https://serpapi.com) 注册 | 100次/月 |
+
+### 行情数据降级链
+
+```
+A股个股:   Tushare Pro → efinance → akshare → yfinance
+港股:       efinance → akshare → yfinance
+美股:       yfinance（主力）
+A股指数:   akshare（sina 实时 → em 兜底） → yfinance（仅部分指数有 yf 映射）
+美股指数:  yfinance（^IXIC / ^GSPC / ^DJI 等）
+公募基金:  akshare（NAV 走势 + 实时估算 + 基本面 + 持仓，数据源唯一）
+```
+
+### 新闻降级链
+
+```
+Tavily → SerpAPI → web_search（兜底，无需配置）
+```
+
+### 节假日判断降级链
+
+```
+chinese_calendar（官方节假日+调休工作日）→ 简单工作日判断（周一至周五）
+```
+
+**节假日功能说明**：
+
+脚本自动识别中国法定节假日和调休工作日，在股票分析输出中包含 `trading_day_status` 字段：
+
+```json
+{
+  "trading_day_status": {
+    "date": "2025-01-01",
+    "is_trading_day": false,
+    "weekday": 2,
+    "weekday_name": "Wednesday",
+    "last_trading_day": "2024-12-31",
+    "next_trading_day": "2025-01-02"
+  }
+}
+```
+
+**独立查询交易日**：
+
+```bash
+# 查询今日
+python3 references/stock_data_fetcher.py --holiday
+
+# 查询指定日期
+python3 references/stock_data_fetcher.py --holiday --date 2025-01-01
+```
+
+**测试节假日功能**：
+
+```bash
+python3 test_holiday.py
+```
+
+详见 [references/holiday-calendar-usage.md](references/holiday-calendar-usage.md)
+
+## 数据来源
+
+| 市场 | 优先级 | 数据源 | Python 库 | 费用 |
+| ---- | ------ | ------ | --------- | ---- |
+| A股个股 | P0 | Tushare Pro | tushare | 免费（需注册） |
+| A股个股 | P1 | 东方财富 | efinance | 免费 |
+| A股个股 | P2 | 东方财富 | akshare | 免费 |
+| A股个股 | P3 | Yahoo Finance | yfinance | 免费 |
+| 港股 | P1 | 东方财富 | efinance | 免费 |
+| 港股 | P2 | 东方财富 | akshare | 免费 |
+| 港股 | P3 | Yahoo Finance | yfinance | 免费 |
+| 美股 | P0 | Yahoo Finance | yfinance | 免费 |
+| A股指数 | P0 | akshare（`stock_zh_index_daily` / `index_zh_a_hist`） | akshare | 免费 |
+| A股指数 | P1 | Yahoo Finance（仅 ^SSEC/000300.SS 等少数） | yfinance | 免费 |
+| 美股指数 | P0 | Yahoo Finance | yfinance | 免费 |
+| 公募基金 | P0 | akshare 基金接口（`fund_open_fund_info_em` + `fund_value_estimation_em` + `fund_individual_basic_info_xq` + `fund_portfolio_hold_em`） | akshare | 免费 |
+
+## 项目结构
+
+```
+.agents/skills/
+├── Stock-Analysis-Skill/
+│   ├── SKILL.md                           # 分析技能入口，仅负责数据分析与 Markdown 看板
+│   └── references/
+│       ├── stock_data_fetcher.py          # 数据获取 + 技术指标计算
+│       ├── analysis-prompt-template.md    # AI 分析框架模板
+│       └── output-format-template.md      # 决策看板输出格式
+└── HTML-Report-Skill/
+    ├── SKILL.md                           # HTML 报告生成技能入口
+    └── references/
+        └── html-report-style-guide.md     # 独立维护的 HTML 样式与响应式规范
+```
+
+## 灵感来源
+
+本项目核心分析逻辑参考了 [daily_stock_analysis](https://github.com/ZhuLinsen/daily_stock_analysis) 项目，并做了以下改造：
+
+- **去除外部 LLM 依赖** — 原项目通过 LiteLLM 调用 Gemini/OpenAI，本 Skill 直接用 Claude 自身分析
+- **封装为 Antler Skill** — 一条命令即可调用
+- **分级降级数据源** — 保留 Tushare/Tavily 等优质数据源，无 API Key 时自动降级到免费源
+- **精简架构** — 从 50+ 文件精简为 4 个核心文件
+
+## License
+
+MIT
+
+---
+
+> Built with Antler ⚡

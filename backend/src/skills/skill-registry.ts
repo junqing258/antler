@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, readdir, realpath, stat } from "node:fs/promises";
+import { lstat, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join, relative, resolve, sep } from "node:path";
 import {
@@ -251,7 +251,7 @@ export class SkillRegistry {
           scope: source.scope,
           directory: await realpath(dir),
           modelUri: `skill://${item.skill.name}/SKILL.md`,
-          fingerprint: digest(item.skill.content),
+          fingerprint: digest(await readFile(item.skill.filePath, "utf8")),
         });
       }
       for (const diagnostic of result.diagnostics)
