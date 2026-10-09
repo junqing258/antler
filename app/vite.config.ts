@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => ({
   resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
   server: { host: '127.0.0.1', port: 1420, strictPort: true },
   test: {
+    include: ['src/**/*.test.{ts,tsx}'],
     environment: 'jsdom',
     globals: true,
     setupFiles: './src/test/setup.ts',

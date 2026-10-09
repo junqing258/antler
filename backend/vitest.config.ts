@@ -4,6 +4,7 @@ export default defineConfig({
   // Avoid resolving the system `localhost` name when Vitest starts its Vite server.
   server: { host: '127.0.0.1' },
   test: {
+    include: ['src/**/*.test.ts'],
     environment: 'node',
     coverage: {
       provider: 'v8',
