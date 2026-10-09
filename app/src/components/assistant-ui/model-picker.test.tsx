@@ -3,6 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 import { ModelPicker } from "./thread";
 
 describe("ModelPicker", () => {
+  it.each(["", "server-model"])("shows server defaults without offering ineffective selections: %j", (model) => {
+    render(<ModelPicker model={model} models={[]} onModelChange={vi.fn()} />);
+
+    expect(screen.getByRole("button", {
+      name: `选择模型，当前模型 ${model || "服务端默认"}`,
+    })).toBeDisabled();
+    expect(screen.getByText(model || "服务端默认")).toBeVisible();
+  });
+
   it("lists configured models and reports a new selection", async () => {
     const onModelChange = vi.fn();
     render(

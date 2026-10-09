@@ -32,6 +32,25 @@ async function testApp(ragUrl?: string, ragKey?: string, root?: string) {
 }
 
 describe("RAG configuration", () => {
+  it("exposes the effective server model without credentials and requires authorization", async () => {
+    const app = await testApp();
+    try {
+      const unauthorized = await app.inject({ method: "GET", url: "/api/config/provider" });
+      expect(unauthorized.statusCode).toBe(401);
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/config/provider",
+        headers: { "x-antler-token": "test-token" },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ model: "test-model" });
+      expect(response.body).not.toContain("secret-provider-key");
+      expect(response.headers["cache-control"]).toBe("no-store");
+    } finally {
+      await app.close();
+    }
+  });
+
   it("persists overrides across restarts, retains a blank draft key, and restores defaults", async () => {
     const headers = { "x-antler-token": "test-token" };
     let app = await testApp("https://default.example.com", "default-key");

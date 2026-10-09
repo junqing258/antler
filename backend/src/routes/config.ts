@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import type { AppConfig } from "../config/env.js";
 import {
   RagConfigValidationError,
   type RagConfigStore,
@@ -7,7 +8,13 @@ import {
 export function registerConfigRoutes(
   app: FastifyInstance,
   config: RagConfigStore,
+  provider: Pick<AppConfig, "model">,
 ) {
+  app.get("/api/config/provider", async (_request, reply) => {
+    reply.header("cache-control", "no-store");
+    return { model: provider.model };
+  });
+
   app.get("/api/config", async (_request, reply) => {
     reply.header("cache-control", "no-store");
     return config.publicConfig();

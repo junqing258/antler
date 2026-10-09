@@ -16,8 +16,8 @@ export const defaultProviderConfig: ProviderConfig = {
   protocol: "openai-responses",
   baseUrl: "",
   apiKey: "",
-  models: ["gpt-4.1-mini"],
-  model: "gpt-4.1-mini",
+  models: [],
+  model: "",
 };
 
 export function loadProviderConfig(): ProviderConfig {
@@ -31,13 +31,12 @@ export function loadProviderConfig(): ProviderConfig {
       typeof value.name !== "string" ||
       typeof value.baseUrl !== "string" ||
       typeof value.apiKey !== "string" ||
-      typeof value.model !== "string" ||
-      !value.model.trim()
+      (value.model !== undefined && typeof value.model !== "string")
     )
       return defaultProviderConfig;
     // Migrate the original single-model configuration without losing it.
     const storedModels = Array.isArray(value.models) ? value.models : [];
-    const model = value.model.trim();
+    const selectedModel = value.model?.trim() ?? "";
     const models = storedModels
       .filter(
         (candidate): candidate is string =>
@@ -45,11 +44,21 @@ export function loadProviderConfig(): ProviderConfig {
       )
       .map((candidate) => candidate.trim());
     const normalizedModels = [...new Set(models)];
-    if (!normalizedModels.includes(model)) normalizedModels.push(model);
+    if (selectedModel && !normalizedModels.includes(selectedModel))
+      normalizedModels.push(selectedModel);
+    const model = selectedModel || normalizedModels[0] || "";
     return { ...value, model, models: normalizedModels } as ProviderConfig;
   } catch {
     return defaultProviderConfig;
   }
+}
+
+export function getModelPickerConfig(
+  config: ProviderConfig,
+  serverModel: string,
+): Pick<ProviderConfig, "model" | "models"> {
+  if (config.apiKey.trim()) return { model: config.model, models: config.models };
+  return { model: serverModel, models: [] };
 }
 
 export function saveProviderConfig(config: ProviderConfig) {

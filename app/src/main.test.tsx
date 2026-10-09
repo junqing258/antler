@@ -43,7 +43,9 @@ vi.mock("@assistant-ui/react", async () => {
   };
 });
 vi.mock("@/components/assistant-ui/thread", () => ({
-  AssistantThread: ({ title }: { title: string }) => <h1>{title}</h1>,
+  AssistantThread: ({ title, model }: { title: string; model: string }) => (
+    <><h1>{title}</h1><span data-testid="current-model">{model}</span></>
+  ),
 }));
 vi.mock("@/components/knowledge-configuration-link", () => ({
   KnowledgeConfigurationLink: () => null,
@@ -60,6 +62,11 @@ afterEach(async () => {
 
 describe("New Thread", () => {
   it("starts empty without copying the previous messages or creating a duplicate title", async () => {
+    localStorage.clear();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ model: "configured-server-model" }),
+    }));
     vi.stubGlobal("indexedDB", new IDBFactory());
     const project = await ensureWorkspaceProject("Stock-Analysis", "/srv/workspace/Stock-Analysis");
     const messages: ThreadMessageLike[] = [{ role: "user", content: "上一条会话内容" }];
@@ -72,6 +79,8 @@ describe("New Thread", () => {
 
     await act(async () => { await import("./main"); });
     await screen.findByRole("heading", { name: "上一条会话标题" });
+    await waitFor(() => expect(screen.getByTestId("current-model"))
+      .toHaveTextContent("configured-server-model"));
     const previousRenderCount = captured.initialMessages.length;
 
     fireEvent.click(screen.getByRole("button", { name: "New Thread" }));

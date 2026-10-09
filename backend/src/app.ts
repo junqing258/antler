@@ -99,7 +99,7 @@ export function createApp(config: AppConfig) {
   registerRunRoutes(app, runtime);
   registerSkillRoutes(app, skillRegistry);
   registerDirectoryRoutes(app, config.workspaceRoot);
-  registerConfigRoutes(app, ragConfig);
+  registerConfigRoutes(app, ragConfig, config);
 
   if (config.staticDir) {
     app.register(fastifyCompress);

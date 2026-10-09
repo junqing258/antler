@@ -13,6 +13,7 @@ import { AssistantThread } from "@/components/assistant-ui/thread";
 import { useAntlerRuntime } from "@/components/assistant-ui/use-antler-runtime";
 import {
   defaultProviderConfig,
+  getModelPickerConfig,
   loadProviderConfig,
   saveProviderConfig,
   type ProviderConfig,
@@ -173,12 +174,11 @@ function SettingsDialog({
   };
   const removeModel = (model: string) =>
     setDraft((current) => {
-      if (current.models.length === 1) return current;
       const models = current.models.filter((item) => item !== model);
       return {
         ...current,
         models,
-        model: current.model === model ? models[0] : current.model,
+        model: current.model === model ? (models[0] ?? "") : current.model,
       };
     });
   const submit = (event: FormEvent) => {
@@ -290,6 +290,11 @@ function SettingsDialog({
               </label>
               <div className="grid gap-2 text-xs font-semibold text-[#4b4b4b]">
                 <span>模型</span>
+                {draft.models.length === 0 && (
+                  <p className="m-0 font-normal text-[#777]">
+                    默认使用服务端配置。使用本地 API Key 时，请添加模型。
+                  </p>
+                )}
                 <div className="grid gap-1.5">
                   {draft.models.map((model) => (
                     <div key={model} className="flex items-center justify-between rounded-lg border border-[#eee] px-3 py-2">
@@ -306,7 +311,6 @@ function SettingsDialog({
                         className="border-0 bg-transparent text-xs text-[#b42318] disabled:opacity-40"
                         type="button"
                         onClick={() => removeModel(model)}
-                        disabled={draft.models.length === 1}
                         aria-label={`删除 ${model}`}
                       >
                         删除
@@ -324,7 +328,7 @@ function SettingsDialog({
                         addModel();
                       }
                     }}
-                    placeholder="输入模型 ID，例如 gpt-4.1-mini"
+                    placeholder="输入供应商支持的模型 ID"
                   />
                   <button className="h-9 rounded-[7px] border border-[#ddd] bg-white px-3 text-[13px] text-[#333] hover:bg-[#f6f6f6]" type="button" onClick={addModel}>
                     添加模型
@@ -423,6 +427,7 @@ function Chat({
   onRenameThread,
   onDeleteThread,
   providerConfig,
+  serverModel,
   onModelChange,
   onOpenSettings,
   onConversationSaved,
@@ -441,10 +446,12 @@ function Chat({
   onRenameThread: (conversation: Conversation) => void;
   onDeleteThread: (conversation: Conversation) => void;
   providerConfig: ProviderConfig;
+  serverModel: string;
   onModelChange: (model: string) => void;
   onOpenSettings: (tab?: SettingsTab) => void;
   onConversationSaved: () => void;
 }) {
+  const modelPickerConfig = getModelPickerConfig(providerConfig, serverModel);
   const runtime = useAntlerRuntime(
     serverInfo,
     conversationId,
@@ -604,8 +611,8 @@ function Chat({
         </aside>
         <section className="min-w-0 flex-1">
           <AssistantThread
-            model={providerConfig.model}
-            models={providerConfig.models}
+            model={modelPickerConfig.model}
+            models={modelPickerConfig.models}
             title={title}
             onModelChange={onModelChange}
           />
@@ -631,6 +638,25 @@ function App() {
     { project?: Project } | undefined
   >();
   const [providerConfig, setProviderConfig] = useState(loadProviderConfig);
+  const [serverModel, setServerModel] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    void serverInfo()
+      .then((server) => fetch(`${server.baseUrl}/api/config/provider`, {
+        headers: { "x-antler-token": server.token },
+        signal: controller.signal,
+      }))
+      .then(async (response) => {
+        if (!response.ok) return;
+        const config = await response.json() as { model?: unknown };
+        if (!controller.signal.aborted && typeof config.model === "string")
+          setServerModel(config.model.trim());
+      })
+      .catch(() => {
+        // Chat can still use the server defaults if config discovery fails.
+      });
+    return () => controller.abort();
+  }, []);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("provider");
   const refreshLibrary = useCallback(() => {
@@ -788,6 +814,7 @@ function App() {
           onRenameThread={renameThread}
           onDeleteThread={removeThread}
           providerConfig={providerConfig}
+          serverModel={serverModel}
           onModelChange={selectModel}
           onOpenSettings={openSettings}
           onConversationSaved={refreshLibrary}

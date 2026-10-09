@@ -56,6 +56,9 @@ export function useAntlerRuntime(
             "x-antler-token": server.token,
           };
           const provider = getProviderConfig();
+          if (provider.apiKey.trim() && !provider.model.trim()) {
+            throw new Error("请在供应商配置中添加并选择模型。");
+          }
           const created = await fetch(`${server.baseUrl}/api/runs`, {
             method: "POST",
             headers,

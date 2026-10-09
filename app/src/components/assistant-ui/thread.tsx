@@ -146,16 +146,18 @@ export function ModelPicker({
   models,
   onModelChange,
 }: ModelPickerProps) {
+  const label = model || "服务端默认";
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
           className="group flex items-center gap-[7px] border-0 bg-transparent p-0 text-xs font-semibold text-[#222] outline-none focus-visible:rounded focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-3"
           type="button"
-          aria-label={`选择模型，当前模型 ${model}`}
+          aria-label={`选择模型，当前模型 ${label}`}
+          disabled={models.length === 0}
         >
           <BotIcon className="size-3.5 stroke-[2.1]" />
-          <span>{model}</span>
+          <span>{label}</span>
           <ChevronDownIcon className="ml-px size-3 text-[#898989] transition-transform duration-150 group-data-[state=open]:rotate-180" />
         </button>
       </DropdownMenu.Trigger>
