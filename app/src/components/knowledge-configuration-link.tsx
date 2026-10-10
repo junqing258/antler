@@ -147,7 +147,7 @@ function KnowledgeConfigurationForm({
             placeholder="https://rag.example.com"
           />
           <span className="font-normal leading-5 text-[#777]">
-            填写服务地址，本机服务可使用 http://localhost:8001。
+            填写 HTTP 或 HTTPS 服务地址，例如 http://localhost:8001。
           </span>
         </label>
         <label className="grid gap-1.5 text-xs font-semibold text-[#4b4b4b]">

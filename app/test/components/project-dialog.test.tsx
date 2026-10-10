@@ -1,0 +1,101 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ProjectDialog } from "@/components/project-dialog";
+
+const getServerInfo = async () => ({ baseUrl: "http://server", token: "test-token" });
+const project = {
+  id: "project-1",
+  name: "My project",
+  workingDirectory: "/workspace/My project",
+  createdAt: 0,
+  updatedAt: 0,
+};
+
+vi.mock("@/components/directory-picker", () => ({
+  DirectoryPicker: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
+    <input aria-label="Working directory" value={value} onChange={(event) => onChange(event.target.value)} />
+  ),
+}));
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("ProjectDialog", () => {
+  it("preserves general edits across tabs and saves trimmed project values", async () => {
+    const onSave = vi.fn();
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ skills: [], diagnostics: [] }) });
+    vi.stubGlobal("fetch", fetch);
+    render(<ProjectDialog project={project} getServerInfo={getServerInfo} onSave={onSave} onClose={vi.fn()} />);
+
+    expect(screen.getByRole("tab", { name: "常规" })).toHaveAttribute("aria-selected", "true");
+    expect(fetch).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("textbox", { name: "Project name" }), { target: { value: " Edited project " } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Working directory" }), { target: { value: " /workspace/new folder " } });
+    fireEvent.click(screen.getByRole("tab", { name: "Skill" }));
+    await screen.findByText("当前项目暂无可用 Skill。");
+    expect(fetch).toHaveBeenCalledWith("http://server/api/skills?workingDirectory=%2Fworkspace%2Fnew%20folder", {
+      headers: { "x-antler-token": "test-token" }, signal: expect.any(AbortSignal),
+    });
+    expect(screen.queryByRole("textbox", { name: "Project name" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Subagent" }));
+    expect(screen.getByText("Subagent 配置即将推出。")).toBeVisible();
+    expect(onSave).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("tab", { name: "常规" }));
+    expect(screen.getByRole("textbox", { name: "Project name" })).toHaveValue(" Edited project ");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(onSave).toHaveBeenCalledWith({ name: "Edited project", workingDirectory: "/workspace/new folder" });
+  });
+
+  it("shows available skills, scope and diagnostics, and retries a failed request", async () => {
+    const fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false, json: async () => ({ error: "服务不可用" }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({
+        skills: [
+          { id: "workspace:test", name: "Test skill", description: "项目技能说明", scope: "workspace" },
+          { id: "user:test", name: "User skill", description: "用户技能说明", scope: "user" },
+          { id: "bundled:test", name: "Bundled skill", description: "内置技能说明", scope: "bundled" },
+        ],
+        diagnostics: [{ code: "skill_invalid", name: "Invalid skill", message: "缺少描述" }],
+      }) });
+    vi.stubGlobal("fetch", fetch);
+    render(<ProjectDialog getServerInfo={getServerInfo} onSave={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Skill" }));
+    expect(screen.getByRole("status")).toHaveTextContent("正在加载 Skill");
+    expect(await screen.findByRole("alert")).toHaveTextContent("服务不可用");
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    await screen.findByText("项目技能说明");
+    for (const scope of ["项目", "用户", "内置"]) expect(screen.getByText(scope)).toBeVisible();
+    expect(screen.getByText("Invalid skill：缺少描述")).toBeVisible();
+    expect(fetch).toHaveBeenLastCalledWith("http://server/api/skills", expect.any(Object));
+  });
+
+  it("keeps new project validation and supports keyboard tab navigation and dismissal", () => {
+    const onSave = vi.fn();
+    const onClose = vi.fn();
+    render(<ProjectDialog getServerInfo={getServerInfo} onSave={onSave} onClose={onClose} />);
+    expect(screen.getByRole("dialog", { name: "New project" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Create project" })).toBeDisabled();
+    fireEvent.change(screen.getByRole("textbox", { name: "Project name" }), { target: { value: "   " } });
+    expect(screen.getByRole("button", { name: "Create project" })).toBeDisabled();
+    fireEvent.keyDown(screen.getByRole("tab", { name: "常规" }), { key: "End" });
+    expect(screen.getByRole("tab", { name: "Subagent" })).toHaveFocus();
+    expect(screen.getByRole("tabpanel", { name: "Subagent" })).toBeVisible();
+    fireEvent.keyDown(screen.getByRole("tab", { name: "Subagent" }), { key: "Home" });
+    expect(screen.getByRole("tab", { name: "常规" })).toHaveFocus();
+    fireEvent.change(screen.getByRole("textbox", { name: "Project name" }), { target: { value: " New project " } });
+    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
+    expect(onSave).toHaveBeenCalledWith({ name: "New project", workingDirectory: "" });
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts the skill request when switching away", async () => {
+    const fetch = vi.fn().mockImplementation(() => new Promise(() => {}));
+    vi.stubGlobal("fetch", fetch);
+    render(<ProjectDialog project={project} getServerInfo={getServerInfo} onSave={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Skill" }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    const signal = fetch.mock.calls[0][1].signal as AbortSignal;
+    fireEvent.click(screen.getByRole("tab", { name: "Subagent" }));
+    expect(signal.aborted).toBe(true);
+  });
+});

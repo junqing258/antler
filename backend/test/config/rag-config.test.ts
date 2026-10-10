@@ -43,14 +43,17 @@ describe("effective RAG configuration", () => {
     expect(await run()).toEqual([
       { type: "text", text: "https://custom.example.com\n[REDACTED]" },
     ]);
-    config.update({ ragUrl: "http://localhost:8001" });
+    config.update({ ragUrl: "http://rag.example.com:6050" });
+    expect(await run()).toEqual([
+      { type: "text", text: "http://rag.example.com:6050\n[REDACTED]" },
+    ]);
     expect(new RagConfigStore(defaults, root).environment()).toEqual({
-      ANTLER_RAG_URL: "http://localhost:8001",
+      ANTLER_RAG_URL: "http://rag.example.com:6050",
       ANTLER_RAG_KEY: "custom-key",
     });
     const path = join(root, ".antler", "rag-config.json");
     expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
-      ragUrl: "http://localhost:8001",
+      ragUrl: "http://rag.example.com:6050",
       ragKey: "custom-key",
     });
     expect((await stat(path)).mode & 0o777).toBe(0o600);

@@ -46,7 +46,7 @@ ANTLER_RAG_URL=https://rag.example.com
 ANTLER_RAG_KEY=your-rag-api-key
 ```
 
-在配置界面点击“恢复环境默认值”可移除界面覆盖，重新使用 `ANTLER_RAG_URL`、`ANTLER_RAG_KEY`。环境变量修改仍需重启 backend。RAG 地址必须是服务 origin，不含路径或查询参数；除本机外须使用 HTTPS。配置界面提供“打开知识库管理页面”链接。Antler 不再提供本地知识库管理、索引和自动检索。
+在配置界面点击“恢复环境默认值”可移除界面覆盖，重新使用 `ANTLER_RAG_URL`、`ANTLER_RAG_KEY`。环境变量修改仍需重启 backend。RAG 地址支持 HTTP 和 HTTPS，必须是服务 origin，不含路径或查询参数。配置界面提供“打开知识库管理页面”链接。Antler 不再提供本地知识库管理、索引和自动检索。
 
 本地可填写仓库根目录的 `.env`；Docker 部署可填写 `.env.deploy`，部署脚本会合并并传入容器。密钥不会写入技能或镜像。Docker 镜像包含技能文件和 Python 3；本地调用技能需安装 Python 3.9+。Agent 通过 `read_skill_resource` 获取随技能打包的客户端脚本，并在当前工作空间临时执行，无需知道服务器的安装路径。
 

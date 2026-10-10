@@ -163,7 +163,7 @@ describe("RAG configuration", () => {
     { ragUrl: "https://rag.example.com/api" },
     { ragUrl: "https://rag.example.com?key=secret" },
     { ragUrl: "https://rag.example.com#fragment" },
-    { ragUrl: "http://rag.example.com" },
+    { ragUrl: "ftp://rag.example.com" },
     { ragUrl: 42 },
     { ragKey: 42 },
     ["invalid"],
@@ -242,6 +242,41 @@ describe("RAG configuration", () => {
       await app.close();
     }
   });
+
+  it.each(["http://rag.example.com:6050", "http://47.100.210.56:6050"])(
+    "supports remote HTTP defaults and persists overrides: %s",
+    async (ragUrl) => {
+      const headers = { "x-antler-token": "test-token" };
+      let app = await testApp(ragUrl, "default-key");
+      const root = workspaces[workspaces.length - 1];
+      try {
+        const config = await app.inject({ method: "GET", url: "/api/config", headers });
+        expect(config.json()).toEqual({
+          ragUrl: `${ragUrl}/`,
+          ragKeyConfigured: true,
+          ragConfigOverridden: false,
+        });
+        const saved = await app.inject({
+          method: "PUT",
+          url: "/api/config/rag",
+          headers,
+          payload: { ragUrl: ` ${ragUrl}/ ` },
+        });
+        expect(saved.statusCode).toBe(200);
+        expect(saved.json()).toEqual({
+          ragUrl: `${ragUrl}/`,
+          ragKeyConfigured: true,
+          ragConfigOverridden: true,
+        });
+        await app.close();
+        app = await testApp("https://default.example.com", "default-key", root);
+        const reloaded = await app.inject({ method: "GET", url: "/api/config", headers });
+        expect(reloaded.json()).toEqual(saved.json());
+      } finally {
+        await app.close();
+      }
+    },
+  );
 
   it("supports a local RAG service and removes local knowledge management routes", async () => {
     const app = await testApp("http://localhost:8001");

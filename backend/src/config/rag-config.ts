@@ -27,12 +27,10 @@ export function normalizeRagUrl(value: string): string | null {
     url.password ||
     url.pathname !== "/" ||
     url.search ||
-    url.hash ||
-    (url.protocol === "http:" &&
-      !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
+    url.hash
   ) {
     throw new RagConfigValidationError(
-      "RAG 地址必须是 HTTPS 服务地址（本机可使用 HTTP），不能包含路径、凭据或查询参数。",
+      "RAG 地址必须是 HTTP 或 HTTPS 服务地址，不能包含路径、凭据或查询参数。",
     );
   }
   return url.origin;

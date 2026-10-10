@@ -82,8 +82,6 @@ def base_url():
         or parsed.fragment
     ):
         raise ValueError("ANTLER_RAG_URL must be a service origin without credentials or a path")
-    if parsed.scheme == "http" and parsed.hostname not in ("localhost", "127.0.0.1", "::1"):
-        raise ValueError("ANTLER_RAG_URL must use HTTPS outside localhost")
     return value
 
 
