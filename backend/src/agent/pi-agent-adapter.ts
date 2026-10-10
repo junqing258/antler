@@ -10,6 +10,7 @@ import { createSkillTools } from "../skills/skill-tools.js";
 import { composeSkillPrompt } from "../skills/skill-prompt.js";
 import { SecretGuard } from "./secret-guard.js";
 
+/** 模型连接、工作区工具和请求超时配置，由宿主创建适配器时注入。 */
 export type PiAgentAdapterConfig = {
   provider: "anthropic" | "openai";
   model: string;
@@ -23,6 +24,7 @@ export type PiAgentAdapterConfig = {
   systemPrompt: string;
   requestTimeoutMs: number;
 };
+/** 可由宿主转换为运行错误码的配置错误。 */
 export class PiAdapterError extends Error {
   constructor(
     readonly code: "provider_not_configured" | "model_not_found",
@@ -31,19 +33,23 @@ export class PiAdapterError extends Error {
     super(message);
   }
 }
+/** 将宿主的一次运行接入 Pi Agent，负责模型配置、工具装配和取消信号桥接。 */
 export class PiAgentAdapter {
   readonly secretGuard: SecretGuard;
+  // 同一适配器内按会话复用 Agent 的消息历史，并记录其初始化时的技能目录指纹。
   private readonly agents = new Map<
     string,
     { agent: Agent; fingerprint: string }
   >();
   constructor(private readonly config: PiAgentAdapterConfig) {
+    // 工具与模型输入共用脱敏规则，覆盖配置中的凭据及工具环境中的秘密。
     this.secretGuard = new SecretGuard(
       config.workspaceRoot,
       config.getToolEnvironment,
       [config.openAiApiKey, config.anthropicAuthToken, config.tavilyApiKey],
     );
   }
+  /** 技能工具使用本次快照；搜索工具仅在配置 Tavily 凭据时启用。 */
   private tools(snapshot: SkillSnapshot) {
     return [
       ...createWorkspaceTools(
@@ -61,6 +67,7 @@ export class PiAgentAdapter {
       ...createSkillTools(snapshot, this.secretGuard),
     ];
   }
+  /** 搜索结果和异常信息都可能包含敏感内容，返回给 Agent 前统一脱敏。 */
   private protectSearchTool(
     tool: ReturnType<typeof createTavilySearchTool>,
   ): ReturnType<typeof createTavilySearchTool> {
@@ -79,6 +86,7 @@ export class PiAgentAdapter {
       },
     };
   }
+  /** 执行一轮输入，转发 Pi 原始事件，并返回 Agent 当前累积的消息历史。 */
   async run(
     input: string,
     conversationId: string,
@@ -86,6 +94,7 @@ export class PiAgentAdapter {
     signal: AbortSignal,
     onEvent: (event: AgentEvent) => void | Promise<void>,
   ) {
+    // 每轮重新加载秘密，避免工作区或工具环境更新后仍使用旧的脱敏规则。
     await this.secretGuard.refresh();
     if (this.config.provider === "anthropic") {
       return this.runAnthropic(
@@ -102,6 +111,7 @@ export class PiAgentAdapter {
         "未配置 OPENAI_API_KEY，无法调用模型。",
       );
     const provider = openaiProvider();
+    // OpenAI 路径要求模型存在于 Pi 目录中，以取得协议所需的模型元数据。
     const catalogModel = provider
       .getModels()
       .find((candidate) => candidate.id === this.config.model);
@@ -117,6 +127,7 @@ export class PiAgentAdapter {
         : {}),
     };
     let cached = this.agents.get(conversationId);
+    // Agent 的系统提示词和工具在创建时固定，技能目录变化时不能沿用旧上下文。
     if (cached && cached.fingerprint !== skillSnapshot.catalogFingerprint)
       throw new Error("skill_snapshot_changed");
     if (!cached) {
@@ -130,6 +141,7 @@ export class PiAgentAdapter {
           messages: [],
           tools: this.tools(skillSnapshot),
         },
+        // 显式注入凭据和单次请求超时；Pi 提供的 signal 用于中止当前模型请求。
         streamFn: (activeModel, context, options) =>
           provider.streamSimple(
             activeModel as Model<"openai-responses">,
@@ -146,11 +158,13 @@ export class PiAgentAdapter {
       this.agents.set(conversationId, cached);
     }
     const agent = cached.agent;
+    // 订阅和取消监听只服务于本轮调用，避免缓存 Agent 累积旧运行的回调。
     const unsubscribe = agent.subscribe(onEvent);
     const abort = () => agent.abort();
     signal.addEventListener("abort", abort, { once: true });
     try {
       await agent.prompt(this.secretGuard.redact(input));
+      // Pi 可能把失败保存在状态中而不抛出异常，需将其转交宿主处理。
       if (agent.state.errorMessage) throw new Error(agent.state.errorMessage);
       return agent.state.messages as AgentMessage[];
     } finally {
@@ -159,6 +173,7 @@ export class PiAgentAdapter {
     }
   }
 
+  /** Anthropic 使用独立的模型解析和认证方式，其余会话生命周期与 OpenAI 一致。 */
   private async runAnthropic(
     input: string,
     conversationId: string,
@@ -175,9 +190,8 @@ export class PiAgentAdapter {
     const catalogModel = provider
       .getModels()
       .find((candidate) => candidate.id === this.config.model);
-    // Anthropic-compatible gateways may expose models outside Pi's first-party
-    // catalog. Keep the catalog's capability metadata while sending the
-    // configured model id to the gateway.
+    // 兼容网关可能提供 Pi 目录之外的模型：借用已知模型的能力元数据，
+    // 但向网关发送用户配置的模型 ID。
     const fallbackModel =
       provider
         .getModels()
@@ -198,6 +212,7 @@ export class PiAgentAdapter {
         : {}),
     };
     let cached = this.agents.get(conversationId);
+    // 防止复用包含旧技能提示词和工具的 Agent。
     if (cached && cached.fingerprint !== skillSnapshot.catalogFingerprint)
       throw new Error("skill_snapshot_changed");
     if (!cached) {
@@ -217,6 +232,7 @@ export class PiAgentAdapter {
             context,
             {
               ...options,
+              // 兼容网关使用 Bearer token，同时保留 Pi 传入的其他请求头。
               headers: {
                 ...options?.headers,
                 Authorization: `Bearer ${this.config.anthropicAuthToken}`,
@@ -230,6 +246,7 @@ export class PiAgentAdapter {
       this.agents.set(conversationId, cached);
     }
     const agent = cached.agent;
+    // 缓存只保留 Agent 状态，事件订阅和取消监听在本轮结束后释放。
     const unsubscribe = agent.subscribe(onEvent);
     const abort = () => agent.abort();
     signal.addEventListener("abort", abort, { once: true });

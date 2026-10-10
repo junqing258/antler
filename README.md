@@ -2,6 +2,8 @@
 
 Antler 是一个 Web Agent 项目。前端使用 React + Vite，后端使用 Fastify；浏览器通过 HTTP API 创建任务，并通过 SSE 接收流式输出。后端使用 Prisma + SQLite 保存运行记录；知识库由外部 Antler RAG 服务管理。
 
+项目演示：[http://47.100.210.56:3210/](http://47.100.210.56:3210/)
+
 ## 本地开发
 
 需要 Node.js、pnpm 10。安装依赖并同时启动前后端：
