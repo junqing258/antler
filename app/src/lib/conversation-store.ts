@@ -115,7 +115,7 @@ export async function ensureDefaultProject(): Promise<Project> {
   const now = Date.now();
   const project: Project = {
     id: DEFAULT_PROJECT_ID,
-    name: "General",
+    name: "默认项目",
     workingDirectory: "",
     createdAt: now,
     updatedAt: now,
@@ -237,7 +237,7 @@ export async function ensureConversation(
   const conversation: Conversation = {
     id,
     projectId,
-    title: "New Chat",
+    title: "新会话",
     createdAt: now,
     updatedAt: now,
     messages: [],
@@ -276,7 +276,7 @@ export async function saveConversationMessages(
     projectId: current?.projectId ?? projectId,
     title: getTitle(
       messages,
-      current?.title ?? "New Chat",
+      current?.title ?? "新会话",
       current?.isTitleManuallySet,
     ),
     createdAt: current?.createdAt ?? now,

@@ -130,19 +130,19 @@ function Chat({
             onClick={() => onNewThread()}
           >
             <PlusIcon className="size-3.5" aria-hidden="true" />
-            New Thread
+            新建会话
           </button>
           <KnowledgeConfigurationLink getServerInfo={serverInfo} />
           <nav
             className="mt-3.5 min-h-0 overflow-y-auto pb-2"
-            aria-label="Projects and chat history"
+            aria-label="项目与会话历史"
           >
             <div className="mb-1.5 flex items-center justify-between px-2 text-[11px] font-medium uppercase tracking-[0.04em] text-[#858585]">
-              <span>Projects</span>
+              <span>项目</span>
               <button className="grid size-[26px] place-items-center rounded-md border-0 bg-transparent text-[#777] hover:bg-[#eaeaea] hover:text-[#333]"
                 type="button"
                 onClick={onNewProject}
-                aria-label="New project"
+                aria-label="新建项目"
               >
                 <FolderPlusIcon className="size-[15px]" />
               </button>
@@ -163,7 +163,7 @@ function Chat({
                       onClick={() => onSelectProject(project)}
                       title={
                         project.workingDirectory ||
-                        "Server default working directory"
+                        "服务端默认工作目录"
                       }
                     >
                       <FolderIcon className="size-[15px] shrink-0 text-[#777]" aria-hidden="true" />
@@ -173,8 +173,8 @@ function Chat({
                       className="grid size-[26px] shrink-0 place-items-center rounded-md border-0 bg-transparent text-[#777] hover:bg-[#eaeaea] hover:text-[#333]"
                       type="button"
                       onClick={() => onNewThread(project.id)}
-                      aria-label={`New Thread in ${project.name}`}
-                      title="New Thread"
+                      aria-label={`在 ${project.name} 中新建会话`}
+                      title="新建会话"
                     >
                       <PlusIcon className="size-[15px]" aria-hidden="true" />
                     </button>
@@ -182,7 +182,7 @@ function Chat({
                       className="mr-[3px] grid size-[26px] shrink-0 place-items-center rounded-md border-0 bg-transparent text-[#777] opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 data-[active=true]:opacity-100 hover:bg-[#eaeaea] hover:text-[#333]"
                       type="button"
                       onClick={() => onEditProject(project)}
-                      aria-label={`Settings for ${project.name}`}
+                      aria-label={`${project.name} 的设置`}
                     >
                       <FolderCogIcon className="size-[15px]" />
                     </button>
@@ -194,7 +194,7 @@ function Chat({
                         type="button"
                         onClick={() => onSelectProject(project)}
                       >
-                        Start a thread
+                        开始新的会话
                       </button>
                     )}
                     {projectConversations.map((conversation) => (
@@ -440,7 +440,7 @@ function App() {
     projects.find((project) => project.id === activeProjectId) ??
     ({
       id: DEFAULT_PROJECT_ID,
-      name: "General",
+      name: "默认项目",
       workingDirectory: "",
       createdAt: 0,
       updatedAt: 0,
@@ -453,7 +453,7 @@ function App() {
           key={conversationId}
           conversationId={conversationId}
           initialMessages={loadedConversation.messages}
-          title={activeConversation?.title ?? "New Chat"}
+          title={activeConversation?.title ?? "新会话"}
           conversations={conversations}
           projects={projects.length ? projects : [activeProject]}
           activeProject={activeProject}

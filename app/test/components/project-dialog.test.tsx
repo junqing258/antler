@@ -13,7 +13,7 @@ const project = {
 
 vi.mock("@/components/directory-picker", () => ({
   DirectoryPicker: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
-    <input aria-label="Working directory" value={value} onChange={(event) => onChange(event.target.value)} />
+    <input aria-label="工作目录" value={value} onChange={(event) => onChange(event.target.value)} />
   ),
 }));
 
@@ -28,20 +28,20 @@ describe("ProjectDialog", () => {
 
     expect(screen.getByRole("tab", { name: "常规" })).toHaveAttribute("aria-selected", "true");
     expect(fetch).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByRole("textbox", { name: "Project name" }), { target: { value: " Edited project " } });
-    fireEvent.change(screen.getByRole("textbox", { name: "Working directory" }), { target: { value: " /workspace/new folder " } });
+    fireEvent.change(screen.getByRole("textbox", { name: "项目名称" }), { target: { value: " Edited project " } });
+    fireEvent.change(screen.getByRole("textbox", { name: "工作目录" }), { target: { value: " /workspace/new folder " } });
     fireEvent.click(screen.getByRole("tab", { name: "Skill" }));
     await screen.findByText("暂无可用 Skill。");
     expect(fetch).toHaveBeenCalledWith("http://server/api/skills?workingDirectory=%2Fworkspace%2Fnew%20folder", {
       headers: { "x-antler-token": "test-token" }, signal: expect.any(AbortSignal),
     });
-    expect(screen.queryByRole("textbox", { name: "Project name" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "项目名称" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Subagent" }));
     expect(screen.getByText("Subagent 配置即将推出。")).toBeVisible();
     expect(onSave).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("tab", { name: "常规" }));
-    expect(screen.getByRole("textbox", { name: "Project name" })).toHaveValue(" Edited project ");
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByRole("textbox", { name: "项目名称" })).toHaveValue(" Edited project ");
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
     expect(onSave).toHaveBeenCalledWith({ name: "Edited project", workingDirectory: "/workspace/new folder" });
   });
 
@@ -126,17 +126,17 @@ describe("ProjectDialog", () => {
     const onSave = vi.fn();
     const onClose = vi.fn();
     render(<ProjectDialog getServerInfo={getServerInfo} onSave={onSave} onClose={onClose} />);
-    expect(screen.getByRole("dialog", { name: "New project" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Create project" })).toBeDisabled();
-    fireEvent.change(screen.getByRole("textbox", { name: "Project name" }), { target: { value: "   " } });
-    expect(screen.getByRole("button", { name: "Create project" })).toBeDisabled();
+    expect(screen.getByRole("dialog", { name: "新建项目" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "创建项目" })).toBeDisabled();
+    fireEvent.change(screen.getByRole("textbox", { name: "项目名称" }), { target: { value: "   " } });
+    expect(screen.getByRole("button", { name: "创建项目" })).toBeDisabled();
     fireEvent.keyDown(screen.getByRole("tab", { name: "常规" }), { key: "End" });
     expect(screen.getByRole("tab", { name: "Subagent" })).toHaveFocus();
     expect(screen.getByRole("tabpanel", { name: "Subagent" })).toBeVisible();
     fireEvent.keyDown(screen.getByRole("tab", { name: "Subagent" }), { key: "Home" });
     expect(screen.getByRole("tab", { name: "常规" })).toHaveFocus();
-    fireEvent.change(screen.getByRole("textbox", { name: "Project name" }), { target: { value: " New project " } });
-    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "项目名称" }), { target: { value: " New project " } });
+    fireEvent.click(screen.getByRole("button", { name: "创建项目" }));
     expect(onSave).toHaveBeenCalledWith({ name: "New project", workingDirectory: "" });
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);

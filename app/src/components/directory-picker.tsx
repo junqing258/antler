@@ -73,7 +73,7 @@ export function DirectoryPicker({
         >
           <FolderOpenIcon className="size-4 shrink-0" />
           <span className={`min-w-0 overflow-hidden truncate text-[13px] ${value ? "text-[#333]" : "text-[#999]"}`}>
-            {value || "Server default (./workspace)"}
+            {value || "服务端默认（./workspace）"}
           </span>
         </button>
         {value && (
@@ -81,8 +81,8 @@ export function DirectoryPicker({
             className="grid w-[38px] shrink-0 place-items-center border-0 border-l border-[#eee] bg-transparent text-[#888] hover:bg-[#f6f6f6] hover:text-[#333]"
             type="button"
             onClick={() => onChange("")}
-            aria-label="Use server default directory"
-            title="Use server default"
+            aria-label="使用服务端默认目录"
+            title="使用服务端默认"
           >
             <XIcon className="size-4" />
           </button>
@@ -93,7 +93,7 @@ export function DirectoryPicker({
         <div
           className="absolute left-0 right-0 z-10 mt-2 grid overflow-hidden rounded-[9px] border border-[#ddd] bg-white shadow-[0_12px_32px_rgb(0_0_0_/_12%)]"
           role="dialog"
-          aria-label="Choose working directory"
+          aria-label="选择工作目录"
         >
           <div className="flex items-center gap-2 border-b border-[#eee] bg-[#fafafa] p-2">
             <button
@@ -105,13 +105,13 @@ export function DirectoryPicker({
                 }
               }}
               disabled={loading || !listing || listing.parent === null}
-              aria-label="Parent directory"
-              title="Parent directory"
+              aria-label="上一级目录"
+              title="上一级目录"
             >
               <ArrowUpIcon className="size-[15px]" />
             </button>
             <span className="min-w-0 overflow-hidden truncate font-mono text-[11px] text-[#666]" title={listing?.workingDirectory}>
-              {listing?.workingDirectory ?? "Loading workspace…"}
+              {listing?.workingDirectory ?? "正在读取工作区…"}
             </span>
           </div>
 
@@ -119,19 +119,19 @@ export function DirectoryPicker({
             {loading && (
               <div className="flex min-h-[86px] items-center justify-center gap-2 text-xs text-[#888]">
                 <LoaderCircleIcon className="size-4 animate-spin" />
-                Loading…
+                加载中…
               </div>
             )}
             {!loading && error && (
               <div className="flex min-h-[86px] flex-col items-center justify-center gap-2 text-center text-xs text-[#b42318]">
                 {error}
                 <button className="border-0 bg-transparent text-primary" type="button" onClick={() => void load(listing?.path)}>
-                  Retry
+                  重试
                 </button>
               </div>
             )}
             {!loading && !error && listing?.directories.length === 0 && (
-              <div className="flex min-h-[86px] items-center justify-center text-xs text-[#888]">No subdirectories</div>
+              <div className="flex min-h-[86px] items-center justify-center text-xs text-[#888]">暂无子目录</div>
             )}
             {!loading &&
               !error &&
@@ -150,7 +150,7 @@ export function DirectoryPicker({
 
           <div className="flex justify-end gap-1.5 border-t border-[#eee] bg-[#fafafa] p-2">
             <button className="flex h-[31px] items-center gap-1.5 rounded-md border border-[#ddd] bg-white px-2.5 text-xs text-[#444] hover:bg-[#f6f6f6]" type="button" onClick={() => setOpen(false)}>
-              Cancel
+              取消
             </button>
             <button
               className="flex h-[31px] items-center gap-1.5 rounded-md border border-primary bg-primary px-2.5 text-xs text-white disabled:cursor-not-allowed disabled:opacity-45"
@@ -163,7 +163,7 @@ export function DirectoryPicker({
               }}
             >
               <CheckIcon className="size-3.5" />
-              Use this folder
+              使用此文件夹
             </button>
           </div>
         </div>

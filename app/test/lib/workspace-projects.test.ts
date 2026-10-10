@@ -34,7 +34,7 @@ describe("workspace project initialization", () => {
       expect.objectContaining({ headers: { "x-antler-token": "test-token" } }),
     );
     expect(await listProjects()).toEqual([
-      expect.objectContaining({ id: "default", name: "General" }),
+      expect.objectContaining({ id: "default", name: "默认项目" }),
       expect.objectContaining({
         id: "workspace:Stock-Analysis",
         name: "Stock-Analysis",

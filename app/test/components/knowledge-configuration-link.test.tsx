@@ -152,7 +152,7 @@ describe("knowledge configuration", () => {
     expect(
       screen.getByRole("link", { name: "打开知识库管理页面" }),
     ).toHaveAttribute("href", "https://custom.example.com/");
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
     expect(
       await screen.findByRole("link", { name: "打开知识库服务地址" }),
     ).toHaveAttribute("href", "https://custom.example.com/");
@@ -210,7 +210,7 @@ describe("knowledge configuration", () => {
     expect(
       screen.getByRole("button", { name: "恢复环境默认值" }),
     ).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
     expect(
       await screen.findByRole("link", { name: "打开知识库服务地址" }),
     ).toHaveAttribute("href", defaults.ragUrl);

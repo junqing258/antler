@@ -198,7 +198,7 @@ function Composer(props: ModelPickerProps) {
       <ComposerPrimitive.Input
         aria-label="消息"
         className="block min-h-[37px] max-h-24 w-full resize-none bg-transparent py-0 text-[14px] leading-5 outline-none placeholder:text-[#afafaf]"
-        placeholder="Send a message... (@ to mention, / for commands)"
+        placeholder="输入消息…（@ 提及，/ 使用命令）"
       />
       <div className="mt-1 flex items-center justify-between gap-2">
         <div className="flex items-center gap-4">
@@ -245,7 +245,7 @@ function Welcome(props: ModelPickerProps) {
   return (
     <div className="aui-welcome flex min-h-[calc(100svh-47px)] flex-col items-center justify-center px-4 text-center">
       <p className="m-0 text-[24px] font-semibold tracking-[-1px] text-foreground">
-        How can I help you today?
+        今天我能帮你做什么？
       </p>
       <div className="mt-6 w-full">
         <Composer {...props} />
@@ -307,7 +307,7 @@ export function AssistantThread({
               onModelChange={onModelChange}
             />
             <p className="mt-2 text-center text-xs text-muted-foreground">
-              Antler can make mistakes. Check important results.
+              Antler 可能出错，请核查重要结果。
             </p>
           </ThreadPrimitive.ViewportFooter>
         </AuiIf>

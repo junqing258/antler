@@ -179,8 +179,8 @@ export function ProjectDialog({
       >
         <aside className="flex flex-col border-b border-[#eee] bg-[#fafafa] p-4 sm:border-b-0 sm:border-r sm:p-5" aria-label="项目设置菜单">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="m-0 min-w-0 text-[#252525]" id="project-dialog-title">{project ? "Project settings" : "New project"}</h2>
-            <button className="grid size-[22.4px] shrink-0 place-items-center rounded-md border-0 bg-transparent text-[#777] hover:bg-[#eee] hover:text-[#222]" type="button" onClick={onClose} aria-label="Close">
+            <h2 className="m-0 min-w-0 text-[#252525]" id="project-dialog-title">{project ? "项目设置" : "新建项目"}</h2>
+            <button className="grid size-[22.4px] shrink-0 place-items-center rounded-md border-0 bg-transparent text-[#777] hover:bg-[#eee] hover:text-[#222]" type="button" onClick={onClose} aria-label="关闭">
               <XIcon className="size-[19.2px]" />
             </button>
           </div>
@@ -219,25 +219,25 @@ export function ProjectDialog({
             <form className="grid min-w-0 max-w-[560px] grid-cols-1 gap-5" onSubmit={submit}>
               <div className="border-b border-[#eee] pb-4">
                 <h3 className="m-0 text-lg">常规</h3>
-                <p className="m-0 mt-1 text-xs leading-6 text-[#777]">Conversations in this project use the same working directory.</p>
+                <p className="m-0 mt-1 text-xs leading-6 text-[#777]">此项目中的会话将使用相同的工作目录。</p>
               </div>
               <label className="grid min-w-0 grid-cols-1 gap-1.5 text-xs font-semibold text-[#4b4b4b]">
-                Project name
+                项目名称
                 <input className="h-10 w-full rounded-lg border border-[#ddd] px-[11px] text-[13px] font-normal text-[#222] outline-none focus:border-primary focus:ring-4 focus:ring-primary/15"
                   autoFocus
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  placeholder="My project"
+                  placeholder="我的项目"
                 />
               </label>
               <label className="grid min-w-0 grid-cols-1 gap-1.5 text-xs font-semibold text-[#4b4b4b]">
-                Working directory
+                工作目录
                 <DirectoryPicker value={workingDirectory} onChange={setWorkingDirectory} getServerInfo={getServerInfo} />
-                <small className="text-[11px] font-normal leading-6 text-[#888]">Choose a folder inside the server workspace, or use the server default.</small>
+                <small className="text-[11px] font-normal leading-6 text-[#888]">选择服务端工作区内的文件夹，或使用服务端默认目录。</small>
               </label>
               <div className="flex justify-end gap-2 border-t border-[#eee] pt-4">
-                <button className="h-9 rounded-[7px] border border-[#ddd] bg-white px-[13px] text-[13px] text-[#333] hover:bg-[#f6f6f6]" type="button" onClick={onClose}>Cancel</button>
-                <button className="h-9 rounded-[7px] border border-primary bg-primary px-[13px] text-[13px] text-white disabled:cursor-not-allowed disabled:opacity-45" type="submit" disabled={!name.trim()}>{project ? "Save" : "Create project"}</button>
+                <button className="h-9 rounded-[7px] border border-[#ddd] bg-white px-[13px] text-[13px] text-[#333] hover:bg-[#f6f6f6]" type="button" onClick={onClose}>取消</button>
+                <button className="h-9 rounded-[7px] border border-primary bg-primary px-[13px] text-[13px] text-white disabled:cursor-not-allowed disabled:opacity-45" type="submit" disabled={!name.trim()}>{project ? "保存" : "创建项目"}</button>
               </div>
             </form>
           </section>

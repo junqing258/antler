@@ -26,7 +26,7 @@ export function SettingsDialog({
   const [draft, setDraft] = useState(config);
   const [newModel, setNewModel] = useState("");
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
-  const [displayName, setDisplayName] = useState("User");
+  const [displayName, setDisplayName] = useState("用户");
   const update = (key: keyof ProviderConfig, value: string) =>
     setDraft((current) => ({ ...current, [key]: value }));
   const addModel = () => {

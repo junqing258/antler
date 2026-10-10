@@ -83,8 +83,8 @@ describe("New Thread", () => {
       .toHaveTextContent("configured-server-model"));
     const previousRenderCount = captured.initialMessages.length;
 
-    fireEvent.click(screen.getByRole("button", { name: "New Thread" }));
-    await screen.findByRole("heading", { name: "New Chat" });
+    fireEvent.click(screen.getByRole("button", { name: "新建会话" }));
+    await screen.findByRole("heading", { name: "新会话" });
 
     const newId = new URLSearchParams(window.location.search).get("conversationId")!;
     expect(newId).not.toBe("previous-thread");
@@ -100,9 +100,9 @@ describe("New Thread", () => {
     expect(document.querySelector('[data-active="true"]')).toHaveTextContent("Stock-Analysis");
 
     let previousId = newId;
-    for (const projectName of ["General", "Stock-Analysis"]) {
-      fireEvent.click(screen.getByRole("button", { name: `New Thread in ${projectName}` }));
-      await screen.findByRole("heading", { name: "New Chat" });
+    for (const projectName of ["默认项目", "Stock-Analysis"]) {
+      fireEvent.click(screen.getByRole("button", { name: `在 ${projectName} 中新建会话` }));
+      await screen.findByRole("heading", { name: "新会话" });
 
       const projectThreadId = new URLSearchParams(window.location.search).get("conversationId")!;
       expect(projectThreadId).not.toBe(previousId);
