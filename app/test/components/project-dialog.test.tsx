@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProjectDialog } from "@/components/project-dialog";
 
@@ -31,7 +31,7 @@ describe("ProjectDialog", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Project name" }), { target: { value: " Edited project " } });
     fireEvent.change(screen.getByRole("textbox", { name: "Working directory" }), { target: { value: " /workspace/new folder " } });
     fireEvent.click(screen.getByRole("tab", { name: "Skill" }));
-    await screen.findByText("当前项目暂无可用 Skill。");
+    await screen.findByText("暂无可用 Skill。");
     expect(fetch).toHaveBeenCalledWith("http://server/api/skills?workingDirectory=%2Fworkspace%2Fnew%20folder", {
       headers: { "x-antler-token": "test-token" }, signal: expect.any(AbortSignal),
     });
@@ -54,7 +54,7 @@ describe("ProjectDialog", () => {
           { id: "user:test", name: "User skill", description: "用户技能说明", scope: "user" },
           { id: "bundled:test", name: "Bundled skill", description: "内置技能说明", scope: "bundled" },
         ],
-        diagnostics: [{ code: "skill_invalid", name: "Invalid skill", message: "缺少描述" }],
+        diagnostics: [{ code: "skill_invalid", name: "Invalid skill", message: "缺少描述", scope: "workspace" }],
       }) });
     vi.stubGlobal("fetch", fetch);
     render(<ProjectDialog getServerInfo={getServerInfo} onSave={vi.fn()} onClose={vi.fn()} />);
@@ -63,9 +63,63 @@ describe("ProjectDialog", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("服务不可用");
     fireEvent.click(screen.getByRole("button", { name: "重试" }));
     await screen.findByText("项目技能说明");
-    for (const scope of ["项目", "用户", "内置"]) expect(screen.getByText(scope)).toBeVisible();
+    for (const scope of ["项目", "用户", "内置"]) expect(within(screen.getByRole("list")).getByText(scope)).toBeVisible();
     expect(screen.getByText("Invalid skill：缺少描述")).toBeVisible();
     expect(fetch).toHaveBeenLastCalledWith("http://server/api/skills", expect.any(Object));
+  });
+
+  it("filters project and global skills and diagnostics without refetching", async () => {
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({
+      skills: [
+        { id: "workspace:test", name: "Project skill", description: "项目技能", scope: "workspace" },
+        { id: "user:test", name: "User skill", description: "用户技能", scope: "user" },
+        { id: "bundled:test", name: "Bundled skill", description: "内置技能", scope: "bundled" },
+      ],
+      diagnostics: [
+        { code: "skill_invalid", message: "项目技能错误", scope: "workspace" },
+        { code: "skill_invalid", message: "用户技能错误", scope: "user" },
+        { code: "skill_invalid", message: "内置技能错误", scope: "bundled" },
+      ],
+    }) });
+    vi.stubGlobal("fetch", fetch);
+    render(<ProjectDialog project={project} getServerInfo={getServerInfo} onSave={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Skill" }));
+    await screen.findByRole("heading", { name: "Project skill" });
+    expect(screen.getByRole("tab", { name: "全部" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+
+    fireEvent.click(screen.getByRole("tab", { name: "项目" }));
+    expect(screen.getByRole("tabpanel", { name: "项目" })).toBeVisible();
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    expect(screen.getByRole("heading", { name: "Project skill" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "User skill" })).not.toBeInTheDocument();
+    expect(screen.getByText("项目技能错误")).toBeVisible();
+    expect(screen.queryByText("用户技能错误")).not.toBeInTheDocument();
+
+    fireEvent.keyDown(screen.getByRole("tab", { name: "项目" }), { key: "ArrowRight" });
+    expect(screen.getByRole("tab", { name: "全局" })).toHaveFocus();
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.queryByRole("heading", { name: "Project skill" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "User skill" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Bundled skill" })).toBeVisible();
+    expect(screen.queryByText("项目技能错误")).not.toBeInTheDocument();
+    expect(screen.getByText("用户技能错误")).toBeVisible();
+    expect(screen.getByText("内置技能错误")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("tab", { name: "全部" }));
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows an empty state for each scope", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ skills: [], diagnostics: [] }) }));
+    render(<ProjectDialog project={project} getServerInfo={getServerInfo} onSave={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Skill" }));
+    await screen.findByText("暂无可用 Skill。");
+    fireEvent.click(screen.getByRole("tab", { name: "项目" }));
+    expect(screen.getByText("当前项目暂无可用 Skill。")).toBeVisible();
+    fireEvent.click(screen.getByRole("tab", { name: "全局" }));
+    expect(screen.getByText("暂无可用的全局 Skill。")).toBeVisible();
   });
 
   it("keeps new project validation and supports keyboard tab navigation and dismissal", () => {

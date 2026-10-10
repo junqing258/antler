@@ -4,15 +4,17 @@ import { DirectoryPicker } from "@/components/directory-picker";
 import type { Project } from "@/lib/conversation-store";
 
 type ProjectTab = "general" | "skill" | "subagent";
+type SkillFilter = "workspace" | "global" | "all";
+type SkillScope = "workspace" | "user" | "bundled";
 type ServerInfo = { baseUrl: string; token: string };
 type SkillCatalog = {
   skills: {
     id: string;
     name: string;
     description: string;
-    scope: "workspace" | "user" | "bundled";
+    scope: SkillScope;
   }[];
-  diagnostics: { code: string; name?: string; message: string }[];
+  diagnostics: { code: string; name?: string; message: string; scope: SkillScope }[];
 };
 
 const tabs = [
@@ -21,6 +23,11 @@ const tabs = [
   { id: "subagent", label: "Subagent", icon: BotIcon },
 ] as const;
 const scopeLabels = { workspace: "项目", user: "用户", bundled: "内置" };
+const skillFilters = [
+  { id: "workspace", label: "项目", empty: "当前项目暂无可用 Skill。" },
+  { id: "global", label: "全局", empty: "暂无可用的全局 Skill。" },
+  { id: "all", label: "全部", empty: "暂无可用 Skill。" },
+] as const;
 
 function ProjectSkills({
   workingDirectory,
@@ -32,6 +39,7 @@ function ProjectSkills({
   const [catalog, setCatalog] = useState<SkillCatalog>();
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
+  const [filter, setFilter] = useState<SkillFilter>("all");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -61,43 +69,78 @@ function ProjectSkills({
     return () => controller.abort();
   }, [workingDirectory, getServerInfo, attempt]);
 
+  const matchesFilter = (scope: SkillScope) =>
+    filter === "all" || (filter === "global" ? scope !== "workspace" : scope === "workspace");
+  const skills = catalog?.skills.filter((skill) => matchesFilter(skill.scope)) ?? [];
+  const diagnostics = catalog?.diagnostics.filter((diagnostic) => matchesFilter(diagnostic.scope)) ?? [];
+
   return (
-    <div className="grid gap-4">
-      {!catalog && !error && <p className="m-0 text-xs text-[#777]" role="status">正在加载 Skill…</p>}
-      {error && (
-        <div className="grid gap-2 rounded-lg border border-[#f4d5d1] bg-[#fff8f7] p-4 text-xs text-[#b42318]">
-          <p className="m-0" role="alert">{error}</p>
-          <button className="justify-self-start border-0 bg-transparent p-0 text-primary" type="button" onClick={() => setAttempt((value) => value + 1)}>
-            重试
+    <div className="grid min-w-0 grid-cols-1 gap-4">
+      <div className="grid grid-cols-3 gap-1 rounded-lg border border-[#eee] bg-[#fafafa] p-1" role="tablist" aria-label="Skill 来源筛选">
+        {skillFilters.map(({ id, label }, index) => (
+          <button
+            key={id}
+            id={`skill-filter-${id}`}
+            type="button"
+            role="tab"
+            aria-selected={filter === id}
+            aria-controls="skill-filter-panel"
+            tabIndex={filter === id ? 0 : -1}
+            className={`rounded-md border-0 px-3 py-2 text-xs ${filter === id ? "bg-[#e8f3ef] font-semibold text-[#087d61]" : "bg-transparent text-[#555] hover:bg-[#f0f0f0]"}`}
+            onClick={() => setFilter(id)}
+            onKeyDown={(event) => {
+              let next = index;
+              if (event.key === "ArrowRight") next = (index + 1) % skillFilters.length;
+              else if (event.key === "ArrowLeft") next = (index + skillFilters.length - 1) % skillFilters.length;
+              else if (event.key === "Home") next = 0;
+              else if (event.key === "End") next = skillFilters.length - 1;
+              else return;
+              event.preventDefault();
+              setFilter(skillFilters[next].id);
+              document.getElementById(`skill-filter-${skillFilters[next].id}`)?.focus();
+            }}
+          >
+            {label}
           </button>
-        </div>
-      )}
-      {catalog?.skills.length === 0 && (
-        <p className="m-0 rounded-xl border border-dashed border-[#ddd] p-5 text-xs text-[#777]">当前项目暂无可用 Skill。</p>
-      )}
-      {catalog && catalog.skills.length > 0 && (
-        <ul className="m-0 grid list-none gap-3 p-0">
-          {catalog.skills.map((skill) => (
-            <li key={skill.id} className="rounded-xl border border-[#e8e8e8] p-4">
-              <div className="flex items-start justify-between gap-3">
-                <h4 className="m-0 min-w-0 break-words text-[13px] font-semibold text-[#333]">{skill.name}</h4>
-                <span className="shrink-0 rounded-md bg-[#f3f4f4] px-2 py-0.5 text-[11px] text-[#666]">{scopeLabels[skill.scope]}</span>
-              </div>
-              <p className="m-0 mt-2 whitespace-pre-wrap break-words text-xs leading-6 text-[#777]">{skill.description}</p>
-            </li>
-          ))}
-        </ul>
-      )}
-      {catalog && catalog.diagnostics.length > 0 && (
-        <div className="grid gap-2 rounded-lg border border-[#f0dfb6] bg-[#fffbf2] p-4" role="status">
-          <h4 className="m-0 text-xs font-semibold text-[#8a641b]">部分 Skill 无法加载</h4>
-          {catalog.diagnostics.map((diagnostic, index) => (
-            <p key={`${diagnostic.code}-${index}`} className="m-0 break-words text-xs leading-6 text-[#8a641b]">
-              {diagnostic.name ? `${diagnostic.name}：` : ""}{diagnostic.message}
-            </p>
-          ))}
-        </div>
-      )}
+        ))}
+      </div>
+      <div className="grid min-w-0 grid-cols-1 gap-4" role="tabpanel" id="skill-filter-panel" aria-labelledby={`skill-filter-${filter}`} tabIndex={0}>
+        {!catalog && !error && <p className="m-0 text-xs text-[#777]" role="status">正在加载 Skill…</p>}
+        {error && (
+          <div className="grid gap-2 rounded-lg border border-[#f4d5d1] bg-[#fff8f7] p-4 text-xs text-[#b42318]">
+            <p className="m-0" role="alert">{error}</p>
+            <button className="justify-self-start border-0 bg-transparent p-0 text-primary" type="button" onClick={() => setAttempt((value) => value + 1)}>
+              重试
+            </button>
+          </div>
+        )}
+        {catalog && skills.length === 0 && (
+          <p className="m-0 rounded-xl border border-dashed border-[#ddd] p-5 text-xs text-[#777]">{skillFilters.find((item) => item.id === filter)?.empty}</p>
+        )}
+        {catalog && skills.length > 0 && (
+          <ul className="m-0 grid min-w-0 grid-cols-1 list-none gap-3 p-0">
+            {skills.map((skill) => (
+              <li key={skill.id} className="rounded-xl border border-[#e8e8e8] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <h4 className="m-0 min-w-0 break-words text-[13px] font-semibold text-[#333]">{skill.name}</h4>
+                  <span className="shrink-0 rounded-md bg-[#f3f4f4] px-2 py-0.5 text-[11px] text-[#666]">{scopeLabels[skill.scope]}</span>
+                </div>
+                <p className="m-0 mt-2 whitespace-pre-wrap break-words text-xs leading-6 text-[#777]">{skill.description}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+        {catalog && diagnostics.length > 0 && (
+          <div className="grid gap-2 rounded-lg border border-[#f0dfb6] bg-[#fffbf2] p-4" role="status">
+            <h4 className="m-0 text-xs font-semibold text-[#8a641b]">部分 Skill 无法加载</h4>
+            {diagnostics.map((diagnostic, index) => (
+              <p key={`${diagnostic.code}-${index}`} className="m-0 break-words text-xs leading-6 text-[#8a641b]">
+                {diagnostic.name ? `${diagnostic.name}：` : ""}{diagnostic.message}
+              </p>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
