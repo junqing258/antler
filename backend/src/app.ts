@@ -3,6 +3,10 @@ import fastifyCompress from "@fastify/compress";
 import fastifyStatic from "@fastify/static";
 import type { AppConfig } from "./config/env.js";
 import { registerHttpHooks } from "./plugins/http.js";
+import {
+  createRequestId,
+  registerRequestLogging,
+} from "./plugins/request-logging.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerTaskRoutes } from "./routes/tasks.js";
 import { TaskService } from "./services/task-service.js";
@@ -24,7 +28,8 @@ import { RagConfigStore } from "./config/rag-config.js";
 export function createApp(config: AppConfig) {
   mkdirSync(config.workspaceRoot, { recursive: true });
   const ragConfig = new RagConfigStore(config, config.workspaceRoot);
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, genReqId: createRequestId });
+  registerRequestLogging(app);
   registerDatabase(app, config.databaseUrl);
   const adapters = new Map<string, PiAgentAdapter>();
   const createAdapter = (
