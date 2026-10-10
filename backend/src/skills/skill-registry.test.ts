@@ -1,4 +1,10 @@
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -79,6 +85,112 @@ describe("SkillRegistry fingerprints", () => {
         tool.execute("changed", { skillId: "example", path: "reference.md" }),
       ).rejects.toThrow("skill_snapshot_changed");
     }
+  });
+});
+
+describe("SkillRegistry metadata and ignore rules", () => {
+  it.each([".gitignore", ".ignore", ".fdignore"])(
+    "honors %s and negated rules",
+    async (name) => {
+      const { file } = await setupSkill();
+      const directory = join(file, "..");
+      const root = join(directory, "../../..");
+      const registry = new SkillRegistry(
+        join(root, "users"),
+        join(root, "bundled"),
+      );
+      await writeFile(join(directory, name), "SKILL.md\n");
+      expect((await registry.list(root)).skills).toEqual([]);
+      await writeFile(join(directory, name), "*.md\n!SKILL.md\n");
+      expect((await registry.list(root)).skills.map((s) => s.id)).toEqual([
+        "example",
+      ]);
+    },
+  );
+
+  it.each([
+    "---\nname: example\n---\nBody",
+    "---\nname: example\ndescription: 123\n---\nBody",
+    `---\nname: example\ndescription: ${"x".repeat(1025)}\n---\nBody`,
+    "---\n- not-a-mapping\n---\nBody",
+  ])("diagnoses invalid metadata without registering a skill", async (raw) => {
+    const { file } = await setupSkill();
+    const root = join(file, "../../../..");
+    await writeFile(file, raw);
+    const catalog = await new SkillRegistry(
+      join(root, "users"),
+      join(root, "bundled"),
+    ).list(root);
+    expect(catalog.skills).toEqual([]);
+    expect(catalog.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "skill_invalid" }),
+    );
+  });
+});
+
+describe("SkillRegistry loading boundaries", () => {
+  it("rejects oversized skill files", async () => {
+    const { file } = await setupSkill();
+    const root = join(file, "../../../..");
+    await writeFile(file, content + "x".repeat(64 * 1024));
+    const catalog = await new SkillRegistry(
+      join(root, "users"),
+      join(root, "bundled"),
+    ).list(root);
+    expect(catalog.skills).toEqual([]);
+    expect(catalog.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "skill_too_large" }),
+    );
+  });
+
+  it("does not load symlinked directories or SKILL.md files escaping their directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "antler-skill-boundary-"));
+    temporaryDirectories.push(root);
+    const skillsRoot = join(root, ".agents", "skills");
+    const outside = join(root, "outside", "example");
+    await mkdir(outside, { recursive: true });
+    await mkdir(skillsRoot, { recursive: true });
+    await writeFile(join(outside, "SKILL.md"), content);
+    await symlink(outside, join(skillsRoot, "example"));
+    const registry = new SkillRegistry(
+      join(root, "users"),
+      join(root, "bundled"),
+    );
+    expect((await registry.list(root)).skills).toEqual([]);
+    await rm(join(skillsRoot, "example"));
+    await mkdir(join(skillsRoot, "example"));
+    await symlink(
+      join(outside, "SKILL.md"),
+      join(skillsRoot, "example", "SKILL.md"),
+    );
+    const catalog = await registry.list(root);
+    expect(catalog.skills).toEqual([]);
+    expect(catalog.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "skill_invalid" }),
+    );
+  });
+
+  it("rejects secret aliases during discovery and escaped resources during tool execution", async () => {
+    const { file, tools } = await setupSkill();
+    const directory = join(file, "..");
+    const root = join(directory, "../../..");
+    await writeFile(join(root, "outside.md"), "Outside content.");
+    await symlink(join(root, "outside.md"), join(directory, "escape.md"));
+    await expect(
+      tools[1].execute("read", { skillId: "example", path: "escape.md" }),
+    ).rejects.toThrow("skill_path_escape");
+    await writeFile(join(directory, ".env"), content);
+    await rm(file);
+    await symlink(join(directory, ".env"), file);
+    const catalog = await new SkillRegistry(
+      join(root, "users"),
+      join(root, "bundled"),
+    ).list(root);
+    expect(catalog.skills).toEqual([]);
+    expect(catalog.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "skill_invalid" }),
+    );
+    expect(JSON.stringify(catalog)).not.toContain("# Instructions");
   });
 });
 

@@ -1,9 +1,7 @@
 import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, resolve, sep } from "node:path";
-import {
-  formatSkillInvocation,
-  type AgentTool,
-} from "@earendil-works/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
+import { formatSkillInvocation } from "./skill-loader.js";
 import { Type } from "typebox";
 import type { LoadedSkill, SkillSnapshot } from "./types.js";
 import { assertSafeFilePath, SecretGuard } from "../agent/secret-guard.js";

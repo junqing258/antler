@@ -1,16 +1,11 @@
 import { createHash } from "node:crypto";
-import { lstat, readFile, readdir, realpath, stat } from "node:fs/promises";
+import { lstat, open, readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { basename, join, relative, resolve, sep } from "node:path";
-import {
-  FileError,
-  err,
-  loadSourcedSkills,
-  ok,
-  type ExecutionEnv,
-  type FileInfo,
-} from "@earendil-works/pi-agent-core";
+import { basename, join, sep } from "node:path";
+import ignore from "ignore";
+import { parseSkill, SkillMetadataError } from "./skill-loader.js";
+import { assertSafeFilePath } from "../agent/secret-guard.js";
 import type { LoadedSkill, SkillDiagnostic, SkillScope } from "./types.js";
 
 const MAX_SKILLS = 100,
@@ -19,146 +14,35 @@ const contained = (root: string, path: string) =>
   path === root || path.startsWith(`${root}${sep}`);
 const digest = (text: string) =>
   `sha256:${createHash("sha256").update(text).digest("hex")}`;
-const failure = (path: string, error: unknown) =>
-  err(
-    new FileError(
-      (error as NodeJS.ErrnoException).code === "ENOENT"
-        ? "not_found"
-        : "unknown",
-      "Skill file operation failed.",
-      path,
-    ),
-  );
+class SkillFileTooLargeError extends Error {}
 
-class RestrictedSkillExecutionEnv {
-  constructor(
-    readonly cwd: string,
-    private readonly roots: string[],
-  ) {}
-  private async path(path: string) {
-    const actual = await realpath(path);
-    if (!this.roots.some((root) => contained(root, actual)))
-      throw new Error("outside skill roots");
-    return actual;
-  }
-  async absolutePath(path: string) {
-    try {
-      return ok(resolve(this.cwd, path));
-    } catch (e) {
-      return failure(path, e);
-    }
-  }
-  async joinPath(parts: string[]) {
-    return this.absolutePath(join(...parts));
-  }
-  async fileInfo(path: string) {
-    try {
-      const info = await lstat(path);
-      return ok({
-        name: basename(path),
-        path: resolve(path),
-        kind: info.isSymbolicLink()
-          ? "symlink"
-          : info.isDirectory()
-            ? "directory"
-            : "file",
-        size: info.size,
-        mtimeMs: info.mtimeMs,
-      } satisfies FileInfo);
-    } catch (e) {
-      return failure(path, e);
-    }
-  }
-  async listDir(path: string) {
-    try {
-      return ok(
-        await Promise.all(
-          (await readdir(path)).map(async (name) =>
-            (await this.fileInfo(join(path, name))).ok
-              ? ((await this.fileInfo(join(path, name))) as any).value
-              : undefined,
-          ),
-        ).then((xs) => xs.filter(Boolean) as FileInfo[]),
+async function readSkillFile(path: string, directory: string): Promise<string> {
+  assertSafeFilePath(path);
+  const actual = await realpath(path);
+  assertSafeFilePath(actual);
+  if (!contained(directory, actual)) throw new Error("skill_path_escape");
+  const file = await open(actual, "r");
+  try {
+    const info = await file.stat();
+    if (!info.isFile()) throw new Error("skill_path_escape");
+    if (info.size > MAX_SKILL_BYTES) throw new SkillFileTooLargeError();
+    // Bound the read even if the file grows after stat; hash exactly what was parsed.
+    const buffer = Buffer.alloc(MAX_SKILL_BYTES + 1);
+    let length = 0;
+    while (length < buffer.length) {
+      const { bytesRead } = await file.read(
+        buffer,
+        length,
+        buffer.length - length,
+        null,
       );
-    } catch (e) {
-      return failure(path, e);
+      if (!bytesRead) break;
+      length += bytesRead;
     }
-  }
-  async canonicalPath(path: string) {
-    try {
-      return ok(await this.path(path));
-    } catch (e) {
-      return failure(path, e);
-    }
-  }
-  async readTextFile(path: string) {
-    try {
-      const actual = await this.path(path);
-      const info = await stat(actual);
-      if (!info.isFile() || info.size > MAX_SKILL_BYTES)
-        throw new Error("invalid skill file");
-      return ok(
-        await (await import("node:fs/promises")).readFile(actual, "utf8"),
-      );
-    } catch (e) {
-      return failure(path, e);
-    }
-  }
-  async readTextLines(path: string, options?: { maxLines?: number }) {
-    const r: any = await this.readTextFile(path);
-    return r.ok
-      ? ok((r.value as string).split(/\r?\n/).slice(0, options?.maxLines))
-      : r;
-  }
-  async readBinaryFile(path: string) {
-    const r: any = await this.readTextFile(path);
-    return r.ok ? ok(new TextEncoder().encode(r.value as string)) : r;
-  }
-  async exists(path: string) {
-    const r: any = await this.fileInfo(path);
-    return r.ok ? ok(true) : r.error.code === "not_found" ? ok(false) : r;
-  }
-  async writeFile(path: string) {
-    return err(
-      new FileError("not_supported", "Skill environment is read-only.", path),
-    );
-  }
-  async appendFile(path: string) {
-    return err(
-      new FileError("not_supported", "Skill environment is read-only.", path),
-    );
-  }
-  async renameFile(path: string) {
-    return err(
-      new FileError("not_supported", "Skill environment is read-only.", path),
-    );
-  }
-  async createDir(path: string) {
-    return err(
-      new FileError("not_supported", "Skill environment is read-only.", path),
-    );
-  }
-  async remove(path: string) {
-    return err(
-      new FileError("not_supported", "Skill environment is read-only.", path),
-    );
-  }
-  async createTempDir() {
-    return err(
-      new FileError("not_supported", "Skill environment is read-only."),
-    );
-  }
-  async createTempFile() {
-    return err(
-      new FileError("not_supported", "Skill environment is read-only."),
-    );
-  }
-  async cleanup() {}
-  async exec() {
-    return err({
-      code: "shell_unavailable",
-      message: "Skill environment has no shell.",
-    } as any);
+    if (length > MAX_SKILL_BYTES) throw new SkillFileTooLargeError();
+    return buffer.subarray(0, length).toString("utf8");
+  } finally {
+    await file.close();
   }
 }
 
@@ -185,10 +69,6 @@ export class SkillRegistry {
         ...item,
         root: await realpath(item.root).catch(() => item.root),
       })),
-    );
-    const env = new RestrictedSkillExecutionEnv(
-      workspaceRoot ?? this.agentsDir,
-      realRoots.map((x) => x.root),
     );
     const diagnostics: SkillDiagnostic[] = [];
     const all: LoadedSkill[] = [];
@@ -217,55 +97,65 @@ export class SkillRegistry {
           }
         }),
       );
-      const result = await loadSourcedSkills(
-        env as unknown as ExecutionEnv,
-        dirs.filter(Boolean).map((path) => ({ path: path!, source })),
-      );
-      for (const item of result.skills) {
-        const dir = resolve(item.skill.filePath, "..");
-        if (
-          basename(item.skill.filePath) !== "SKILL.md" ||
-          !dirs.includes(dir) ||
-          item.skill.disableModelInvocation
-        )
-          continue;
-        const invalid = result.diagnostics.some(
-          (d) =>
-            d.path === item.skill.filePath && d.code === "invalid_metadata",
-        );
-        if (invalid) {
-          diagnostics.push({
-            code: "skill_invalid",
+      for (const directory of dirs) {
+        if (!directory) continue;
+        try {
+          const actualDirectory = await realpath(directory);
+          if (!contained(source.root, actualDirectory))
+            throw new Error("skill_path_escape");
+          const filePath = join(directory, "SKILL.md");
+          // Missing SKILL.md and explicitly ignored skills are not candidates.
+          try {
+            await lstat(filePath);
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+            throw error;
+          }
+          const matcher = ignore();
+          for (const name of [".gitignore", ".ignore", ".fdignore"]) {
+            const ignorePath = join(directory, name);
+            try {
+              // The previous loader only read regular ignore files.
+              if (!(await lstat(ignorePath)).isFile()) continue;
+              matcher.add(await readSkillFile(ignorePath, actualDirectory));
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+                diagnostics.push({
+                  code: "skill_invalid",
+                  scope: source.scope,
+                  message: "Skill 忽略规则无法读取。",
+                });
+              }
+            }
+          }
+          if (matcher.ignores("SKILL.md")) continue;
+          const raw = await readSkillFile(filePath, actualDirectory);
+          const skill = parseSkill(raw, basename(directory), filePath);
+          if (skill.disableModelInvocation) continue;
+          all.push({
+            id: skill.name,
+            skill,
             scope: source.scope,
-            message: "Skill 元数据无效。",
+            directory: actualDirectory,
+            modelUri: `skill://${skill.name}/SKILL.md`,
+            fingerprint: digest(raw),
           });
-          continue;
-        }
-        if (Buffer.byteLength(item.skill.content) > MAX_SKILL_BYTES) {
+        } catch (error) {
           diagnostics.push({
-            code: "skill_too_large",
-            name: item.skill.name,
+            code:
+              error instanceof SkillFileTooLargeError
+                ? "skill_too_large"
+                : "skill_invalid",
             scope: source.scope,
-            message: "SKILL.md 超过大小限制。",
+            message:
+              error instanceof SkillFileTooLargeError
+                ? "Skill 文件超过大小限制。"
+                : error instanceof SkillMetadataError
+                  ? "Skill 元数据无效。"
+                  : "Skill 无法解析。",
           });
-          continue;
         }
-        all.push({
-          id: item.skill.name,
-          skill: item.skill,
-          scope: source.scope,
-          directory: await realpath(dir),
-          modelUri: `skill://${item.skill.name}/SKILL.md`,
-          fingerprint: digest(await readFile(item.skill.filePath, "utf8")),
-        });
       }
-      for (const diagnostic of result.diagnostics)
-        if (diagnostic.code !== "invalid_metadata")
-          diagnostics.push({
-            code: "skill_invalid",
-            scope: source.scope,
-            message: "Skill 无法解析。",
-          });
     }
     const byId = new Map<string, LoadedSkill>();
     // Workspace and user skills override bundled defaults; first writer is active.
