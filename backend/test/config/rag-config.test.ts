@@ -2,8 +2,8 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { RagConfigStore } from "./rag-config.js";
-import { createWorkspaceTools } from "../agent/workspace-tools.js";
+import { RagConfigStore } from "../../src/config/rag-config.js";
+import { createWorkspaceTools } from "../../src/agent/workspace-tools.js";
 
 const roots: string[] = [];
 afterEach(async () => {

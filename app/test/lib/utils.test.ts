@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { cn, createUuid } from "./utils";
+import { cn, createUuid } from "../../src/lib/utils";
 
 describe("cn", () => {
   it("merges conflicting Tailwind classes and ignores falsy values", () => {

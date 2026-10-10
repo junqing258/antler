@@ -5,7 +5,7 @@ import {
   DEFAULT_PROJECT_ID,
   getConversation,
   saveConversationMessages,
-} from "./conversation-store";
+} from "../../src/lib/conversation-store";
 
 const projectId = "workspace:Stock-Analysis";
 const messages: ThreadMessageLike[] = [{ role: "user", content: "分析股票" }];

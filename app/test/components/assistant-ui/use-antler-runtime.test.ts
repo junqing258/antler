@@ -2,7 +2,7 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { saveConversationMessages } from "@/lib/conversation-store";
 import { loadProviderConfig } from "@/lib/provider-config";
-import { useAntlerRuntime } from "./use-antler-runtime";
+import { useAntlerRuntime } from "../../../src/components/assistant-ui/use-antler-runtime";
 
 const { runtime, subscribe } = vi.hoisted(() => {
   const subscribe = vi.fn();

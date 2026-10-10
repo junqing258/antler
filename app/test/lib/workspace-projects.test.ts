@@ -6,7 +6,7 @@ import {
   updateProject,
   updateProjectKnowledgePolicy,
 } from "@/lib/conversation-store";
-import { initializeWorkspaceProjects } from "./workspace-projects";
+import { initializeWorkspaceProjects } from "../../src/lib/workspace-projects";
 
 const workingDirectory = "/srv/antler/workspace/Stock-Analysis";
 const getServerInfo = async () => ({

@@ -15,11 +15,11 @@ import {
 import {
   PiAgentAdapter,
   type PiAgentAdapterConfig,
-} from "./pi-agent-adapter.js";
-import { SkillRegistry } from "../skills/skill-registry.js";
-import { createSkillSnapshot } from "../skills/skill-policy.js";
-import { DISABLED_SKILL_SNAPSHOT } from "../skills/types.js";
-import { REDACTED } from "./secret-guard.js";
+} from "../../src/agent/pi-agent-adapter.js";
+import { SkillRegistry } from "../../src/skills/skill-registry.js";
+import { createSkillSnapshot } from "../../src/skills/skill-policy.js";
+import { DISABLED_SKILL_SNAPSHOT } from "../../src/skills/types.js";
+import { REDACTED } from "../../src/agent/secret-guard.js";
 
 const streams = vi.hoisted(() => ({
   openai: vi.fn<StreamFn>(),

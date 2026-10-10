@@ -13,7 +13,7 @@ describe("backend workspace configuration", () => {
   it("resolves the default workspace from the project root", async () => {
     vi.stubEnv("ANTLER_WORKSPACE_ROOT", undefined);
 
-    const { config } = await import("./env.js");
+    const { config } = await import("../../src/config/env.js");
 
     expect(config.workspaceRoot).toBe(resolve(projectRoot, "workspace"));
   });
@@ -21,7 +21,7 @@ describe("backend workspace configuration", () => {
   it("resolves a relative ANTLER_WORKSPACE_ROOT from the project root", async () => {
     vi.stubEnv("ANTLER_WORKSPACE_ROOT", "./custom-workspace");
 
-    const { config } = await import("./env.js");
+    const { config } = await import("../../src/config/env.js");
 
     expect(config.workspaceRoot).toBe(resolve(projectRoot, "custom-workspace"));
   });
@@ -29,7 +29,7 @@ describe("backend workspace configuration", () => {
   it("reads the default RAG URL and key from the backend environment", async () => {
     vi.stubEnv("ANTLER_RAG_URL", "https://rag.example.com");
     vi.stubEnv("ANTLER_RAG_KEY", "test-rag-key");
-    const { config } = await import("./env.js");
+    const { config } = await import("../../src/config/env.js");
     expect(config.ragUrl).toBe("https://rag.example.com");
     expect(config.ragKey).toBe("test-rag-key");
   });

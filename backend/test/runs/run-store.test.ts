@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createDatabase } from "../plugins/database.js";
-import { PrismaRunStore } from "./run-store.js";
+import { createDatabase } from "../../src/plugins/database.js";
+import { PrismaRunStore } from "../../src/runs/run-store.js";
 
 describe("PrismaRunStore", () => {
   const clients: ReturnType<typeof createDatabase>[] = [];

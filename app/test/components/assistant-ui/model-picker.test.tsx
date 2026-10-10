@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ModelPicker } from "./thread";
+import { ModelPicker } from "../../../src/components/assistant-ui/thread";
 
 describe("ModelPicker", () => {
   it.each(["", "server-model"])("shows server defaults without offering ineffective selections: %j", (model) => {

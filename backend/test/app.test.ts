@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
-import { createApp } from "./app.js";
+import { createApp } from "../src/app.js";
 
 const temporaryDirectories: string[] = [];
 

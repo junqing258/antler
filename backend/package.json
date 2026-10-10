@@ -7,7 +7,7 @@
     "predev": "pnpm db:generate && node --import tsx scripts/prepare-dev-db.ts",
     "dev": "tsx watch src/index.ts",
     "prebuild": "pnpm db:generate",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "precheck": "pnpm db:generate",
     "check": "tsc --noEmit",

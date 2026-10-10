@@ -23,7 +23,7 @@ Use strict TypeScript, ES modules, two-space indentation, semicolons, and traili
 
 ## Testing Guidelines
 
-Vitest is used throughout; frontend tests use jsdom and Testing Library, while backend tests use Node. Co-locate tests with source as `*.test.ts` or `*.test.tsx`. Add regression coverage for behavior changes, especially routes, run transitions, persistence, and UI interactions. No coverage threshold is enforced; avoid reducing meaningful coverage.
+Vitest is used throughout; frontend tests use jsdom and Testing Library, while backend tests use Node. Tests live in the package's `test/` directory (`app/test/`, `backend/test/`), mirroring the `src/` directory layout as `*.test.ts` or `*.test.tsx`. Add regression coverage for behavior changes, especially routes, run transitions, persistence, and UI interactions. No coverage threshold is enforced; avoid reducing meaningful coverage.
 
 ## Commit & Pull Request Guidelines
 

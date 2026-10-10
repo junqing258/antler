@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { AntlerHostRuntime } from "./host-runtime.js";
-import type { PiAgentAdapter } from "./pi-agent-adapter.js";
-import type { RunStore } from "../runs/run-store.js";
+import { AntlerHostRuntime } from "../../src/agent/host-runtime.js";
+import type { PiAgentAdapter } from "../../src/agent/pi-agent-adapter.js";
+import type { RunStore } from "../../src/runs/run-store.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { SkillRegistry } from "../skills/skill-registry.js";
+import { SkillRegistry } from "../../src/skills/skill-registry.js";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
-import type { RunEvent } from "./events.js";
-import { REDACTED } from "./secret-guard.js";
+import type { RunEvent } from "../../src/agent/events.js";
+import { REDACTED } from "../../src/agent/secret-guard.js";
 
 describe("AntlerHostRuntime knowledge contract", () => {
   it("makes bundled skills available to a Web run by default", async () => {

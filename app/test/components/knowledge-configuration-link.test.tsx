@@ -6,7 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { KnowledgeConfigurationLink } from "./knowledge-configuration-link";
+import { KnowledgeConfigurationLink } from "../../src/components/knowledge-configuration-link";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 vi.mock("@tauri-apps/plugin-opener", () => ({

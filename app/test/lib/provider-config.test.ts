@@ -5,7 +5,7 @@ import {
   PROVIDER_CONFIG_STORAGE_KEY,
   saveProviderConfig,
   type ProviderConfig,
-} from "./provider-config";
+} from "../../src/lib/provider-config";
 
 const config: ProviderConfig = {
   name: "Test provider",

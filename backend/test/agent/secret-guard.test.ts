@@ -2,8 +2,8 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { REDACTED, SecretGuard } from "./secret-guard.js";
-import * as protectedEnv from "../config/protected-env.js";
+import { REDACTED, SecretGuard } from "../../src/agent/secret-guard.js";
+import * as protectedEnv from "../../src/config/protected-env.js";
 
 const roots: string[] = [];
 afterEach(async () => {

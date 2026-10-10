@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import { describe, expect, it, vi } from "vitest";
-import type { AntlerHostRuntime, Run } from "../agent/host-runtime.js";
-import { registerRunRoutes } from "./runs.js";
+import type { AntlerHostRuntime, Run } from "../../src/agent/host-runtime.js";
+import { registerRunRoutes } from "../../src/routes/runs.js";
 
 function testRuntime() {
   const run: Run = {

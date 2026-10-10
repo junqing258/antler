@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import Fastify from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
-import { registerDirectoryRoutes } from "./directories.js";
+import { registerDirectoryRoutes } from "../../src/routes/directories.js";
 
 const temporaryDirectories: string[] = [];
 

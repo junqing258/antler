@@ -8,11 +8,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createSkillSnapshot } from "./skill-policy.js";
-import { SkillRegistry } from "./skill-registry.js";
-import { createSkillTools } from "./skill-tools.js";
-import { createWorkspaceTools } from "../agent/workspace-tools.js";
-import { composeSkillPrompt } from "./skill-prompt.js";
+import { createSkillSnapshot } from "../../src/skills/skill-policy.js";
+import { SkillRegistry } from "../../src/skills/skill-registry.js";
+import { createSkillTools } from "../../src/skills/skill-tools.js";
+import { createWorkspaceTools } from "../../src/agent/workspace-tools.js";
+import { composeSkillPrompt } from "../../src/skills/skill-prompt.js";
 
 const temporaryDirectories: string[] = [];
 const content =

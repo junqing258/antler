@@ -77,7 +77,7 @@ describe("New Thread", () => {
     root.id = "root";
     document.body.append(root);
 
-    await act(async () => { await import("./main"); });
+    await act(async () => { await import("../src/main"); });
     await screen.findByRole("heading", { name: "上一条会话标题" });
     await waitFor(() => expect(screen.getByTestId("current-model"))
       .toHaveTextContent("configured-server-model"));

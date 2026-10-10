@@ -9,8 +9,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createWorkspaceTools } from "./workspace-tools.js";
-import { REDACTED } from "./secret-guard.js";
+import { createWorkspaceTools } from "../../src/agent/workspace-tools.js";
+import { REDACTED } from "../../src/agent/secret-guard.js";
 
 const roots: string[] = [];
 afterEach(async () => {
