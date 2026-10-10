@@ -54,7 +54,12 @@ import argparse
 import re
 import threading
 import warnings
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import contextlib
+import importlib.util
+import math
+import multiprocessing
+import tempfile
+import time
 from datetime import datetime, timedelta
 
 warnings.filterwarnings("ignore")
@@ -130,6 +135,10 @@ def is_trading_day(check_date=None):
     """
     if check_date is None:
         check_date = datetime.now().date()
+
+    # CN exchanges remain closed on weekends, including make-up workdays.
+    if check_date.weekday() >= 5:
+        return False
 
     # Try chinese_calendar first (most reliable for CN market)
     if _check_chinese_calendar():
@@ -224,8 +233,7 @@ def get_trading_day_status(check_date=None):
         "weekday_name": weekday_names[check_date.weekday()],
         "last_trading_day": get_last_trading_day(
             check_date - timedelta(days=1)).isoformat(),
-        "next_trading_day": get_next_trading_day(
-            check_date + timedelta(days=1)).isoformat(),
+        "next_trading_day": get_next_trading_day(check_date).isoformat(),
     }
 
 
@@ -1099,14 +1107,22 @@ def fetch_us_index(ticker: str, days: int) -> dict:
 # SECTION 2.5: News Search (optional, with graceful degradation)
 # ============================================================
 
-def search_news(stock_name: str, code: str, max_results: int = 5) -> list:
+def search_news(stock_name: str, code: str, max_results: int = 5,
+                diagnostics: dict = None) -> list:
     """
     Search news with priority: Tavily > SerpAPI > empty (let web_search).
     Returns list of {"title": ..., "content": ..., "url": ..., "date": ...}
     """
+    diagnostics = diagnostics if diagnostics is not None else {}
+    diagnostics.update(status="fallback_required", fallback="web_search", attempts=[])
+    attempts = diagnostics["attempts"]
     # Priority 0: Tavily
     tavily_key = os.environ.get("TAVILY_API_KEY")
-    if tavily_key:
+    if not tavily_key:
+        attempts.append({"provider": "tavily", "reason": "missing_api_key"})
+    elif not _check_source("tavily"):
+        attempts.append({"provider": "tavily", "reason": "not_installed"})
+    else:
         try:
             from tavily import TavilyClient
             client = TavilyClient(api_key=tavily_key)
@@ -1121,14 +1137,21 @@ def search_news(stock_name: str, code: str, max_results: int = 5) -> list:
                     "source": "tavily",
                 })
             if results:
+                diagnostics.update(status="ok", source="tavily", fallback=None)
                 _log(f"[{code}] News via Tavily ({len(results)} results)")
                 return results
+            attempts.append({"provider": "tavily", "reason": "empty_results"})
         except Exception as e:
-            _log(f"[{code}] Tavily failed: {e}")
+            attempts.append({"provider": "tavily", "reason": "request_failed", "type": type(e).__name__})
+            _log(f"[{code}] Tavily failed ({type(e).__name__})")
 
     # Priority 1: SerpAPI
     serpapi_key = os.environ.get("SERPAPI_KEY")
-    if serpapi_key:
+    if not serpapi_key:
+        attempts.append({"provider": "serpapi", "reason": "missing_api_key"})
+    elif not _check_source("serpapi"):
+        attempts.append({"provider": "serpapi", "reason": "not_installed"})
+    else:
         try:
             from serpapi import GoogleSearch
             params = {
@@ -1147,13 +1170,15 @@ def search_news(stock_name: str, code: str, max_results: int = 5) -> list:
                     "source": "serpapi",
                 })
             if results:
+                diagnostics.update(status="ok", source="serpapi", fallback=None)
                 _log(f"[{code}] News via SerpAPI ({len(results)} results)")
                 return results
+            attempts.append({"provider": "serpapi", "reason": "empty_results"})
         except Exception as e:
-            _log(f"[{code}] SerpAPI failed: {e}")
+            attempts.append({"provider": "serpapi", "reason": "request_failed", "type": type(e).__name__})
+            _log(f"[{code}] SerpAPI failed ({type(e).__name__})")
 
-    # No API keys configured — return empty, let Claude use WebSearch
-    _log(f"[{code}] No news API configured, skipping (Claude will use WebSearch)")
+    _log(f"[{code}] News unavailable: {json.dumps(attempts)}; use Antler web_search")
     return []
 
 
@@ -1690,9 +1715,10 @@ def analyze_stock(code: str, days: int = 120, fetch_news: bool = False) -> dict:
 
     # News search (optional)
     news = []
+    news_status = {"status": "not_requested", "fallback": None}
     if fetch_news:
         stock_name = raw.get("name", display)
-        news = search_news(stock_name, display)
+        news = search_news(stock_name, display, diagnostics=news_status)
 
     result = {
         "code": display,
@@ -1714,6 +1740,8 @@ def analyze_stock(code: str, days: int = 120, fetch_news: bool = False) -> dict:
         "recent_bars": ohlcv[-10:],
         "total_bars": len(ohlcv),
         "fetch_time": datetime.now().isoformat(),
+        "news": news,
+        "news_status": news_status,
     }
 
     # Fund-specific extras
@@ -1741,8 +1769,6 @@ def analyze_stock(code: str, days: int = 120, fetch_news: bool = False) -> dict:
             pass
         if warnings:
             result["warnings"] = warnings
-    if news:
-        result["news"] = news
     return result
 
 
@@ -1802,6 +1828,161 @@ def persist_signals(results: list, signal_file: str, analysis_date: str) -> int:
     return lines
 
 
+def write_checkpoint(path: str, output: dict):
+    """Replace a complete JSON snapshot atomically, including during a batch."""
+    if not path:
+        return
+    directory = os.path.dirname(os.path.abspath(path))
+    os.makedirs(directory, exist_ok=True)
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8",
+                                         dir=directory, delete=False) as handle:
+            temp_path = handle.name
+            json.dump(output, handle, ensure_ascii=False, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
+
+
+def _analysis_worker(connection, code, days, fetch_news):
+    """Send price analysis before starting optional news; isolate blocking SDKs."""
+    try:
+        # Some data libraries print progress to stdout. Keep JSON stdout clean.
+        with contextlib.redirect_stdout(sys.stderr):
+            result = analyze_stock(code, days, fetch_news=False)
+            if fetch_news:
+                result["news_status"] = {"status": "pending", "fallback": "web_search"}
+            connection.send(("result", result))
+            if fetch_news:
+                result["news"] = search_news(result["name"], result["code"],
+                                             diagnostics=result["news_status"])
+                connection.send(("result", result))
+            connection.send(("done", None))
+    except Exception as error:
+        connection.send(("error", {"code": code, "error": str(error),
+                                    "type": type(error).__name__}))
+    finally:
+        connection.close()
+
+
+def _stop_worker(process):
+    if process.is_alive():
+        process.terminate()
+    process.join(timeout=0.2)
+    if process.is_alive():
+        process.kill()
+        process.join(timeout=0.2)
+
+
+def run_batch(codes, days, fetch_news, output, output_path=None,
+              workers=3, stock_timeout=35, batch_timeout=45,
+              worker_target=_analysis_worker, context=None):
+    """Bound wall time with killable processes and checkpoint every received result."""
+    context = context or multiprocessing.get_context("spawn")
+    deadline = time.monotonic() + batch_timeout
+    queue = list(enumerate(codes))
+    active = {}
+    completed = set()
+    results = {}
+
+    def checkpoint():
+        output["stocks"] = [results[index] for index in sorted(results)]
+        output["total_success"] = len(results)
+        output["pending_codes"] = [code for index, code in enumerate(codes)
+                                   if index not in completed]
+        write_checkpoint(output_path, output)
+
+    def finish(index, error=None):
+        process, connection, _, code = active.pop(index)
+        _stop_worker(process)
+        connection.close()
+        completed.add(index)
+        if error:
+            if index in results and fetch_news:
+                results[index]["news_status"] = {
+                    "status": "fallback_required", "fallback": "web_search",
+                    "attempts": [{"provider": "news", "reason": error["type"]}],
+                }
+            output["errors"].append(error)
+            _log(f"[{code}] {error['type']}: {error['error']}")
+        checkpoint()
+
+    checkpoint()
+    try:
+        while queue or active:
+            while queue and len(active) < workers and time.monotonic() < deadline:
+                index, code = queue.pop(0)
+                receiver, sender = context.Pipe(duplex=False)
+                process = context.Process(target=worker_target,
+                                          args=(sender, code, days, fetch_news))
+                try:
+                    process.start()
+                except Exception:
+                    receiver.close()
+                    sender.close()
+                    raise
+                sender.close()
+                active[index] = (process, receiver, time.monotonic(), code)
+                _log(f"[{code}] Started (stock timeout={stock_timeout}s)")
+            for index, (process, connection, started, code) in list(active.items()):
+                try:
+                    while connection.poll():
+                        kind, payload = connection.recv()
+                        if kind == "result":
+                            results[index] = payload
+                            checkpoint()
+                        elif kind == "error":
+                            finish(index, payload)
+                            break
+                        elif kind == "done":
+                            finish(index)
+                            break
+                except EOFError:
+                    if index in active:
+                        finish(index, {"code": code, "type": "WorkerError",
+                                       "error": "Worker exited without completing analysis"})
+                if index not in active:
+                    continue
+                now = time.monotonic()
+                if now >= deadline or now - started >= stock_timeout:
+                    error_type = "NewsTimeoutError" if index in results else "TimeoutError"
+                    finish(index, {"code": code, "type": error_type,
+                                   "error": "Batch deadline reached" if now >= deadline
+                                            else f"Stock exceeded {stock_timeout}s"})
+                elif not process.is_alive():
+                    # Drain messages on the next iteration before handling EOF.
+                    if not connection.poll():
+                        finish(index, {"code": code, "type": "WorkerError",
+                                       "error": f"Worker exited with code {process.exitcode}"})
+            if time.monotonic() >= deadline:
+                for index, code in queue:
+                    completed.add(index)
+                    output["errors"].append({"code": code, "type": "TimeoutError",
+                                              "error": "Batch deadline reached before starting"})
+                queue.clear()
+                checkpoint()
+            if active:
+                time.sleep(0.02)
+        output["status"] = "partial" if output["errors"] else "complete"
+        checkpoint()
+    finally:
+        for process, connection, _, _ in active.values():
+            _stop_worker(process)
+            connection.close()
+    return output
+
+
+def _positive_seconds(value):
+    seconds = float(value)
+    if not math.isfinite(seconds) or seconds <= 0:
+        raise argparse.ArgumentTypeError("must be a positive finite number")
+    return seconds
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Stock Data Fetcher + Holiday Calendar"
@@ -1840,6 +2021,13 @@ def main():
         default=None,
         help="Path to signal JSONL file (default: <cwd>/signals.jsonl)"
     )
+    parser.add_argument("--output", help="Atomic JSON checkpoint file, updated during analysis")
+    parser.add_argument("--workers", type=int, choices=range(1, 9), default=3,
+                        help="Concurrent isolated workers (1-8, default: 3)")
+    parser.add_argument("--stock-timeout", type=_positive_seconds, default=35,
+                        help="Seconds per stock, including news (default: 35)")
+    parser.add_argument("--batch-timeout", type=_positive_seconds, default=45,
+                        help="Seconds for the data batch (default: 45)")
     args = parser.parse_args()
 
     # Holiday calendar mode
@@ -1882,13 +2070,28 @@ def main():
         parser.error("--stocks is required unless --holiday is used")
 
     codes = parse_stock_codes(args.stocks)
-    results = []
-    errors = []
+    if not codes:
+        parser.error("--stocks must contain at least one code")
+    output = {
+        "schema_version": "1.1",
+        "analysis_date": datetime.now().strftime("%Y-%m-%d"),
+        "analysis_time": datetime.now().strftime("%H:%M:%S"),
+        "trading_day_status": None,
+        "data_sources": {},
+        "stocks": [],
+        "errors": [],
+        "total_requested": len(codes),
+        "total_success": 0,
+        "pending_codes": codes,
+        "status": "running",
+    }
+    write_checkpoint(args.output, output)
 
     # Report available data sources
     sources_status = {}
-    for lib in ["tushare", "efinance", "akshare", "yfinance", "chinese_calendar"]:
-        sources_status[lib] = "available" if _check_source(lib) else "not installed"
+    for lib in ["tushare", "efinance", "akshare", "yfinance", "chinese_calendar", "tavily", "serpapi"]:
+        key = "serpapi_library" if lib == "serpapi" else lib
+        sources_status[key] = "available" if importlib.util.find_spec(lib) else "not installed"
     sources_status["tushare_token"] = "configured" if os.environ.get("TUSHARE_TOKEN") else "not set"
     sources_status["tavily_api"] = "configured" if os.environ.get("TAVILY_API_KEY") else "not set"
     sources_status["serpapi"] = "configured" if os.environ.get("SERPAPI_KEY") else "not set"
@@ -1899,39 +2102,24 @@ def main():
     _log(f"Today ({today_status['date']}) is_trading_day={today_status['is_trading_day']} "
          f"({today_status['weekday_name']})")
 
-    max_workers = min(len(codes), 8)
-    _log(f"Fetching {len(codes)} stocks in parallel (max_workers={max_workers})")
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_code = {
-            executor.submit(analyze_stock, code, args.days, fetch_news=args.news): code
-            for code in codes
-        }
-        for future in as_completed(future_to_code):
-            code = future_to_code[future]
-            try:
-                result = future.result(timeout=120)
-                results.append(result)
-            except Exception as e:
-                errors.append({"code": code, "error": str(e), "type": type(e).__name__})
-
-    output = {
-        "analysis_date": datetime.now().strftime("%Y-%m-%d"),
-        "analysis_time": datetime.now().strftime("%H:%M:%S"),
-        "trading_day_status": today_status,
-        "data_sources": sources_status,
-        "stocks": results,
-        "errors": errors,
-        "total_requested": len(codes),
-        "total_success": len(results),
-    }
+    output.update(trading_day_status=today_status, data_sources=sources_status)
+    run_batch(codes, args.days, args.news, output, args.output,
+              workers=args.workers, stock_timeout=args.stock_timeout,
+              batch_timeout=args.batch_timeout)
 
     # Persist signals for backtesting (opt-in via --save-signal)
     if args.save_signal:
         signal_file = args.signal_file or os.path.join(
             os.getcwd(), "signals.jsonl")
-        persist_signals(results, signal_file, output["analysis_date"])
+        persist_signals(output["stocks"], signal_file, output["analysis_date"])
 
-    print(json.dumps(output, ensure_ascii=False, indent=2))
+    if args.output:
+        summary = {key: output[key] for key in ("status", "total_requested", "total_success",
+                                                "errors", "pending_codes")}
+        summary["output_file"] = args.output
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    else:
+        print(json.dumps(output, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

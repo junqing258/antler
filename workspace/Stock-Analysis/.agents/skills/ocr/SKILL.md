@@ -18,8 +18,9 @@ metadata:
 
 ## Antler 运行约定
 
-- 当前工作目录为 `Stock-Analysis`，下文命令均从该目录执行。
+- 每次 `bash` 都从项目配置的工作目录重新启动；选择现有 `Stock-Analysis` 项目时，这里已经是项目根目录，不要再 `cd Stock-Analysis` 或创建同名目录。先用 `pwd` 和 `test -f .agents/skills/ocr/SKILL.md` 校验位置。需要切换目录时，使用已确认的绝对路径，并与目标命令放在同一次调用中；上一次调用的 `cd` 不会延续。
 - Skill 目录为 `.agents/skills/ocr`；无需 Claude 专用环境变量。
+- 使用现有目录中的 Skill 和文件，仅按需创建 `reports/` 等输出目录。找不到资源时先检查项目工作目录设置，不要通过移动项目文件修补路径。`.env` 和 `.env.example` 都受保护；保持现有配置文件原位，由业务脚本加载。遇到 `secret_access_denied` 后取消相关文件操作，继续可执行的任务，不用通配符、别名或其他脚本重试被拒绝的操作。
 - 读取本 Skill 的 `references/`、`scripts/` 等资源时，使用 `read_skill_resource`，传入 `skillId: "ocr"` 和相对资源路径；读取工作目录内文件使用 `read`，写入使用 `write`，执行命令使用 `bash`。
 
 识别图片中的文字，优先处理中文/英文混排截图。若用户直接上传了图片且图像内容在对话中可见，先用视觉能力直接转写；若用户给出本地图片路径、需要批量处理、需要 JSON 输出或需要可复现结果，使用随 Skill 提供的脚本。

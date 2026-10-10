@@ -32,7 +32,8 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
 
 在本地构建包含 Antler Web 静态资源的 backend Docker 镜像，经 SSH 传输到远端主机，
 上传 Compose 与合并后的环境配置，然后重建容器并等待健康检查通过。
-镜像传输使用 pv 显示实时进度、吞吐率与 ETA（按镜像层大小估算）。
+先导出 gzip 压缩镜像归档，再用 pv 按归档实际大小显示传输进度、吞吐率与 ETA。
+本地需有足够空间存放临时压缩归档；脚本退出时自动清理。
 本地需安装 pv（macOS：brew install pv）。
 
 环境默认为 deploy：脚本合并 .env 和可选的 .env.deploy，后者覆盖同名变量。
@@ -98,7 +99,7 @@ remote_sh() {
 }
 
 transfer_image() {
-  docker save "$DEPLOY_BACKEND_IMAGE_REF" | pv -f -p -t -e -r -b -s "$image_size_bytes" | gzip "-$DEPLOY_GZIP_LEVEL" | remote_sh "gunzip | docker load"
+  pv -f -p -t -e -r -b -s "$image_archive_size_bytes" "$tmp_image_archive" | remote_sh "gunzip | docker load"
 }
 
 read_env_file_value() {
@@ -182,8 +183,12 @@ if [[ -z "$DEPLOY_REMOTE_DIR" ]]; then
 fi
 
 tmp_env_file="$(mktemp)"
+tmp_image_archive=""
 cleanup() {
   rm -f "$tmp_env_file"
+  if [[ -n "$tmp_image_archive" ]]; then
+    rm -f "$tmp_image_archive"
+  fi
 }
 trap cleanup EXIT
 
@@ -229,9 +234,11 @@ log_step "上传工作区种子目录（仅补充远端缺失的文件）"
 (cd "$ROOT_DIR" && git ls-files -z -- workspace/ | tar --null -T - -czf - $DEPLOY_TAR_METADATA_FLAG) \
   | remote_sh "tar -xzf - --skip-old-files -C $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR")"
 
-log_step "传输镜像"
-image_size_bytes="$(docker image inspect --format '{{.Size}}' "$DEPLOY_BACKEND_IMAGE_REF")"
-log_step "镜像层大小约 $(format_mib "$image_size_bytes")；流式压缩、传输并导入远端 Docker"
+log_step "导出压缩镜像归档"
+tmp_image_archive="$(mktemp)"
+docker save "$DEPLOY_BACKEND_IMAGE_REF" | gzip "-$DEPLOY_GZIP_LEVEL" > "$tmp_image_archive"
+image_archive_size_bytes="$(wc -c < "$tmp_image_archive" | tr -d '[:space:]')"
+log_step "压缩归档大小 $(format_mib "$image_archive_size_bytes")；传输并导入远端 Docker（进度按归档实际大小计算）"
 transfer_image
 
 log_step "启动服务、移除旧 Web 容器并等待健康检查"

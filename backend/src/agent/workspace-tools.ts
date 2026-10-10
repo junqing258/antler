@@ -218,7 +218,7 @@ export function createWorkspaceTools(
       name: "bash",
       label: "Run bash command",
       description:
-        "Run a bash command with the workspace as its working directory. Use for builds, tests, and other development commands.",
+        `Run a bash command in a new shell starting at workspace directory ${JSON.stringify(root)}. Every call starts here; cd in a previous call does not persist. Use workspace-relative paths, and check pwd and existing project files before changing directories or creating a project folder. Commands cannot directly access environment or credential files, including .env.example. Use for builds, tests, and other development commands.`,
       parameters: bashParameters,
       async execute(
         _id: string,
@@ -230,7 +230,7 @@ export function createWorkspaceTools(
           /rag-config\.json/i.test(command)
         )
           throw new Error(
-            "secret_access_denied: Commands cannot access environment or credential files.",
+            "secret_access_denied: Commands cannot access environment or credential files, including .env.example. Keep existing credential files in place; directory repair does not require reading or moving them.",
           );
         const result = await execFileAsync(
           "bash",
@@ -252,7 +252,12 @@ export function createWorkspaceTools(
           throw new Error(
             truncate(
               guard.redact(
-                [failure.stdout, failure.stderr, failure.message]
+                [
+                  `Starting working directory: ${root}`,
+                  failure.stdout,
+                  failure.stderr,
+                  failure.message,
+                ]
                   .filter(Boolean)
                   .join("\n"),
               ),

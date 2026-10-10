@@ -61,6 +61,8 @@ scripts/deploy-apps-ssh.sh
 
 脚本合并 `.env` 与 `.env.deploy`，后者的同名配置优先；它会探测远端 amd64/arm64 架构、构建并传输镜像，然后启动容器并等待健康检查。示例配置默认部署到 `root@47.100.210.56:/opt/antler`，访问地址为 <http://47.100.210.56:3210/>。目标和端口可在环境文件中修改；运行 `scripts/deploy-apps-ssh.sh --help` 可查看其他选项。
 
+镜像先导出为本地 gzip 压缩归档，再通过 SSH 上传并导入远端 Docker。`pv` 按归档实际大小显示传输进度、吞吐率与 ETA；本地需有足够空间存放临时压缩归档，脚本退出时自动清理。
+
 Docker 构建默认使用 npmmirror 下载 pnpm 和 npm 依赖，使用中科大 Debian 镜像安装系统依赖。apt 下载最多重试 3 次，连接及数据等待超时为 30 秒。手动构建时可通过 `--build-arg DEBIAN_MIRROR=http://其他镜像主机` 更换 Debian 镜像；该主机需同时提供 `/debian` 和 `/debian-security`。
 
 镜像在 `/opt/antler-python` 中预装 pip、uv 和 Tushare SDK（版本见 `backend/requirements-runtime.txt`），`python`、`python3`、`pip`、`pip3` 和 `uv` 可直接在容器内使用。Python 包默认从腾讯云 PyPI 镜像下载，可在构建时通过 `--build-arg PYPI_INDEX_URL=https://其他镜像/simple` 更换；运行时可分别通过 `PIP_INDEX_URL` 和 `UV_DEFAULT_INDEX` 覆盖。部署脚本会在传输镜像前离线检查工具版本、依赖完整性及 Tushare 导入，避免把缺少依赖的镜像部署到远端。

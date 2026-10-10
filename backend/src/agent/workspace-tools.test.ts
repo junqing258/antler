@@ -76,6 +76,7 @@ describe("workspace secret protection", () => {
     "source .env.local",
     "cat nested/.env.production",
     "cat .antler/rag-config.json",
+    "mv .env .env.example README.md reports .",
   ])("denies direct shell access: %s", async (command) => {
     const { tool } = await setup();
     await expect(tool("bash").execute("test", { command })).rejects.toThrow(
@@ -138,5 +139,31 @@ describe("workspace secret protection", () => {
         })
       ).content,
     ).toEqual([{ type: "text", text: "world" }]);
+  });
+});
+
+describe("workspace bash directory", () => {
+  it("starts each call at the configured root even after another call uses cd", async () => {
+    const { root, tool } = await setup();
+    await mkdir(join(root, "Stock-Analysis"));
+    await tool("bash").execute("first", {
+      command: "cd Stock-Analysis && printf nested > marker.txt",
+    });
+    await tool("bash").execute("second", {
+      command: "printf root > marker.txt",
+    });
+    expect(
+      await readFile(join(root, "Stock-Analysis", "marker.txt"), "utf8"),
+    ).toBe("nested");
+    expect(await readFile(join(root, "marker.txt"), "utf8")).toBe("root");
+  });
+
+  it("reports the starting directory with command failures", async () => {
+    const { root, tool } = await setup();
+    await expect(
+      tool("bash").execute("failure", {
+        command: "test -f missing/pyproject.toml",
+      }),
+    ).rejects.toThrow(`Starting working directory: ${root}`);
   });
 });
