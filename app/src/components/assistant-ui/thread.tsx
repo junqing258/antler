@@ -274,14 +274,16 @@ export function AssistantThread({
   model,
   models,
   title,
+  navigation,
   onModelChange,
-}: ModelPickerProps & { title: string }) {
+}: ModelPickerProps & { title: string; navigation?: ReactNode }) {
   return (
     <ThreadPrimitive.Root className="aui-thread-root flex h-full min-h-0 flex-col bg-background">
-      <header className="flex h-[47px] items-center px-5 pl-[25px] text-sm font-semibold tracking-[-0.2px] text-[#202020] max-[800px]:pl-4">
-        <PanelsTopLeftIcon className="mr-[17px] size-4 stroke-[2.25]" />
-        <span>{title}</span>
-        <button className="ml-auto grid size-[23px] place-items-center border-0 bg-transparent p-0 text-[#929292] hover:text-[#222]" type="button" aria-label="分享对话">
+      <header className="flex h-[47px] min-w-0 shrink-0 items-center px-5 pl-[25px] text-sm font-semibold tracking-[-0.2px] text-[#202020] max-[800px]:pl-4">
+        {navigation}
+        <PanelsTopLeftIcon className="mr-[17px] size-4 shrink-0 stroke-[2.25] max-[620px]:hidden" aria-hidden="true" />
+        <span className="min-w-0 truncate">{title}</span>
+        <button className="ml-auto grid size-[23px] shrink-0 place-items-center border-0 bg-transparent p-0 text-[#929292] hover:text-[#222]" type="button" aria-label="分享对话">
           <ShareIcon className="size-[15px] stroke-[1.9]" />
         </button>
       </header>

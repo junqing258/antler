@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { Root } from "react-dom/client";
 import type { ThreadMessageLike } from "@assistant-ui/react";
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { IDBFactory } from "fake-indexeddb";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -15,6 +15,7 @@ import {
 const captured = vi.hoisted(() => ({
   root: undefined as Root | undefined,
   initialMessages: [] as ThreadMessageLike[][],
+  pendingSaves: [] as Promise<unknown>[],
 }));
 
 vi.mock("react-dom/client", async (importOriginal) => {
@@ -43,8 +44,8 @@ vi.mock("@assistant-ui/react", async () => {
   };
 });
 vi.mock("@/components/assistant-ui/thread", () => ({
-  AssistantThread: ({ title, model }: { title: string; model: string }) => (
-    <><h1>{title}</h1><span data-testid="current-model">{model}</span></>
+  AssistantThread: ({ title, model, navigation }: { title: string; model: string; navigation?: ReactNode }) => (
+    <>{navigation}<h1>{title}</h1><span data-testid="current-model">{model}</span></>
   ),
 }));
 vi.mock("@/components/knowledge-configuration-link", () => ({
@@ -56,7 +57,9 @@ vi.mock("@/lib/workspace-projects", () => ({
 
 afterEach(async () => {
   await act(async () => captured.root?.unmount());
+  await Promise.all(captured.pendingSaves.splice(0));
   document.body.replaceChildren();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -114,5 +117,90 @@ describe("New Thread", () => {
     expect(captured.initialMessages.slice(previousRenderCount).every((initial) => initial.length === 0))
       .toBe(true);
     expect(await listConversations()).toHaveLength(1);
+  });
+});
+
+describe("Mobile navigation", () => {
+  it("opens and dismisses the drawer, navigates, and restores the desktop sidebar on resize", async () => {
+    vi.resetModules();
+    localStorage.clear();
+    vi.stubGlobal("indexedDB", new IDBFactory());
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ model: "test-model" }),
+    }));
+    const listeners = new Set<() => void>();
+    const media = {
+      matches: true,
+      addEventListener: (_event: string, listener: () => void) => listeners.add(listener),
+      removeEventListener: (_event: string, listener: () => void) => listeners.delete(listener),
+    };
+    vi.stubGlobal("matchMedia", () => media);
+    const store = await import("@/lib/conversation-store");
+    await store.saveConversationMessages("mobile-history", [{ role: "user", content: "历史消息" }]);
+    await store.renameConversation("mobile-history", "历史会话");
+    const saveMessages = store.saveConversationMessages;
+    vi.spyOn(store, "saveConversationMessages").mockImplementation((...args) => {
+      const pending = saveMessages(...args);
+      captured.pendingSaves.push(pending);
+      return pending;
+    });
+    window.history.replaceState(null, "", "/");
+    const root = document.createElement("div");
+    root.id = "root";
+    document.body.append(root);
+    await act(async () => { await import("../src/main"); });
+
+    const trigger = await screen.findByRole("button", { name: "打开导航" });
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+    fireEvent.click(trigger);
+    let drawer = await screen.findByRole("dialog", { name: "项目与会话导航" });
+    expect(within(drawer).getByRole("navigation", { name: "项目与会话历史" })).toBeVisible();
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(trigger).toHaveFocus());
+
+    fireEvent.click(trigger);
+    drawer = await screen.findByRole("dialog");
+    fireEvent.click(within(drawer).getByRole("button", { name: "关闭导航" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    fireEvent.click(trigger);
+    drawer = await screen.findByRole("dialog");
+    fireEvent.click(within(drawer).getByRole("button", { name: "新建会话" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(await screen.findByRole("heading", { name: "新会话" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "打开导航" }));
+    drawer = await screen.findByRole("dialog");
+    fireEvent.click(within(drawer).getByRole("button", { name: "历史会话" }));
+    await screen.findByRole("heading", { name: "历史会话" });
+    expect(new URLSearchParams(window.location.search).get("conversationId")).toBe("mobile-history");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "打开导航" }));
+    drawer = await screen.findByRole("dialog");
+    fireEvent.click(within(drawer).getByRole("button", { name: "设置中心" }));
+    await screen.findByRole("heading", { name: "设置" });
+    expect(screen.queryByRole("dialog", { name: "项目与会话导航" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "关闭设置" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "打开导航" }));
+    await screen.findByRole("dialog");
+    await act(async () => {
+      media.matches = false;
+      listeners.forEach((listener) => listener());
+    });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "打开导航" })).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "项目与会话历史" })).toBeVisible();
+
+    await act(async () => {
+      media.matches = true;
+      listeners.forEach((listener) => listener());
+    });
+    expect(screen.getByRole("button", { name: "打开导航" })).toHaveAttribute("aria-expanded", "false");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 });
