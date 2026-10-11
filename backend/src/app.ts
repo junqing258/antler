@@ -15,7 +15,7 @@ import { PiAgentAdapter } from "./agent/pi-agent-adapter.js";
 import { DEFAULT_SYSTEM_PROMPT } from "./agent/system-prompt.js";
 import { registerRunRoutes } from "./routes/runs.js";
 import type { ProviderRunConfig } from "./agent/host-runtime.js";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { SkillRegistry } from "./skills/skill-registry.js";
 import { registerSkillRoutes } from "./routes/skills.js";
 import { registerDirectoryRoutes } from "./routes/directories.js";
@@ -113,6 +113,11 @@ export function createApp(config: AppConfig) {
       prefix: "/",
       maxAge: "30d",
       immutable: true,
+      setHeaders(reply, path) {
+        // These stable URLs must be revalidated to discover new app versions.
+        if (["sw.js", "manifest.webmanifest", "index.html"].includes(basename(path)))
+          reply.header("cache-control", "public, max-age=0, must-revalidate");
+      },
     });
     app.get("/", async (_request, reply) =>
       reply.sendFile("index.html", { maxAge: 0, immutable: false }),

@@ -33,6 +33,21 @@ pnpm --filter @antler/server db:migrate -- --name <migration-name>
 pnpm --filter @antler/server db:generate
 ```
 
+## PWA
+
+Web 生产构建支持安装到桌面或手机主屏幕。使用 HTTPS 部署后，可通过浏览器的“安装应用”入口安装；iPhone/iPad 在 Safari 分享菜单中选择“添加到主屏幕”。Service Worker 仅在生产环境的安全浏览器上下文中注册，开发模式和 Tauri 桌面端不启用。
+
+首次在线访问并完成缓存后，页面和本地保存的会话可离线打开；发送消息、执行任务和读取服务端配置仍需要网络。缓存只包含前端静态资源，不缓存 API、SSE 或模型响应。发现新版本时会显示提示，点击“刷新更新”后应用更新，请先等待当前任务完成。
+
+本地验证生产版本：
+
+```bash
+pnpm --filter @antler/app build
+pnpm --filter @antler/app exec vite preview --host 127.0.0.1
+```
+
+在 <http://127.0.0.1:4173> 检查浏览器开发者工具的 Application → Manifest / Service Workers，并在缓存完成后切换离线、刷新页面。localhost/回环地址可使用 HTTP 测试；公网 HTTP 地址（包括当前演示地址）无法启用 Service Worker，需要配置 HTTPS。预览服务器不提供后端 API，完整聊天功能需部署到后端同源服务。
+
 ## backend 共享技能
 
 `backend/skills/` 中的技能随服务端分发，供所有 Web Agent 工作空间使用，目前内置 `antler-rag`。服务端从自身模块的位置定位该目录，本地开发、编译后启动和 Docker 运行使用同一套发现逻辑，无需把技能安装到开发机或各个工作空间的 `.agents` 目录。

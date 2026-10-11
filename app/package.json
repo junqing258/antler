@@ -46,6 +46,8 @@
     "code-inspector-plugin": "^2.0.8",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^30.0.1",
-    "vitest": "^5.0.3"
+    "vite-plugin-pwa": "^2.0.0",
+    "vitest": "^5.0.3",
+    "workbox-window": "^7.4.1"
   }
 }

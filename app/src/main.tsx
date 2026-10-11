@@ -46,6 +46,7 @@ import { initializeWorkspaceProjects } from "@/lib/workspace-projects";
 import { KnowledgeConfigurationLink } from "@/components/knowledge-configuration-link";
 import { SettingsDialog, type SettingsTab } from "@/components/settings-dialog";
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
+import { PwaUpdatePrompt } from "@/components/pwa-update-prompt";
 
 type ServerInfo = { baseUrl: string; token: string };
 
@@ -538,6 +539,7 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
       <App />
+      <PwaUpdatePrompt />
     </BrowserRouter>
   </StrictMode>,
 );

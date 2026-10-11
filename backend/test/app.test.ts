@@ -16,6 +16,8 @@ async function staticDirectory() {
     "<!doctype html><title>Antler Web</title>",
   );
   await writeFile(join(directory, "assets", "app.js"), 'console.log("antler")');
+  await writeFile(join(directory, "sw.js"), "self.addEventListener('install', () => {});");
+  await writeFile(join(directory, "manifest.webmanifest"), '{"name":"Antler"}');
   return directory;
 }
 
@@ -70,7 +72,13 @@ describe("backend Web hosting", () => {
     const home = await app.inject({ method: "GET", url: "/" });
     expect(home.statusCode).toBe(200);
     expect(home.body).toContain("Antler Web");
-    expect(home.headers["cache-control"]).toBe("public, max-age=0");
+    expect(home.headers["cache-control"]).toBe("public, max-age=0, must-revalidate");
+
+    for (const url of ["/sw.js", "/manifest.webmanifest", "/index.html"]) {
+      const response = await app.inject({ method: "GET", url });
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["cache-control"]).toBe("public, max-age=0, must-revalidate");
+    }
 
     const asset = await app.inject({ method: "GET", url: "/assets/app.js" });
     expect(asset.statusCode).toBe(200);
