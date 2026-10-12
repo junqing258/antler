@@ -11,6 +11,7 @@ import {
   renameConversation,
   saveConversationMessages,
 } from "@/lib/conversation-store";
+import { COLLAPSED_PROJECTS_STORAGE_KEY } from "@/lib/project-navigation";
 
 const captured = vi.hoisted(() => ({
   root: undefined as Root | undefined,
@@ -120,6 +121,73 @@ describe("New Thread", () => {
   });
 });
 
+describe("Project navigation", () => {
+  it("collapses projects independently and restores their state after reopening the app", async () => {
+    vi.resetModules();
+    localStorage.clear();
+    vi.stubGlobal("indexedDB", new IDBFactory());
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ model: "test-model" }),
+    }));
+    const store = await import("@/lib/conversation-store");
+    const project = await store.ensureWorkspaceProject("Stock-Analysis", "/srv/workspace/Stock-Analysis");
+    await store.saveConversationMessages("project-history", [{ role: "user", content: "历史消息" }], project.id);
+    await store.renameConversation("project-history", "项目历史会话");
+    window.history.replaceState(null, "", "/?conversationId=project-history");
+    const root = document.createElement("div");
+    root.id = "root";
+    document.body.append(root);
+    await act(async () => { await import("../src/main"); });
+
+    const toggle = await screen.findByRole("button", { name: "折叠 Stock-Analysis" });
+    const content = document.getElementById(toggle.getAttribute("aria-controls")!)!;
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "项目历史会话" })).toBeVisible();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(content).not.toBeVisible();
+    expect(screen.queryByRole("button", { name: "项目历史会话" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "开始新的会话" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "项目历史会话" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Stock-Analysis 的设置" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "折叠 默认项目" }));
+    expect(screen.queryByRole("button", { name: "开始新的会话" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "展开 默认项目" }));
+    expect(screen.getByRole("button", { name: "开始新的会话" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "默认项目" }));
+    await screen.findByRole("heading", { name: "新会话" });
+    expect(screen.getByRole("button", { name: "展开 Stock-Analysis" })).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(screen.getByRole("button", { name: "Stock-Analysis" }));
+    await screen.findByRole("heading", { name: "项目历史会话" });
+    expect(screen.queryByRole("button", { name: "项目历史会话" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "展开 Stock-Analysis" }));
+    expect(screen.getByRole("button", { name: "项目历史会话" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "折叠 Stock-Analysis" })).toHaveAttribute("aria-expanded", "true");
+    expect(JSON.parse(localStorage.getItem(COLLAPSED_PROJECTS_STORAGE_KEY)!)).toEqual([]);
+
+    fireEvent.click(screen.getByRole("button", { name: "折叠 Stock-Analysis" }));
+    expect(JSON.parse(localStorage.getItem(COLLAPSED_PROJECTS_STORAGE_KEY)!)).toEqual([project.id]);
+    await act(async () => captured.root?.unmount());
+    vi.resetModules();
+    await act(async () => { await import("../src/main"); });
+    expect(await screen.findByRole("button", { name: "展开 Stock-Analysis" }))
+      .toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: "项目历史会话" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "开始新的会话" })).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "展开 Stock-Analysis" }));
+    await act(async () => captured.root?.unmount());
+    vi.resetModules();
+    await act(async () => { await import("../src/main"); });
+    expect(await screen.findByRole("button", { name: "项目历史会话" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "折叠 Stock-Analysis" })).toHaveAttribute("aria-expanded", "true");
+  });
+});
+
 describe("Mobile navigation", () => {
   it("opens and dismisses the drawer, navigates, and restores the desktop sidebar on resize", async () => {
     vi.resetModules();
@@ -156,6 +224,11 @@ describe("Mobile navigation", () => {
     fireEvent.click(trigger);
     let drawer = await screen.findByRole("dialog", { name: "项目与会话导航" });
     expect(within(drawer).getByRole("navigation", { name: "项目与会话历史" })).toBeVisible();
+    fireEvent.click(within(drawer).getByRole("button", { name: "折叠 默认项目" }));
+    expect(drawer).toBeVisible();
+    expect(within(drawer).queryByRole("button", { name: "历史会话" })).not.toBeInTheDocument();
+    fireEvent.click(within(drawer).getByRole("button", { name: "展开 默认项目" }));
+    expect(within(drawer).getByRole("button", { name: "历史会话" })).toBeVisible();
     fireEvent.keyDown(document.activeElement!, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     await waitFor(() => expect(trigger).toHaveFocus());

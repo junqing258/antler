@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Antler is a pnpm workspace with two packages. `app/` contains the React/Vite UI: components in `src/components`, browser services in `src/lib`, styles in `src/styles`, and static assets in `public`. Its Tauri/Rust wrapper is in `app/src-tauri/`. `backend/` is the Fastify/TypeScript service, organized by routes, agent runtime, skills, knowledge, and persistence. Prisma files live in `backend/prisma/`; architecture material and deployment utilities are in `docs/` and `scripts/`.
+Antler is a pnpm workspace with two packages. `app/` contains the React/Vite UI: page components in `src/views`, reusable components in `src/components`, browser services in `src/lib`, styles in `src/styles`, and static assets in `public`. Its Tauri/Rust wrapper is in `app/src-tauri/`. `backend/` is the Fastify/TypeScript service, organized by routes, agent runtime, skills, knowledge, and persistence. Prisma files live in `backend/prisma/`; architecture material and deployment utilities are in `docs/` and `scripts/`.
 
 ## Build, Test, and Development Commands
 
