@@ -96,6 +96,78 @@ describe("AntlerHostRuntime knowledge contract", () => {
   });
 });
 
+describe("AntlerHostRuntime compaction", () => {
+  it("dispatches /compact separately, skips knowledge retrieval and reports the summary", async () => {
+    const adapter = {
+      run: vi.fn(),
+      compact: vi.fn(async () => ({
+        summary: "压缩后的目标与约束",
+        beforeMessages: 10,
+        beforeBytes: 2000,
+        afterBytes: 100,
+      })),
+    };
+    const knowledge = { retrieve: vi.fn() };
+    const runtime = new AntlerHostRuntime(
+      () => adapter as unknown as PiAgentAdapter,
+      { maxRunDurationMs: 1000, maxEvents: 10 },
+      undefined,
+      undefined,
+      knowledge,
+    );
+    const run = await runtime.createRun("/compact", {
+      projectId: "project",
+      conversationId: "conversation",
+    });
+    await vi.waitFor(() => expect(run.status).toBe("succeeded"));
+    expect(adapter.compact).toHaveBeenCalledWith(
+      "conversation",
+      expect.anything(),
+      expect.any(AbortSignal),
+    );
+    expect(adapter.run).not.toHaveBeenCalled();
+    expect(knowledge.retrieve).not.toHaveBeenCalled();
+    const events = await runtime.getEvents(run.id);
+    expect(events.map((event) => event.type)).toEqual([
+      "run.started",
+      "assistant.delta",
+      "run.completed",
+    ]);
+    expect(events[1].payload.delta).toContain("10 条历史消息 → 1 条摘要");
+    expect(events[1].payload.delta).toContain("压缩后的目标与约束");
+  });
+
+  it("holds the conversation lock during compaction and supports cancellation", async () => {
+    const compact = vi.fn(async (_id, _snapshot, signal: AbortSignal) => {
+      await new Promise<void>((_resolve, reject) =>
+        signal.addEventListener("abort", () => reject(new Error("cancelled")), {
+          once: true,
+        }),
+      );
+    });
+    const runtime = new AntlerHostRuntime(
+      () => ({ compact }) as unknown as PiAgentAdapter,
+      { maxRunDurationMs: 1000, maxEvents: 10 },
+    );
+    const run = await runtime.createRun("/compact", {
+      projectId: "project",
+      conversationId: "conversation",
+    });
+    await vi.waitFor(() => expect(compact).toHaveBeenCalledOnce());
+    await expect(
+      runtime.createRun("next", {
+        projectId: "project",
+        conversationId: "conversation",
+      }),
+    ).rejects.toThrow("conversation_busy");
+    await runtime.cancel(run.id);
+    await vi.waitFor(() => expect(run.status).toBe("cancelled"));
+    expect(
+      (await runtime.getEvents(run.id)).map((event) => event.type),
+    ).toEqual(["run.started", "run.cancelled"]);
+  });
+});
+
 describe("AntlerHostRuntime secret protection", () => {
   it("redacts split assistant/thinking output, tool arguments/results and provider errors before persistence and live delivery", async () => {
     const root = await mkdtemp(join(tmpdir(), "antler-runtime-security-"));

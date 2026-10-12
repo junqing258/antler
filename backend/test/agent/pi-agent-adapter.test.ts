@@ -304,6 +304,158 @@ describe.each(["openai", "anthropic"] as const)(
       );
     });
 
+    it("compacts history and uses only the summary with original instructions/tools on the next run", async () => {
+      const { adapter } = await setup(provider);
+      const oldDetails = "Original conversation details. ".repeat(200);
+      streams[provider].mockImplementation((model) =>
+        completed(model, [{ type: "text", text: oldDetails }]),
+      );
+      await adapter.run(
+        "Original goal",
+        "compact",
+        DISABLED_SKILL_SNAPSHOT,
+        new AbortController().signal,
+        () => {},
+      );
+      streams[provider].mockImplementation((model, context, options) => {
+        expect(getCurrentTools(context.messages)).toEqual([]);
+        expect(getCurrentSystemPrompt(context.messages)).toContain(
+          "压缩会话上下文",
+        );
+        expect(JSON.stringify(context.messages)).toContain(oldDetails);
+        expect(options?.maxTokens).toBe(2048);
+        return completed(model, [
+          { type: "text", text: `保留原目标，继续工作。${secret}` },
+        ]);
+      });
+      const result = await adapter.compact(
+        "compact",
+        DISABLED_SKILL_SNAPSHOT,
+        new AbortController().signal,
+      );
+      expect(result.beforeMessages).toBe(2);
+      expect(result.afterBytes).toBeLessThan(result.beforeBytes);
+      expect(result.summary).toBe(`保留原目标，继续工作。${REDACTED}`);
+      streams[provider].mockImplementation((model, context) => {
+        expect(context.messages).toHaveLength(3);
+        expect(getCurrentSystemPrompt(context.messages)).toContain(
+          `Base instructions ${REDACTED}`,
+        );
+        expect(
+          getCurrentTools(context.messages).map((tool) => tool.name),
+        ).toContain("read");
+        expect(JSON.stringify(context.messages)).not.toContain(oldDetails);
+        expect(JSON.stringify(context.messages)).not.toContain("Original goal");
+        expect(JSON.stringify(context.messages)).toContain(result.summary);
+        expect(JSON.stringify(context.messages)).not.toContain(secret);
+        return completed(model, [{ type: "text", text: "Continued." }]);
+      });
+      await adapter.run(
+        "Continue",
+        "compact",
+        DISABLED_SKILL_SNAPSHOT,
+        new AbortController().signal,
+        () => {},
+      );
+    });
+
+    it.each(["error", "empty", "long", "tool", "abort"] as const)(
+      "preserves history when compaction returns %s",
+      async (failure) => {
+        const { adapter } = await setup(provider);
+        const original = "Important original context. ".repeat(200);
+        streams[provider].mockImplementation((model) =>
+          completed(model, [{ type: "text", text: original }]),
+        );
+        await adapter.run(
+          "Keep this goal",
+          "preserved",
+          DISABLED_SKILL_SNAPSHOT,
+          new AbortController().signal,
+          () => {},
+        );
+        const controller = new AbortController();
+        streams[provider].mockImplementation((model, _context, options) => {
+          if (failure === "tool")
+            return completed(
+              model,
+              [
+                {
+                  type: "toolCall",
+                  id: "unexpected",
+                  name: "bash",
+                  arguments: { command: "exit 1" },
+                },
+              ],
+              "toolUse",
+            );
+          if (failure === "empty" || failure === "long")
+            return completed(model, [
+              {
+                type: "text",
+                text: failure === "empty" ? " " : original.repeat(2),
+              },
+            ]);
+          const stream = createAssistantMessageEventStream();
+          const error = {
+            ...message(model, [], failure === "abort" ? "aborted" : "error"),
+            errorMessage: "Compaction failed",
+          };
+          if (failure === "abort") {
+            options?.signal?.addEventListener(
+              "abort",
+              () => stream.push({ type: "error", reason: "aborted", error }),
+              { once: true },
+            );
+            queueMicrotask(() => controller.abort());
+          } else stream.push({ type: "error", reason: "error", error });
+          return stream;
+        });
+        await expect(
+          adapter.compact(
+            "preserved",
+            DISABLED_SKILL_SNAPSHOT,
+            controller.signal,
+          ),
+        ).rejects.toThrow();
+        streams[provider].mockImplementation((model, context) => {
+          expect(JSON.stringify(context.messages)).toContain(original);
+          expect(JSON.stringify(context.messages)).toContain("Keep this goal");
+          expect(JSON.stringify(context.messages)).not.toContain(
+            "此前会话的压缩摘要",
+          );
+          expect(
+            getCurrentTools(context.messages).map((tool) => tool.name),
+          ).toContain("bash");
+          return completed(model, [{ type: "text", text: "Continued." }]);
+        });
+        await adapter.run(
+          "Continue after failure",
+          "preserved",
+          DISABLED_SKILL_SNAPSHOT,
+          new AbortController().signal,
+          () => {},
+        );
+      },
+    );
+
+    it("rejects empty context and an already aborted compaction without calling the model", async () => {
+      const { adapter } = await setup(provider);
+      await expect(
+        adapter.compact(
+          "empty",
+          DISABLED_SKILL_SNAPSHOT,
+          new AbortController().signal,
+        ),
+      ).rejects.toThrow("没有可压缩");
+      const controller = new AbortController();
+      controller.abort();
+      await expect(
+        adapter.compact("empty", DISABLED_SKILL_SNAPSHOT, controller.signal),
+      ).rejects.toThrow();
+      expect(streams[provider]).not.toHaveBeenCalled();
+    });
+
     it("rejects missing credentials before streaming", async () => {
       const { adapter } = await setup(provider, {
         openAiApiKey: undefined,

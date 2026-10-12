@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import type { ReactNode } from "react";
+import { SlashCommandInput } from "./slash-command-input";
 
 function MarkdownText() {
   return (
@@ -195,11 +196,7 @@ export function ModelPicker({
 function Composer(props: ModelPickerProps) {
   return (
     <ComposerPrimitive.Root className="aui-composer mx-auto w-full max-w-175.5 rounded-[23px] border border-[#e8e8e8] bg-background px-4 pt-3 pb-2 shadow-[0_1px_2px_rgba(0,0,0,.02)] focus-within:border-[#dadada]">
-      <ComposerPrimitive.Input
-        aria-label="消息"
-        className="block min-h-[37px] max-h-24 w-full resize-none bg-transparent py-0 text-[14px] leading-5 outline-none placeholder:text-[#afafaf]"
-        placeholder="输入消息…（@ 提及，/ 使用命令）"
-      />
+      <SlashCommandInput />
       <div className="mt-1 flex items-center justify-between gap-2">
         <div className="flex items-center gap-4">
           <button

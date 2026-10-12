@@ -1,6 +1,10 @@
 import Fastify from "fastify";
 import { describe, expect, it, vi } from "vitest";
-import type { AntlerHostRuntime, Run } from "../../src/agent/host-runtime.js";
+import { AntlerHostRuntime, type Run } from "../../src/agent/host-runtime.js";
+import {
+  PiAdapterError,
+  type PiAgentAdapter,
+} from "../../src/agent/pi-agent-adapter.js";
 import { registerRunRoutes } from "../../src/routes/runs.js";
 
 function testRuntime() {
@@ -125,4 +129,64 @@ describe("POST /api/runs workingDirectory", () => {
     });
     await app.close();
   });
+});
+
+describe("POST /api/runs /compact", () => {
+  it.each(["success", "empty"])(
+    "returns compaction %s through the existing SSE endpoint",
+    async (outcome) => {
+      const app = Fastify();
+      const compact = vi.fn(async () => {
+        if (outcome === "empty")
+          throw new PiAdapterError(
+            "conversation_context_empty",
+            "没有可压缩的上下文",
+          );
+        return {
+          summary: "保留目标和待办事项",
+          beforeMessages: 12,
+          beforeBytes: 2000,
+          afterBytes: 100,
+        };
+      });
+      const runAdapter = vi.fn();
+      const runtime = new AntlerHostRuntime(
+        () => ({ compact, run: runAdapter }) as unknown as PiAgentAdapter,
+        { maxRunDurationMs: 1000, maxEvents: 10 },
+      );
+      registerRunRoutes(app, runtime);
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/runs",
+          payload: {
+            message: "/compact",
+            projectId: "project-1",
+            conversationId: "conversation-1",
+          },
+        });
+        expect(response.statusCode).toBe(202);
+        const { runId, eventsUrl } = response.json();
+        await vi.waitFor(async () =>
+          expect((await runtime.getRun(runId))?.status).toBe(
+            outcome === "success" ? "succeeded" : "failed",
+          ),
+        );
+        const events = await app.inject({ method: "GET", url: eventsUrl });
+        expect(events.statusCode).toBe(200);
+        expect(events.headers["content-type"]).toContain("text/event-stream");
+        if (outcome === "success") {
+          expect(events.body).toContain("event: run.completed");
+          expect(events.body).toContain("会话上下文已压缩");
+          expect(events.body).toContain("保留目标和待办事项");
+        } else {
+          expect(events.body).toContain("event: run.failed");
+          expect(events.body).toContain("conversation_context_empty");
+        }
+        expect(runAdapter).not.toHaveBeenCalled();
+      } finally {
+        await app.close();
+      }
+    },
+  );
 });

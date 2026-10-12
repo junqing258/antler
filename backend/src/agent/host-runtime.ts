@@ -231,6 +231,23 @@ export class AntlerHostRuntime {
     run.startedAt = new Date().toISOString();
     try {
       await active.secretGuard.refresh();
+      if (run.input.trim() === "/compact") {
+        await this.emit(active, "run.started", { runId: run.id, status: run.status }, true);
+        active.timeout = setTimeout(() => active.controller.abort(), this.config.maxRunDurationMs);
+        const result = await active.adapter.compact(
+          run.conversationId,
+          active.skillSnapshot,
+          active.controller.signal,
+        );
+        // compact 返回时上下文已提交；之后到达的取消不会撤销已完成的压缩。
+        clearTimeout(active.timeout);
+        await this.emit(active, "assistant.delta", {
+          runId: run.id,
+          delta: `会话上下文已压缩（${result.beforeMessages} 条历史消息 → 1 条摘要），聊天记录已保留。\n\n${result.summary}`,
+        });
+        await this.finish(active, "succeeded");
+        return;
+      }
       // 知识命中既用于模型提示词，也保存用于引用展示；保存前先脱敏。
       const knowledgeContext = await this.knowledge.retrieve({
         projectId: run.projectId,
