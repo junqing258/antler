@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ThreadMessageLike } from "@assistant-ui/react";
 import { useSearchParams } from "react-router";
 import { ProjectDialog } from "@/components/project-dialog";
+import { SchedulerDialog } from "@/components/scheduler-dialog";
 import { SettingsDialog, type SettingsTab } from "@/components/settings-dialog";
 import {
   createProject,
@@ -83,6 +84,7 @@ export function ChatView() {
     return () => controller.abort();
   }, []);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [schedulerOpen, setSchedulerOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("provider");
   const refreshLibrary = useCallback(() => {
     void Promise.all([listProjects(), listConversations()])
@@ -244,6 +246,7 @@ export function ChatView() {
           serverModel={serverModel}
           onModelChange={selectModel}
           onOpenSettings={openSettings}
+          onOpenScheduler={() => setSchedulerOpen(true)}
           onConversationSaved={refreshLibrary}
         />
       )}
@@ -253,6 +256,12 @@ export function ChatView() {
           initialTab={settingsTab}
           onSave={saveSettings}
           onClose={() => setSettingsOpen(false)}
+        />
+      )}
+      {schedulerOpen && (
+        <SchedulerDialog
+          getServerInfo={serverInfo}
+          onClose={() => setSchedulerOpen(false)}
         />
       )}
       {projectDialog && (

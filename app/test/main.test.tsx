@@ -85,6 +85,14 @@ describe("New Thread", () => {
     await screen.findByRole("heading", { name: "上一条会话标题" });
     await waitFor(() => expect(screen.getByTestId("current-model"))
       .toHaveTextContent("configured-server-model"));
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ tasks: [], total: 0, page: 1, limit: 20 })));
+    const conversationUrl = window.location.href;
+    fireEvent.click(screen.getByRole("button", { name: "定时任务" }));
+    await screen.findByRole("dialog", { name: "定时任务" });
+    await screen.findByText("暂无定时任务");
+    expect(window.location.href).toBe(conversationUrl);
+    fireEvent.click(screen.getByRole("button", { name: "关闭" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "定时任务" })).not.toBeInTheDocument());
     const previousRenderCount = captured.initialMessages.length;
 
     fireEvent.click(screen.getByRole("button", { name: "新建会话" }));

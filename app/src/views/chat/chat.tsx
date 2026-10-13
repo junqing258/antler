@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AssistantRuntimeProvider, type ThreadMessageLike } from "@assistant-ui/react";
 import {
   ChevronRightIcon,
+  CalendarClockIcon,
   FolderCogIcon,
   FolderIcon,
   FolderPlusIcon,
@@ -40,6 +41,7 @@ export function Chat({
   serverModel,
   onModelChange,
   onOpenSettings,
+  onOpenScheduler,
   onConversationSaved,
 }: {
   conversationId: string;
@@ -61,6 +63,7 @@ export function Chat({
   serverModel: string;
   onModelChange: (model: string) => void;
   onOpenSettings: (tab?: SettingsTab) => void;
+  onOpenScheduler: () => void;
   onConversationSaved: () => void;
 }) {
   const modelPickerConfig = getModelPickerConfig(providerConfig, serverModel);
@@ -111,6 +114,14 @@ export function Chat({
         新建会话
       </button>
       <KnowledgeConfigurationLink getServerInfo={serverInfo} />
+      <button
+        className="mt-1.5 flex w-full items-center gap-2 rounded-lg border-0 bg-transparent px-3 py-1.5 text-left text-[13px] text-[#4b4b4b] hover:bg-[#f0f0f0] hover:text-[#222]"
+        type="button"
+        onClick={() => navigate(onOpenScheduler)}
+      >
+        <CalendarClockIcon className="size-[15px] shrink-0" aria-hidden="true" />
+        定时任务
+      </button>
       <nav
         className="mt-3.5 min-h-0 overflow-y-auto pb-2"
         aria-label="项目与会话历史"

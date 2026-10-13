@@ -5,6 +5,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const projectRoot = fileURLToPath(new URL("../../..", import.meta.url));
 
 describe("backend workspace configuration", () => {
+  it.each([
+    ["true", true],
+    ["false", false],
+    ["1", false],
+    ["TRUE", false],
+    [undefined, false],
+  ])("enables scheduled scripts only for the explicit true setting (%s)", async (value, expected) => {
+    vi.stubEnv("ANTLER_SCHEDULER_ENABLE_SCRIPT", value);
+    const { config } = await import("../../src/config/env.js");
+    expect(config.schedulerEnableScript).toBe(expected);
+  });
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.resetModules();

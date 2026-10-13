@@ -184,3 +184,52 @@ model KnowledgeIngestionEvent {
   @@unique([jobId, seq])
   @@map("knowledge_ingestion_events")
 }
+
+enum ScheduledTaskType {
+  http
+  service
+  script
+}
+
+enum TaskExecutionStatus {
+  running
+  succeeded
+  failed
+  timeout
+}
+
+model ScheduledTask {
+  id              String            @id @default(uuid())
+  name            String
+  description     String?
+  type            ScheduledTaskType
+  schedule        String            // cron 表达式或 "delay:毫秒"
+  enabled         Boolean           @default(true)
+  payload         Json
+  retryCount      Int               @default(0)
+  retryDelay      Int               @default(60000)  // 毫秒
+  timeout         Int               @default(300000) // 毫秒
+  runAt           DateTime?         // 一次性任务的预定执行时刻；NULL 表示非一次性或已领取
+  lastExecutedAt  DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  executions      TaskExecution[]
+
+  @@map("scheduled_tasks")
+}
+
+model TaskExecution {
+  id           String              @id @default(uuid())
+  taskId       String
+  status       TaskExecutionStatus @default(running)
+  startedAt    DateTime            @default(now())
+  finishedAt   DateTime?
+  duration     Int?
+  result       Json?
+  error        String?
+  retryAttempt Int                 @default(0)
+  task         ScheduledTask       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, startedAt])
+  @@map("task_executions")
+}

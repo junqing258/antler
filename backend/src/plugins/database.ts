@@ -13,9 +13,19 @@ export function createDatabase(url = ":memory:"): PrismaClient {
   return new PrismaClient({ adapter });
 }
 
-export function registerDatabase(app: FastifyInstance, url?: string) {
+export function registerDatabase(
+  app: FastifyInstance,
+  url?: string,
+  beforeDisconnect?: () => Promise<void>,
+) {
   const prisma = createDatabase(url);
   app.decorate("prisma", prisma);
   app.addHook("onReady", () => prisma.$connect());
-  app.addHook("onClose", () => prisma.$disconnect());
+  app.addHook("onClose", async () => {
+    try {
+      await beforeDisconnect?.();
+    } finally {
+      await prisma.$disconnect();
+    }
+  });
 }

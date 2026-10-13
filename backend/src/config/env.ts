@@ -29,6 +29,7 @@ export type AppConfig = {
   maxRunDurationMs: number;
   agentsDir?: string;
   databaseUrl?: string;
+  schedulerEnableScript?: boolean;
 };
 
 const workspaceRoot = resolve(
@@ -40,6 +41,7 @@ export const config: AppConfig = {
   host: process.env.ANTLER_HOST ?? "127.0.0.1",
   port: Number(process.env.ANTLER_PORT ?? 3210),
   accessToken: process.env.ANTLER_ACCESS_TOKEN,
+  schedulerEnableScript: process.env.ANTLER_SCHEDULER_ENABLE_SCRIPT === "true",
   provider: process.env.ANTHROPIC_AUTH_TOKEN ? "anthropic" : "openai",
   openAiApiKey: process.env.OPENAI_API_KEY,
   openAiBaseUrl: process.env.OPENAI_BASE_URL,

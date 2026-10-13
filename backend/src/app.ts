@@ -24,13 +24,19 @@ import { registerDatabase } from "./plugins/database.js";
 import { PrismaRunStore } from "./runs/run-store.js";
 import { registerConfigRoutes } from "./routes/config.js";
 import { RagConfigStore } from "./config/rag-config.js";
+import { TaskExecutor } from "./scheduler/executor.js";
+import { CronScheduler } from "./scheduler/scheduler.js";
+import { SchedulerService } from "./scheduler/service.js";
+import { registerSchedulerRoutes } from "./routes/scheduler.js";
+import type { ServiceRegistry } from "./scheduler/types.js";
 
 export function createApp(config: AppConfig) {
   mkdirSync(config.workspaceRoot, { recursive: true });
   const ragConfig = new RagConfigStore(config, config.workspaceRoot);
   const app = Fastify({ logger: false, genReqId: createRequestId });
   registerRequestLogging(app);
-  registerDatabase(app, config.databaseUrl);
+  let scheduler: CronScheduler | undefined;
+  registerDatabase(app, config.databaseUrl, async () => scheduler?.stop());
   const adapters = new Map<string, PiAgentAdapter>();
   const createAdapter = (
     provider?: ProviderRunConfig,
@@ -97,6 +103,41 @@ export function createApp(config: AppConfig) {
   if (config.databaseUrl)
     app.addHook("onReady", () => runtime.recoverInterrupted());
   const taskService = new TaskService(runtime);
+  const serviceRegistry: ServiceRegistry = new Map([
+    [
+      "taskService",
+      {
+        // The executor appends AbortSignal; strip it before forwarding optional arguments.
+        create: (...args: unknown[]) => {
+          const [message, conversationId] = args.slice(0, -1);
+          if (
+            typeof message !== "string" ||
+            !message.trim() ||
+            (conversationId !== undefined && typeof conversationId !== "string")
+          ) {
+            throw new Error("taskService.create 参数无效");
+          }
+          return taskService.create(message, conversationId);
+        },
+        get: (...args: unknown[]) => {
+          const [id] = args.slice(0, -1);
+          if (typeof id !== "string" || !id)
+            throw new Error("taskService.get 参数无效");
+          return taskService.get(id);
+        },
+      },
+    ],
+  ]);
+  scheduler = new CronScheduler(
+    new TaskExecutor(
+      app.prisma,
+      serviceRegistry,
+      config.schedulerEnableScript ?? false,
+    ),
+    app.prisma,
+  );
+  // Schema-free in-memory test apps omit databaseUrl, just like run recovery above.
+  if (config.databaseUrl) app.addHook("onReady", () => scheduler!.start());
 
   registerHttpHooks(app, config);
   registerHealthRoutes(app);
@@ -105,6 +146,7 @@ export function createApp(config: AppConfig) {
   registerSkillRoutes(app, skillRegistry);
   registerDirectoryRoutes(app, config.workspaceRoot);
   registerConfigRoutes(app, ragConfig, config);
+  registerSchedulerRoutes(app, new SchedulerService(app.prisma, scheduler));
 
   if (config.staticDir) {
     app.register(fastifyCompress);
