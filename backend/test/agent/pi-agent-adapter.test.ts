@@ -20,6 +20,8 @@ import { SkillRegistry } from "../../src/skills/skill-registry.js";
 import { createSkillSnapshot } from "../../src/skills/skill-policy.js";
 import { DISABLED_SKILL_SNAPSHOT } from "../../src/skills/types.js";
 import { REDACTED } from "../../src/agent/secret-guard.js";
+import { createApp } from "../../src/app.js";
+import { migratedWorkspace } from "../scheduler/helpers.js";
 
 const streams = vi.hoisted(() => ({
   openai: vi.fn<StreamFn>(),
@@ -136,6 +138,97 @@ function completed(
 describe.each(["openai", "anthropic"] as const)(
   "Pi 1.1.0 %s adapter",
   (provider) => {
+    it("creates platform tasks through a real run and can submit the scheduled Agent run", async () => {
+      const { root, file } = await migratedWorkspace();
+      roots.push(root);
+      const app = createApp({
+        host: "127.0.0.1",
+        port: 3210,
+        workspaceRoot: root,
+        databaseUrl: `file:${file}`,
+        provider,
+        model: provider === "openai" ? "gpt-4.1-mini" : "gateway-private-model",
+        openAiApiKey: secret,
+        anthropicAuthToken: secret,
+        maxRunDurationMs: 5000,
+      });
+      let turn = 0;
+      streams[provider].mockImplementation((model, context) => {
+        expect(
+          getCurrentTools(context.messages).map((tool) => tool.name),
+        ).toEqual(
+          expect.arrayContaining([
+            "get_scheduler_time",
+            "create_scheduled_task",
+          ]),
+        );
+        const calls: Array<{ name: string; arguments: JsonObject }> = [
+          { name: "get_scheduler_time", arguments: {} },
+          {
+            name: "create_scheduled_task",
+            arguments: {
+              name: "Agent daily summary",
+              message: "Summarize the backend default workspace.",
+              schedule: "0 9 * * *",
+            },
+          },
+        ];
+        const tool = calls[turn++];
+        return tool
+          ? completed(
+              model,
+              [{ type: "toolCall", id: `schedule-${turn}`, ...tool }],
+              "toolUse",
+            )
+          : completed(model, [{ type: "text", text: "Done." }]);
+      });
+      try {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/runs",
+          payload: {
+            projectId: "default",
+            conversationId: "schedule-conversation",
+            message: "每天早上 9 点汇总默认工作区",
+            skillPolicy: { mode: "disabled" },
+          },
+        });
+        expect(response.statusCode).toBe(202);
+        const events = await app.inject(response.json().eventsUrl);
+        expect(events.body).toContain('"status":"succeeded"');
+        const list = (await app.inject("/api/scheduled-tasks")).json();
+        expect(list.total).toBe(1);
+        const task = list.tasks[0];
+        expect(task).toMatchObject({
+          type: "service",
+          schedule: "0 9 * * *",
+          payload: { service: "taskService", method: "create" },
+        });
+        const triggered = await app.inject({
+          method: "POST",
+          url: `/api/scheduled-tasks/${task.id}/trigger`,
+        });
+        expect(triggered.statusCode).toBe(202);
+        const executionUrl = `/api/task-executions/${triggered.json().executionId}`;
+        await expect
+          .poll(async () => (await app.inject(executionUrl)).json().status)
+          .toBe("succeeded");
+        const execution = (await app.inject(executionUrl)).json();
+        expect(execution.result).toMatchObject({
+          input: "Summarize the backend default workspace.",
+        });
+        expect(execution.result.conversationId).not.toBe(
+          "schedule-conversation",
+        );
+        const scheduledEvents = await app.inject(
+          `/api/runs/${execution.result.id}/events`,
+        );
+        expect(scheduledEvents.body).toContain('"status":"succeeded"');
+      } finally {
+        await app.close();
+      }
+    });
+
     it("replays system/tools in transcript and executes skill, workspace and search tools", async () => {
       const { root, config, adapter } = await setup(provider, {
         tavilyApiKey: "test-tavily-key",

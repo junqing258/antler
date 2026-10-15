@@ -9,6 +9,7 @@ import type { SkillSnapshot } from "../skills/types.js";
 import { createSkillTools } from "../skills/skill-tools.js";
 import { composeSkillPrompt } from "../skills/skill-prompt.js";
 import { SecretGuard } from "./secret-guard.js";
+import { createSchedulerTools, type AgentScheduler } from "./scheduler-tools.js";
 
 /** 模型连接、工作区工具和请求超时配置，由宿主创建适配器时注入。 */
 export type PiAgentAdapterConfig = {
@@ -20,6 +21,7 @@ export type PiAgentAdapterConfig = {
   anthropicBaseUrl?: string;
   tavilyApiKey?: string;
   getToolEnvironment?: () => NodeJS.ProcessEnv;
+  schedulerService?: AgentScheduler;
   workspaceRoot: string;
   systemPrompt: string;
   requestTimeoutMs: number;
@@ -69,6 +71,9 @@ export class PiAgentAdapter {
           ]
         : []),
       ...createSkillTools(snapshot, this.secretGuard),
+      ...(this.config.schedulerService
+        ? createSchedulerTools(this.config.schedulerService, this.secretGuard)
+        : []),
     ];
   }
   /** 搜索结果和异常信息都可能包含敏感内容，返回给 Agent 前统一脱敏。 */

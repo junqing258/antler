@@ -85,6 +85,7 @@ export function createApp(config: AppConfig) {
         workspaceRoot,
         requestTimeoutMs: config.maxRunDurationMs,
         systemPrompt: DEFAULT_SYSTEM_PROMPT,
+        schedulerService,
       });
       adapters.set(key, adapter);
     }
@@ -138,6 +139,7 @@ export function createApp(config: AppConfig) {
   );
   // Schema-free in-memory test apps omit databaseUrl, just like run recovery above.
   if (config.databaseUrl) app.addHook("onReady", () => scheduler!.start());
+  const schedulerService = new SchedulerService(app.prisma, scheduler);
 
   registerHttpHooks(app, config);
   registerHealthRoutes(app);
@@ -146,7 +148,7 @@ export function createApp(config: AppConfig) {
   registerSkillRoutes(app, skillRegistry);
   registerDirectoryRoutes(app, config.workspaceRoot);
   registerConfigRoutes(app, ragConfig, config);
-  registerSchedulerRoutes(app, new SchedulerService(app.prisma, scheduler));
+  registerSchedulerRoutes(app, schedulerService);
 
   if (config.staticDir) {
     app.register(fastifyCompress);
