@@ -18,6 +18,7 @@ import {
 } from "../knowledge/types.js";
 import type { RunStore } from "../runs/run-store.js";
 import { SecretGuard } from "./secret-guard.js";
+import { RunTracing } from "../telemetry/tracing.js";
 
 /** 单次运行使用的模型连接配置，由适配器工厂转换为具体 provider 配置。 */
 export type ProviderRunConfig = {
@@ -51,6 +52,7 @@ type ActiveRun = {
   skillSnapshot: SkillSnapshot;
   knowledgePolicy: KnowledgePolicy;
   secretGuard: SecretGuard;
+  tracing?: RunTracing;
   // 按输出类型与内容块索引隔离缓冲，避免正文和思考内容互相拼接。
   streams: Map<
     string,
@@ -157,8 +159,16 @@ export class AntlerHostRuntime {
     };
     this.runs.set(run.id, active);
     this.activeConversations.set(conversationId, run.id);
+    const tracing = new RunTracing(run, (value) => active.secretGuard.redact(value));
+    active.tracing = tracing;
     // 入队后异步启动，使调用方无需等待知识检索或模型响应。
-    queueMicrotask(() => void this.execute(active));
+    queueMicrotask(() => void tracing.withContext(async () => {
+      try {
+        await this.execute(active);
+      } finally {
+        tracing.finish(active.run.status, active.run.errorCode);
+      }
+    }));
     return run;
   }
   /** 按策略发现技能并生成快照，同时向调用方返回技能加载诊断。 */
@@ -342,6 +352,7 @@ export class AntlerHostRuntime {
   private async mapPiEvent(active: ActiveRun, event: AgentEvent) {
     // 工具可能更新环境变量，在处理输出前补充最新的秘密集合。
     active.secretGuard.captureEnvironment();
+    active.tracing?.observe(event);
     const runId = active.run.id;
     if (
       event.type === "message_update" &&

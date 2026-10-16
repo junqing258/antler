@@ -29,11 +29,13 @@ import { CronScheduler } from "./scheduler/scheduler.js";
 import { SchedulerService } from "./scheduler/service.js";
 import { registerSchedulerRoutes } from "./routes/scheduler.js";
 import type { ServiceRegistry } from "./scheduler/types.js";
+import { registerRequestTracing } from "./plugins/request-tracing.js";
 
 export function createApp(config: AppConfig) {
   mkdirSync(config.workspaceRoot, { recursive: true });
   const ragConfig = new RagConfigStore(config, config.workspaceRoot);
   const app = Fastify({ logger: false, genReqId: createRequestId });
+  registerRequestTracing(app);
   registerRequestLogging(app);
   let scheduler: CronScheduler | undefined;
   registerDatabase(app, config.databaseUrl, async () => scheduler?.stop());

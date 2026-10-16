@@ -1,7 +1,11 @@
 import { createApp } from "./app.js";
 import { config } from "./config/env.js";
+import { initializeTracing } from "./telemetry/tracing.js";
+
+let telemetry: ReturnType<typeof initializeTracing>;
 
 try {
+  telemetry = initializeTracing();
   const app = createApp(config);
   let closing = false;
   const shutdown = async () => {
@@ -9,9 +13,11 @@ try {
     closing = true;
     try {
       await app.close();
+      await telemetry?.shutdown();
       process.exit(0);
     } catch (error) {
       console.error("Antler backend failed to shut down:", error);
+      await telemetry?.shutdown().catch(() => {});
       process.exit(1);
     }
   };
@@ -24,5 +30,6 @@ try {
 } catch (error) {
   // Fastify logging is disabled in createApp; startup failures must still be visible.
   console.error("Antler backend failed to start:", error);
+  await telemetry?.shutdown().catch(() => {});
   process.exit(1);
 }

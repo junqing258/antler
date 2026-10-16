@@ -96,6 +96,10 @@ Tushare Pro 的 Token 可放在 `.env.deploy` 的 `TUSHARE_TOKEN` 中，随部�
 
 Web 部署会直接公开后端端口。公网部署请通过防火墙限制访问来源，或在外部网关配置用户认证。
 
+## 日志与 traces
+
+后端支持通过共享 Vector 将 HTTP、Agent Run、模型和工具调用的 traces 写入 OpenObserve，并在日志中附加 trace ID。配置、采集范围及查看方式见 [tracing 接入说明](docs/tracing.md)。共享采集器独立维护于 `../observability`，同时采集后端和 RAG 日志。
+
 ## 检查
 
 ```bash
