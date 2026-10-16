@@ -80,14 +80,23 @@ export class RunTracing {
   private closed = false;
 
   constructor(
-    private readonly run: { id: string },
+    private readonly run: { id: string; conversationId: string; projectId: string },
     private readonly redact: (value: string) => string = (value) => value,
   ) {
     this.span = tracer().startSpan("agent.run", {
-      attributes: { "antler.run.id": run.id, "gen_ai.operation.name": "invoke_agent" },
+      attributes: { ...this.attributes(), "gen_ai.operation.name": "invoke_agent" },
     });
     this.context = trace.setSpan(context.active(), this.span);
     if (traceFields(this.span)) activeRuns.add(this);
+  }
+
+  private attributes() {
+    return {
+      "antler.run.id": this.redact(this.run.id),
+      "gen_ai.conversation.id": this.redact(this.run.conversationId),
+      "gen_ai.agent.name": "antler",
+      "antler.project.id": this.redact(this.run.projectId),
+    };
   }
 
   withContext<T>(callback: () => T): T {
@@ -103,7 +112,7 @@ export class RunTracing {
       }
       this.model = tracer().startSpan("gen_ai.chat", {
         kind: SpanKind.CLIENT,
-        attributes: { "antler.run.id": this.run.id, "gen_ai.operation.name": "chat" },
+        attributes: { ...this.attributes(), "gen_ai.operation.name": "chat" },
       }, this.context);
     } else if (event.type === "message_end" && event.message.role === "assistant") {
       const message = event.message;
@@ -133,7 +142,7 @@ export class RunTracing {
       this.tools.get(event.toolCallId)?.end();
       this.tools.set(event.toolCallId, tracer().startSpan("tool.execute", {
         attributes: {
-          "antler.run.id": this.run.id,
+          ...this.attributes(),
           "gen_ai.operation.name": "execute_tool",
           "gen_ai.tool.name": this.redact(event.toolName).slice(0, 128),
         },

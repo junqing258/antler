@@ -37,7 +37,7 @@ describe("tracing", () => {
   it("preserves upstream context through async handlers, runs, model calls and tools without exporting content", async () => {
     app.post("/runs/:id", async () => {
       await setTimeout(1);
-      const run = new RunTracing({ id: "run-1" }, (value) => value.replaceAll("secret", "[REDACTED]"));
+      const run = new RunTracing({ id: "run-1", conversationId: "conversation-1", projectId: "project-1" }, (value) => value.replaceAll("secret", "[REDACTED]"));
       await run.withContext(async () => {
         await setTimeout(1);
         run.observe({ type: "turn_start" });
@@ -84,13 +84,32 @@ describe("tracing", () => {
     expect(log.mock.calls.flat().join("\n")).not.toContain("private-query");
   });
 
+  it("groups separate turns by conversation and keeps other sessions isolated on all agent spans", async () => {
+    for (const [id, conversationId] of [["run-1", "session-1"], ["run-2", "session-1"], ["run-3", "session-2"]]) {
+      const run = new RunTracing({ id, conversationId, projectId: "project-secret" }, (value) => value.replaceAll("secret", "[REDACTED]"));
+      run.observe({ type: "turn_start" });
+      run.observe({ type: "tool_execution_start", toolCallId: "tool-1", toolName: "test", args: {} });
+      run.finish("succeeded");
+    }
+    await provider.forceFlush();
+    const spans = exporter.getFinishedSpans();
+    expect(spans).toHaveLength(9);
+    for (const span of spans) {
+      expect(span.attributes["gen_ai.conversation.id"]).toBe(span.attributes["antler.run.id"] === "run-3" ? "session-2" : "session-1");
+      expect(span.attributes["gen_ai.agent.name"]).toBe("antler");
+      expect(span.attributes["antler.project.id"]).toBe("project-[REDACTED]");
+    }
+    const runs = spans.filter((span) => span.name === "agent.run");
+    expect(new Set(runs.map((span) => span.spanContext().traceId)).size).toBe(3);
+  });
+
   it("keeps concurrent request contexts separate and ends each request once", async () => {
     app.get("/work/:id", async (request) => {
       await setTimeout(5);
-      const run = new RunTracing({ id: request.id });
+      const run = new RunTracing({ id: request.id, conversationId: request.id, projectId: "project-1" });
       await run.withContext(() => setTimeout(2));
       run.finish("completed");
-      return { id: request.id };
+      return { id: request.id, conversationId: request.id, projectId: "project-1" };
     });
     await Promise.all(Array.from({ length: 8 }, (_, i) => app.inject(`/work/${i}`)));
     const spans = exporter.getFinishedSpans();
@@ -99,6 +118,7 @@ describe("tracing", () => {
       const parent = spans.find((span) => span.spanContext().spanId === run.parentSpanContext?.spanId)!;
       expect(parent).toBeDefined();
       expect(parent.attributes["antler.request.id"]).toBe(run.attributes["antler.run.id"]);
+      expect(run.attributes["gen_ai.conversation.id"]).toBe(parent.attributes["antler.request.id"]);
       expect(parent.spanContext().traceId).toBe(run.spanContext().traceId);
     }
     expect(new Set(spans.map((span) => span.spanContext().traceId)).size).toBe(8);
@@ -107,7 +127,7 @@ describe("tracing", () => {
   it.each(["interrupted", "cancelled"])("marks failed HTTP responses and closes %s model/tool spans", async (status) => {
     app.get("/fail", async () => { throw new Error("private-error-message"); });
     await app.inject("/fail");
-    const run = new RunTracing({ id: "cancelled" });
+    const run = new RunTracing({ id: "cancelled", conversationId: "conversation-1", projectId: "project-1" });
     run.observe({ type: "turn_start" });
     run.observe({ type: "tool_execution_start", toolCallId: "tool-2", toolName: "test", args: {} });
     run.finish(status, "cancelled");

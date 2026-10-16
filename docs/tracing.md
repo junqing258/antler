@@ -29,7 +29,7 @@ Antler Compose 通过 `extra_hosts: ["host.docker.internal:host-gateway"]` 注�
 ## 采集范围
 
 - HTTP：方法、路由模板、状态码、请求 ID、耗时；响应返回 `x-trace-id`，支持上游 `traceparent` / `tracestate`。`/health` 健康检查不创建或导出 span（含 GET、HEAD 和查询参数），请求日志继续保留。
-- Agent Run：Run ID、结束状态、错误代码。异步执行保留创建请求的父 span，Run 可持续到 HTTP 响应结束之后。
+- Agent Run：Run ID、结束状态、错误代码。Run、模型和工具 span 均携带 `gen_ai.conversation.id`（业务 conversationId）、`gen_ai.agent.name=antler` 和 `antler.project.id`，支持跨轮会话聚合。异步执行保留创建请求的父 span，Run 可持续到 HTTP 响应结束之后。
 - 模型：每个 Agent turn 一个 `gen_ai.chat`，包含供应商、模型、结束原因和 token 用量。
 - 工具：每次工具执行的名称、耗时与错误状态。
 
@@ -54,3 +54,9 @@ Antler Compose 通过 `extra_hosts: ["host.docker.internal:host-gateway"]` 注�
 参考：[Vector OTLP source](https://vector.dev/docs/reference/configuration/sources/opentelemetry/)、[Vector OTLP sink](https://vector.dev/docs/reference/configuration/sinks/opentelemetry/)、[OpenTelemetry JavaScript](https://opentelemetry.io/docs/languages/js/instrumentation/)。Vector 的 traces 支持仍属实验性质，升级时需验证父子关系和多 span 批量转发。
 
 2026-10-16 host-gateway 切换验收：Antler 和 Vector 均通过 Docker 的 `host.docker.internal` 映射获取宿主机地址，Vector 仅绑定实际内部网关；新请求 trace 与关联日志入库正常，`/health` 继续不生成 trace。配置备份：`/opt/observability/private/before-host-gateway-20261016231015`。网关变化后重新创建两个容器以刷新映射。
+
+## LLM 会话
+
+在支持 Sessions 的 OpenObserve 版本中，进入 AI → Monitor → Sessions，使用 Stream 模式选择 `antler_traces`，并选择包含新运行的时间范围。同一业务会话每轮使用独立 Trace，通过 `gen_ai.conversation.id` 聚合；工具和模型 span 使用相同会话 ID。无需新增数据库字段或导出配置。此变更需构建并部署后端后生效，历史 span 不会自动补齐会话 ID。
+
+当前仅导出元数据，可用于会话关联及 Token、耗时和错误分析；没有导出提问和回复，因此不支持完整正文回放、首条消息展示或按正文搜索。费用需要在 OpenObserve Model Pricing 中配置对应模型的价格。
