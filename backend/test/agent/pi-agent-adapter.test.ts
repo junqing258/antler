@@ -397,6 +397,55 @@ describe.each(["openai", "anthropic"] as const)(
       );
     });
 
+    it("generates a bounded, redacted title with no tools and preserves chat history", async () => {
+      const { adapter, config } = await setup(provider);
+      streams[provider].mockImplementation((model) =>
+        completed(model, [{ type: "text", text: "Original answer" }]),
+      );
+      await adapter.run("Original goal", "title", DISABLED_SKILL_SNAPSHOT, new AbortController().signal, () => {});
+      streams[provider].mockImplementation((model, context, options) => {
+        expect(model.id).toBe(config.model);
+        expect(model.baseUrl).toBe(provider === "openai" ? config.openAiBaseUrl : config.anthropicBaseUrl);
+        expect(getCurrentTools(context.messages)).toEqual([]);
+        expect(getCurrentSystemPrompt(context.messages)).toContain("简短标题");
+        const transcript = JSON.stringify(context.messages);
+        expect(transcript).toContain("用户主题");
+        expect(transcript).toContain("助手回答");
+        expect(transcript).not.toContain(secret);
+        expect(transcript).not.toContain(secret.slice(0, 8));
+        expect(transcript.length).toBeLessThan(13_000);
+        expect(options?.maxTokens).toBe(128);
+        if (provider === "openai") expect(options?.apiKey).toBe(secret);
+        else expect(options?.headers?.Authorization).toBe(`Bearer ${secret}`);
+        return completed(model, [{ type: "text", text: `“主题概括 ${secret}”\n额外解释` }]);
+      });
+      expect(await adapter.generateTitle("title", `用户主题 ${secret}${"a".repeat(3980)}${secret}end`, `助手回答 ${secret}${"b".repeat(7980)}${secret}end`, new AbortController().signal))
+        .toBe(`主题概括 ${REDACTED}`);
+      streams[provider].mockImplementation((model, context) => {
+        expect(JSON.stringify(context.messages)).toContain("Original goal");
+        expect(JSON.stringify(context.messages)).toContain("Original answer");
+        expect(JSON.stringify(context.messages)).not.toContain("用户主题");
+        expect(getCurrentTools(context.messages).map((tool) => tool.name)).toContain("read");
+        return completed(model, [{ type: "text", text: "Continued." }]);
+      });
+      await adapter.run("Continue", "title", DISABLED_SKILL_SNAPSHOT, new AbortController().signal, () => {});
+    });
+
+    it.each(["empty", "error", "long", "abort"])("handles %s title generation", async (outcome) => {
+      const { adapter } = await setup(provider);
+      streams[provider].mockImplementation((model) => completed(model, [{ type: "text", text: "Answer" }]));
+      await adapter.run("Goal", "title", DISABLED_SKILL_SNAPSHOT, new AbortController().signal, () => {});
+      const controller = new AbortController();
+      streams[provider].mockImplementation((model) => {
+        if (outcome === "error") throw new Error(`Remote error ${secret}`);
+        if (outcome === "abort") controller.abort();
+        return completed(model, [{ type: "text", text: outcome === "long" ? "题".repeat(100) : "" }]);
+      });
+      const result = adapter.generateTitle("title", "Goal", "Answer", controller.signal);
+      if (outcome === "long") expect(await result).toBe("题".repeat(48));
+      else await expect(result).rejects.toThrow();
+    });
+
     it("compacts history and uses only the summary with original instructions/tools on the next run", async () => {
       const { adapter } = await setup(provider);
       const oldDetails = "Original conversation details. ".repeat(200);

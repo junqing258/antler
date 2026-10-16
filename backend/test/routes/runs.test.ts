@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import { describe, expect, it, vi } from "vitest";
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import { AntlerHostRuntime, type Run } from "../../src/agent/host-runtime.js";
 import {
   PiAdapterError,
@@ -20,6 +21,87 @@ function testRuntime() {
     createRunWithSkills: vi.fn(async () => ({ run, skillDiagnostics: [] })),
   };
 }
+
+describe("POST /api/runs/:runId/title", () => {
+  it("uses the completed run's model and reuses its generated title", async () => {
+    const generateTitle = vi.fn(async () => "股票投资分析");
+    const runAdapter: PiAgentAdapter["run"] = async (_input, _id, _snapshot, _signal, onEvent) => {
+      for (const [type, delta] of [
+        ["thinking_delta", "内部思考"],
+        ["text_delta", "分析结果"],
+      ]) {
+        await onEvent({
+          type: "message_update",
+          assistantMessageEvent: { type, contentIndex: 0, delta },
+        } as AgentEvent);
+      }
+      return [];
+    };
+    const runtime = new AntlerHostRuntime(
+      () => ({ run: runAdapter, generateTitle }) as unknown as PiAgentAdapter,
+      { maxRunDurationMs: 1000, maxEvents: 10 },
+    );
+    const app = Fastify();
+    registerRunRoutes(app, runtime);
+    try {
+      const run = await runtime.createRun("分析股票", { projectId: "project", conversationId: "conversation" });
+      await vi.waitFor(() => expect(run.status).toBe("succeeded"));
+      const responses = await Promise.all([1, 2].map(() => app.inject({ method: "POST", url: `/api/runs/${run.id}/title` })));
+      for (const response of responses) {
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual({ title: "股票投资分析" });
+      }
+      expect(generateTitle).toHaveBeenCalledOnce();
+      expect(generateTitle).toHaveBeenCalledWith("conversation", "分析股票", "分析结果", expect.any(AbortSignal));
+      expect(run.status).toBe("succeeded");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("returns 404 for unavailable context and 409 for unfinished runs", async () => {
+    let finish!: () => void;
+    const generateTitle = vi.fn();
+    const runtime = new AntlerHostRuntime(
+      () => ({ run: () => new Promise<void>((resolve) => { finish = resolve; }), generateTitle }) as unknown as PiAgentAdapter,
+      { maxRunDurationMs: 1000, maxEvents: 10 },
+    );
+    const app = Fastify();
+    registerRunRoutes(app, runtime);
+    try {
+      expect((await app.inject({ method: "POST", url: "/api/runs/missing/title" })).statusCode).toBe(404);
+      const run = await runtime.createRun("hello", { projectId: "project" });
+      await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+      expect((await app.inject({ method: "POST", url: `/api/runs/${run.id}/title` })).statusCode).toBe(409);
+      expect(generateTitle).not.toHaveBeenCalled();
+      finish();
+      await vi.waitFor(() => expect(run.status).toBe("succeeded"));
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("keeps title failures separate from completed runs and allows retry without exposing errors", async () => {
+    const generateTitle = vi.fn().mockRejectedValueOnce(new Error("provider-secret-value")).mockResolvedValue("成功标题");
+    const runtime = new AntlerHostRuntime(
+      () => ({ run: async () => {}, generateTitle }) as unknown as PiAgentAdapter,
+      { maxRunDurationMs: 1000, maxEvents: 10 },
+    );
+    const app = Fastify();
+    registerRunRoutes(app, runtime);
+    try {
+      const run = await runtime.createRun("hello", { projectId: "project" });
+      await vi.waitFor(() => expect(run.status).toBe("succeeded"));
+      const response = await app.inject({ method: "POST", url: `/api/runs/${run.id}/title` });
+      expect(response.statusCode).toBe(503);
+      expect(response.body).not.toContain("provider-secret-value");
+      expect(run.status).toBe("succeeded");
+      expect((await app.inject({ method: "POST", url: `/api/runs/${run.id}/title` })).json()).toEqual({ title: "成功标题" });
+    } finally {
+      await app.close();
+    }
+  });
+});
 
 describe("POST /api/runs workingDirectory", () => {
   it("passes an existing absolute directory to the runtime", async () => {

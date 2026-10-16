@@ -30,6 +30,7 @@ export type Conversation = {
   updatedAt: number;
   messages: ThreadMessageLike[];
   isTitleManuallySet?: boolean;
+  isTitleGenerated?: boolean;
 };
 
 type StoredConversation = Omit<Conversation, "projectId"> & {
@@ -107,6 +108,42 @@ function getTitle(
   const firstMessage = messages.map(getMessageText).find(Boolean);
   if (!firstMessage) return currentTitle;
   return firstMessage.slice(0, 48);
+}
+
+// Read and update in one transaction so streaming saves, generated titles and
+// manual renames cannot overwrite each other's latest fields.
+async function updateConversation(
+  id: string,
+  update: (current: Conversation | undefined) => Conversation | undefined,
+): Promise<Conversation | undefined> {
+  const database = await openDatabase();
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = database.transaction(CONVERSATIONS_STORE, "readwrite");
+      const store = transaction.objectStore(CONVERSATIONS_STORE);
+      const request = store.get(id);
+      let result: Conversation | undefined;
+      request.onsuccess = () => {
+        if (deletedConversationIds.has(id)) return;
+        try {
+          result = update(
+            request.result ? normalizeConversation(request.result) : undefined,
+          );
+          if (result) store.put(result);
+        } catch (error) {
+          transaction.abort();
+          reject(error);
+        }
+      };
+      transaction.oncomplete = () => resolve(result);
+      transaction.onerror = () =>
+        reject(transaction.error ?? new Error("本地数据操作失败"));
+      transaction.onabort = () =>
+        reject(transaction.error ?? new Error("本地数据操作已取消"));
+    });
+  } finally {
+    database.close();
+  }
 }
 
 export async function ensureDefaultProject(): Promise<Project> {
@@ -265,29 +302,41 @@ export async function saveConversationMessages(
   projectId = DEFAULT_PROJECT_ID,
 ): Promise<Conversation | undefined> {
   if (deletedConversationIds.has(id)) return undefined;
-  const current = await getConversation(id);
-  // Empty drafts are intentionally not persisted. They become conversations
-  // only after the user has actually sent a message.
-  if (!current && messages.length === 0) return undefined;
-  if (deletedConversationIds.has(id)) return undefined;
-  const now = Date.now();
-  const conversation: Conversation = {
-    id,
-    projectId: current?.projectId ?? projectId,
-    title: getTitle(
+  return updateConversation(id, (current) => {
+    // Empty drafts enter history only after a message has been sent.
+    if (!current && messages.length === 0) return undefined;
+    const now = Date.now();
+    return {
+      ...current,
+      id,
+      projectId: current?.projectId ?? projectId,
+      title: getTitle(
+        messages,
+        current?.title ?? "新会话",
+        current?.isTitleManuallySet || current?.isTitleGenerated,
+      ),
+      createdAt: current?.createdAt ?? now,
+      updatedAt: now,
       messages,
-      current?.title ?? "新会话",
-      current?.isTitleManuallySet,
-    ),
-    createdAt: current?.createdAt ?? now,
-    updatedAt: now,
-    messages,
-    isTitleManuallySet: current?.isTitleManuallySet,
-  };
-  await withStore(CONVERSATIONS_STORE, "readwrite", (store) =>
-    store.put(conversation),
-  );
-  return conversation;
+    };
+  });
+}
+
+export function saveGeneratedConversationTitle(
+  id: string,
+  title: string,
+): Promise<Conversation | undefined> {
+  return updateConversation(id, (current) => {
+    if (
+      !current ||
+      current.isTitleManuallySet ||
+      current.isTitleGenerated ||
+      !title.trim()
+    )
+      return undefined;
+    // Updating metadata should not move an older conversation to the top.
+    return { ...current, title: title.trim(), isTitleGenerated: true };
+  });
 }
 
 export async function listConversations(): Promise<Conversation[]> {
@@ -312,17 +361,11 @@ export async function renameConversation(
   id: string,
   title: string,
 ): Promise<Conversation> {
-  const current = await getConversation(id);
-  if (!current) throw new Error("会话不存在");
-  const conversation = {
-    ...current,
-    title,
-    updatedAt: Date.now(),
-    isTitleManuallySet: true,
-  };
-  await withStore(CONVERSATIONS_STORE, "readwrite", (store) =>
-    store.put(conversation),
-  );
+  const conversation = await updateConversation(id, (current) => {
+    if (!current) throw new Error("会话不存在");
+    return { ...current, title, updatedAt: Date.now(), isTitleManuallySet: true };
+  });
+  if (!conversation) throw new Error("会话不存在");
   return conversation;
 }
 

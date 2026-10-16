@@ -47,6 +47,7 @@ type ActiveRun = {
   listeners: Set<(event: RunEvent) => void>;
   timeout?: NodeJS.Timeout;
   adapter: PiAgentAdapter;
+  title?: Promise<string>;
   skillSnapshot: SkillSnapshot;
   knowledgePolicy: KnowledgePolicy;
   secretGuard: SecretGuard;
@@ -195,6 +196,34 @@ export class AntlerHostRuntime {
   /** 优先读取内存中的最新状态；重启前的运行则从持久化存储读取。 */
   async getRun(runId: string) {
     return this.runs.get(runId)?.run ?? (await this.runStore?.get(runId));
+  }
+  /** 标题独立于运行终态；同一运行的重复请求复用结果，失败可重试。 */
+  async generateTitle(runId: string): Promise<string | undefined> {
+    const active = this.runs.get(runId);
+    if (!active) return undefined;
+    if (
+      active.run.status !== "succeeded" ||
+      active.run.input.trim() === "/compact"
+    )
+      throw new PiAdapterError("conversation_context_empty", "当前运行无法生成标题。");
+    if (!active.title) {
+      const response = active.events
+        .filter((event) => event.type === "assistant.delta")
+        .map((event) => event.payload.delta as string)
+        .join("");
+      active.title = active.adapter
+        .generateTitle(
+          active.run.conversationId,
+          active.run.input,
+          response,
+          AbortSignal.timeout(Math.min(this.config.maxRunDurationMs, 30_000)),
+        )
+        .catch((error) => {
+          active.title = undefined;
+          throw error;
+        });
+    }
+    return active.title;
   }
   /** 只返回指定事件 ID 之后的事件，支持客户端断线后的增量回放。 */
   async getEvents(runId: string, afterEventId = 0) {

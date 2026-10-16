@@ -7,6 +7,7 @@ import { streamRun } from "../utils/sse.js";
 import type { ProviderRunConfig } from "../agent/host-runtime.js";
 import { statSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
+import { PiAdapterError } from "../agent/pi-agent-adapter.js";
 
 function parseProvider(value: unknown): ProviderRunConfig | undefined {
   if (value === undefined) return undefined;
@@ -53,6 +54,25 @@ export function registerRunRoutes(
   app: FastifyInstance,
   runtime: AntlerHostRuntime,
 ) {
+  app.post<{ Params: { runId: string } }>(
+    "/api/runs/:runId/title",
+    async (request, reply) => {
+      try {
+        const title = await runtime.generateTitle(request.params.runId);
+        if (title === undefined)
+          return reply.code(404).send({ error: "run 不存在或上下文已过期。" });
+        return { title };
+      } catch (error) {
+        if (
+          error instanceof PiAdapterError &&
+          error.code === "conversation_context_empty"
+        )
+          return reply.code(409).send({ error: error.message });
+        // 标题失败不能影响聊天，也不能将供应商错误中的凭据返回给浏览器。
+        return reply.code(503).send({ error: "标题生成暂时不可用。" });
+      }
+    },
+  );
   app.post("/api/runs", async (request, reply) => {
     const {
       message,

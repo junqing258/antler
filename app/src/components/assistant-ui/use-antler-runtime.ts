@@ -6,11 +6,52 @@ import {
 } from "@assistant-ui/react";
 import { useEffect, useMemo } from "react";
 import type { ProviderConfig } from "@/lib/provider-config";
-import { saveConversationMessages } from "@/lib/conversation-store";
+import {
+  saveConversationMessages,
+  saveGeneratedConversationTitle,
+} from "@/lib/conversation-store";
 
 type ServerInfo = { baseUrl: string; token: string };
 type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];
 type JsonObject = { [key: string]: JsonValue };
+
+const pendingTitles = new Set<string>();
+
+async function generateTitle(
+  server: ServerInfo,
+  runId: string,
+  conversationId: string,
+  projectId: string,
+  messages: ThreadMessageLike[],
+  onConversationSaved: () => void,
+) {
+  if (pendingTitles.has(conversationId)) return;
+  pendingTitles.add(conversationId);
+  try {
+    const conversation = await saveConversationMessages(
+      conversationId,
+      messages,
+      projectId,
+    );
+    if (!conversation) return;
+    onConversationSaved();
+    if (conversation.isTitleManuallySet || conversation.isTitleGenerated) return;
+    const response = await fetch(`${server.baseUrl}/api/runs/${runId}/title`, {
+      method: "POST",
+      headers: { "x-antler-token": server.token },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) return;
+    const { title } = (await response.json()) as { title?: unknown };
+    if (typeof title !== "string" || !title.trim()) return;
+    if (await saveGeneratedConversationTitle(conversationId, title))
+      onConversationSaved();
+  } catch {
+    // Keep the first-message fallback; a later successful reply can retry.
+  } finally {
+    pendingTitles.delete(conversationId);
+  }
+}
 
 async function responseError(response: Response, fallback: string) {
   try {
@@ -163,6 +204,17 @@ export function useAntlerRuntime(
               if (event === "run.failed") {
                 throw new Error(payload.error?.message ?? "任务执行失败");
               }
+              if (event === "run.completed" && message.trim() !== "/compact") {
+                // Title generation runs independently so it cannot delay the reply.
+                void generateTitle(
+                  server,
+                  runId,
+                  conversationId,
+                  projectId,
+                  [...messages, { role: "assistant", content: [...content] }],
+                  onConversationSaved,
+                );
+              }
             if (event === "run.cancelled") return;
               if (event === "assistant.delta" && payload.delta) {
                 appendText(payload.delta);
@@ -233,6 +285,7 @@ export function useAntlerRuntime(
       getServerInfo,
       projectId,
       workingDirectory,
+      onConversationSaved,
     ],
   );
   const runtime = useLocalRuntime(adapter, { initialMessages });
