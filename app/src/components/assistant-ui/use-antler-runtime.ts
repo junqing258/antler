@@ -10,6 +10,7 @@ import {
   saveConversationMessages,
   saveGeneratedConversationTitle,
 } from "@/lib/conversation-store";
+import { authHeaders } from "@/lib/server-info";
 
 type ServerInfo = { baseUrl: string; token: string };
 type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];
@@ -38,7 +39,7 @@ async function generateTitle(
     if (conversation.isTitleManuallySet || conversation.isTitleGenerated) return;
     const response = await fetch(`${server.baseUrl}/api/runs/${runId}/title`, {
       method: "POST",
-      headers: { "x-antler-token": server.token },
+      headers: authHeaders(server),
       signal: AbortSignal.timeout(30_000),
     });
     if (!response.ok) return;
@@ -94,7 +95,7 @@ export function useAntlerRuntime(
           const server = await getServerInfo();
           const headers = {
             "content-type": "application/json",
-            "x-antler-token": server.token,
+            ...authHeaders(server),
           };
           const provider = getProviderConfig();
           if (provider.apiKey.trim() && !provider.model.trim()) {
@@ -133,7 +134,7 @@ export function useAntlerRuntime(
           const events = await fetch(
             `${server.baseUrl}${eventsUrl}?token=${encodeURIComponent(server.token)}`,
             {
-              headers: { "x-antler-token": server.token },
+              headers: authHeaders(server),
               signal: abortSignal,
             },
           );

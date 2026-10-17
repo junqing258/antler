@@ -1,4 +1,4 @@
-import type { ServerInfo } from "@/lib/server-info";
+import { authHeaders, type ServerInfo } from "@/lib/server-info";
 
 export type ScheduledTask = {
   id: string;
@@ -32,7 +32,7 @@ export function schedulerApi(getServerInfo: () => Promise<ServerInfo>) {
     const response = await fetch(`${server.baseUrl}/api/${path}`, {
       ...init,
       headers: {
-        "x-antler-token": server.token,
+        ...authHeaders(server),
         ...(init.body !== undefined
           ? { "content-type": "application/json" }
           : {}),

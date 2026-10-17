@@ -41,7 +41,10 @@ export function registerSchedulerRoutes(
 ) {
   app.post("/api/scheduled-tasks", async (request, reply) =>
     respond(reply, async () => {
-      const task = await service.createTask(request.body as CreateTaskDto);
+      const task = await service.createTask(
+        request.body as CreateTaskDto,
+        request.antlerUser?.id,
+      );
       return reply.code(201).send(task);
     }),
   );
@@ -60,20 +63,23 @@ export function registerSchedulerRoutes(
         !["true", "false"].includes(query.enabled)
       )
         throw new TaskValidationError("enabled 必须是 true 或 false");
-      return service.listTasks({
-        enabled:
-          query.enabled === undefined ? undefined : query.enabled === "true",
-        type: query.type as TaskFilter["type"],
-        page: positiveInt(query.page),
-        limit: positiveInt(query.limit),
-      });
+      return service.listTasks(
+        {
+          enabled:
+            query.enabled === undefined ? undefined : query.enabled === "true",
+          type: query.type as TaskFilter["type"],
+          page: positiveInt(query.page),
+          limit: positiveInt(query.limit),
+        },
+        request.antlerUser?.id,
+      );
     }),
   );
   app.get<{ Params: { id: string } }>(
     "/api/scheduled-tasks/:id",
     async (request, reply) =>
       respond(reply, async () => {
-        const task = await service.getTask(request.params.id);
+        const task = await service.getTask(request.params.id, request.antlerUser?.id);
         if (!task) throw new TaskNotFoundError();
         return task;
       }),
@@ -82,32 +88,35 @@ export function registerSchedulerRoutes(
     "/api/scheduled-tasks/:id",
     async (request, reply) =>
       respond(reply, () =>
-        service.updateTask(request.params.id, request.body as UpdateTaskDto),
+        service.updateTask(request.params.id, request.body as UpdateTaskDto, request.antlerUser?.id),
       ),
   );
   app.delete<{ Params: { id: string } }>(
     "/api/scheduled-tasks/:id",
     async (request, reply) =>
       respond(reply, async () => {
-        await service.deleteTask(request.params.id);
+        await service.deleteTask(request.params.id, request.antlerUser?.id);
         return reply.code(204).send();
       }),
   );
   app.post<{ Params: { id: string } }>(
     "/api/scheduled-tasks/:id/enable",
     async (request, reply) =>
-      respond(reply, () => service.enableTask(request.params.id)),
+      respond(reply, () => service.enableTask(request.params.id, request.antlerUser?.id)),
   );
   app.post<{ Params: { id: string } }>(
     "/api/scheduled-tasks/:id/disable",
     async (request, reply) =>
-      respond(reply, () => service.disableTask(request.params.id)),
+      respond(reply, () => service.disableTask(request.params.id, request.antlerUser?.id)),
   );
   app.post<{ Params: { id: string } }>(
     "/api/scheduled-tasks/:id/trigger",
     async (request, reply) =>
       respond(reply, async () => {
-        const execution = await service.triggerTask(request.params.id);
+        const execution = await service.triggerTask(
+          request.params.id,
+          request.antlerUser?.id,
+        );
         return reply
           .code(202)
           .send({ executionId: execution.id, status: execution.status });
@@ -120,6 +129,7 @@ export function registerSchedulerRoutes(
         executions: await service.getExecutions(
           request.params.id,
           positiveInt(request.query.limit),
+          request.antlerUser?.id,
         ),
       })),
   );
@@ -129,6 +139,7 @@ export function registerSchedulerRoutes(
       respond(reply, async () => {
         const execution = await service.getExecution(
           request.params.executionId,
+          request.antlerUser?.id,
         );
         if (!execution)
           return reply.code(404).send({ error: "执行记录不存在" });

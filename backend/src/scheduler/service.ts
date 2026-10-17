@@ -10,6 +10,7 @@ import {
   type TaskListResult,
 } from "./types.js";
 import { CronScheduler, MAX_DELAY_MS, validateSchedule } from "./scheduler.js";
+import { currentRunUserId } from "../run-context.js";
 
 const TASK_TYPES = ["http", "service", "script"];
 const FIELDS = [
@@ -138,11 +139,14 @@ export class SchedulerService {
     private scheduler: CronScheduler,
   ) {}
 
-  async createTask(data: CreateTaskDto): Promise<ScheduledTask> {
+  async createTask(data: CreateTaskDto, userId?: string): Promise<ScheduledTask> {
     validateInput(data, true);
     validatePayload(data.type, data.payload);
+    // 无显式归属时继承当前运行的所属用户（Agent 工具创建的任务）。
+    const owner = userId ?? currentRunUserId() ?? "";
     const task = await this.prisma.scheduledTask.create({
       data: {
+        userId: owner,
         name: data.name,
         description: data.description,
         type: data.type,
@@ -159,9 +163,13 @@ export class SchedulerService {
     return task;
   }
 
-  async updateTask(id: string, data: UpdateTaskDto): Promise<ScheduledTask> {
+  async updateTask(
+    id: string,
+    data: UpdateTaskDto,
+    userId?: string,
+  ): Promise<ScheduledTask> {
     validateInput(data, false);
-    const existing = await this.requireTask(id);
+    const existing = await this.requireTask(id, userId);
     validatePayload(
       existing.type,
       data.payload !== undefined ? data.payload : existing.payload,
@@ -187,17 +195,19 @@ export class SchedulerService {
     return task;
   }
 
-  async deleteTask(id: string): Promise<void> {
-    await this.requireTask(id);
+  async deleteTask(id: string, userId?: string): Promise<void> {
+    await this.requireTask(id, userId);
     await this.prisma.scheduledTask.delete({ where: { id } });
     this.scheduler.unscheduleTask(id);
     this.scheduler.cancelRetries(id);
   }
-  getTask(id: string): Promise<ScheduledTask | null> {
-    return this.prisma.scheduledTask.findUnique({ where: { id } });
+  async getTask(id: string, userId?: string): Promise<ScheduledTask | null> {
+    const task = await this.prisma.scheduledTask.findUnique({ where: { id } });
+    if (!task || (userId !== undefined && task.userId !== userId)) return null;
+    return task;
   }
-  private async requireTask(id: string): Promise<ScheduledTask> {
-    const task = await this.getTask(id);
+  private async requireTask(id: string, userId?: string): Promise<ScheduledTask> {
+    const task = await this.getTask(id, userId);
     if (!task) throw new TaskNotFoundError();
     return task;
   }
@@ -207,7 +217,7 @@ export class SchedulerService {
       : null;
   }
 
-  async listTasks(filter: TaskFilter = {}): Promise<TaskListResult> {
+  async listTasks(filter: TaskFilter = {}, userId?: string): Promise<TaskListResult> {
     const page = filter.page ?? 1;
     const requestedLimit = filter.limit ?? 20;
     integer(page, 1, Number.MAX_SAFE_INTEGER, "page");
@@ -221,6 +231,7 @@ export class SchedulerService {
     const where: Prisma.ScheduledTaskWhereInput = {
       enabled: filter.enabled,
       type: filter.type,
+      ...(userId !== undefined ? { userId } : {}),
     };
     const [tasks, total] = await this.prisma.$transaction([
       this.prisma.scheduledTask.findMany({
@@ -233,8 +244,8 @@ export class SchedulerService {
     ]);
     return { tasks, total, page, limit };
   }
-  async enableTask(id: string): Promise<ScheduledTask> {
-    const existing = await this.requireTask(id);
+  async enableTask(id: string, userId?: string): Promise<ScheduledTask> {
+    const existing = await this.requireTask(id, userId);
     validateSchedule(existing.schedule);
     validatePayload(existing.type, existing.payload);
     if (existing.schedule.startsWith("delay:") && !existing.runAt)
@@ -246,8 +257,8 @@ export class SchedulerService {
     await this.scheduler.scheduleTask(task);
     return task;
   }
-  async disableTask(id: string): Promise<ScheduledTask> {
-    await this.requireTask(id);
+  async disableTask(id: string, userId?: string): Promise<ScheduledTask> {
+    await this.requireTask(id, userId);
     const task = await this.prisma.scheduledTask.update({
       where: { id },
       data: { enabled: false },
@@ -256,19 +267,34 @@ export class SchedulerService {
     this.scheduler.cancelRetries(id);
     return task;
   }
-  triggerTask(id: string): Promise<TaskExecution> {
-    return this.scheduler.trigger(id);
+  triggerTask(id: string, userId?: string): Promise<TaskExecution> {
+    // Keep the no-owner path synchronous: scheduler.trigger must observe its
+    // running state before any concurrent stop() can flip it.
+    if (userId === undefined) return this.scheduler.trigger(id);
+    return this.requireTask(id, userId).then(() => this.scheduler.trigger(id));
   }
-  async getExecutions(taskId: string, limit = 50): Promise<TaskExecution[]> {
+  async getExecutions(
+    taskId: string,
+    limit = 50,
+    userId?: string,
+  ): Promise<TaskExecution[]> {
     integer(limit, 1, Number.MAX_SAFE_INTEGER, "limit");
-    await this.requireTask(taskId);
+    await this.requireTask(taskId, userId);
     return this.prisma.taskExecution.findMany({
       where: { taskId },
       orderBy: [{ startedAt: "desc" }, { id: "desc" }],
       take: Math.min(limit, 200),
     });
   }
-  getExecution(executionId: string): Promise<TaskExecution | null> {
-    return this.prisma.taskExecution.findUnique({ where: { id: executionId } });
+  async getExecution(
+    executionId: string,
+    userId?: string,
+  ): Promise<TaskExecution | null> {
+    const execution = await this.prisma.taskExecution.findUnique({
+      where: { id: executionId },
+    });
+    if (!execution || (userId !== undefined && execution.userId !== userId))
+      return null;
+    return execution;
   }
 }

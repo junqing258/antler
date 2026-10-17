@@ -15,6 +15,9 @@ export type AppConfig = {
   host: string;
   port: number;
   accessToken?: string;
+  authMode?: "local" | "supabase";
+  supabaseUrl?: string;
+  supabasePublishableKey?: string;
   provider: "anthropic" | "openai";
   openAiApiKey?: string;
   openAiBaseUrl?: string;
@@ -41,6 +44,10 @@ export const config: AppConfig = {
   host: process.env.ANTLER_HOST ?? "127.0.0.1",
   port: Number(process.env.ANTLER_PORT ?? 3210),
   accessToken: process.env.ANTLER_ACCESS_TOKEN,
+  authMode:
+    process.env.ANTLER_AUTH_MODE === "supabase" ? "supabase" : "local",
+  supabaseUrl: process.env.ANTLER_SUPABASE_URL,
+  supabasePublishableKey: process.env.ANTLER_SUPABASE_PUBLISHABLE_KEY,
   schedulerEnableScript: process.env.ANTLER_SCHEDULER_ENABLE_SCRIPT === "true",
   provider: process.env.ANTHROPIC_AUTH_TOKEN ? "anthropic" : "openai",
   openAiApiKey: process.env.OPENAI_API_KEY,

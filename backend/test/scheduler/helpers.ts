@@ -1,4 +1,5 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
@@ -35,15 +36,17 @@ export async function migratedWorkspace() {
 
 export async function schedulerDatabase() {
   const prisma = createDatabase();
-  const sql = await readFile(
-    new URL(
-      "../../prisma/migrations/20261013000000_add_scheduler_tables/migration.sql",
-      import.meta.url,
-    ),
-    "utf8",
+  // Apply every migration in order so the schema stays current with prisma/migrations.
+  const migrationsDir = fileURLToPath(
+    new URL("../../prisma/migrations", import.meta.url),
   );
-  for (const statement of sql.split(";").filter((part) => part.trim())) {
-    await prisma.$executeRawUnsafe(statement);
+  for (const dir of readdirSync(migrationsDir).sort()) {
+    const file = join(migrationsDir, dir, "migration.sql");
+    if (!existsSync(file)) continue;
+    const sql = await readFile(file, "utf8");
+    for (const statement of sql.split(";").filter((part) => part.trim())) {
+      await prisma.$executeRawUnsafe(statement);
+    }
   }
   return prisma;
 }

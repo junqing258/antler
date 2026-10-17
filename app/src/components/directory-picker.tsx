@@ -7,6 +7,7 @@ import {
   LoaderCircleIcon,
   XIcon,
 } from "lucide-react";
+import { authHeaders } from "@/lib/server-info";
 
 type ServerInfo = { baseUrl: string; token: string };
 
@@ -41,7 +42,7 @@ export function DirectoryPicker({
       const response = await fetch(
         `${server.baseUrl}/api/directories${query}`,
         {
-          headers: { "x-antler-token": server.token },
+          headers: authHeaders(server),
         },
       );
       const body = (await response.json()) as DirectoryListing & {

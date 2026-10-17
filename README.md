@@ -26,6 +26,30 @@ OPENAI_API_KEY=your-api-key
 
 服务端也支持 `ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_MODEL` 等配置。未配置可用密钥时，任务会以 `task.failed` 结束。浏览器中填写的供应商配置保存在当前浏览器的本地存储中。
 
+## Supabase 登录认证（Web 多用户）
+
+自托管 Web 部署可启用 Supabase Auth（邮箱密码注册/登录）：浏览器持有 Supabase 会话并随请求发送 `Authorization: Bearer <access_token>`，backend 校验签名后按用户 ID 隔离运行记录与定时任务。Tauri 桌面模式与本地开发不受影响，仍使用共享访问令牌。
+
+Supabase 控制台准备：开启 Email provider；项目使用非对称 JWT 签名密钥（新项目默认即是，`GET <项目URL>/auth/v1/.well-known/jwks.json` 能返回密钥）。若项目仍是 HS256 共享密钥，需配置 `ANTLER_SUPABASE_PUBLISHABLE_KEY`，backend 会改走 `/auth/v1/user` 在线校验。
+
+backend 环境变量（`.env`）：
+
+```dotenv
+ANTLER_AUTH_MODE=supabase
+ANTLER_SUPABASE_URL=https://<project-ref>.supabase.co
+# 仅 HS256 项目需要：
+# ANTLER_SUPABASE_PUBLISHABLE_KEY=<publishable key>
+```
+
+前端环境变量（`app/.env` 或部署构建环境）：
+
+```dotenv
+VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+VITE_SUPABASE_ANON_KEY=<anon key>
+```
+
+数据隔离：`runs`、`scheduled_tasks`、`task_executions` 均记录归属用户；local 模式写入空字符串，查询不过滤。会话与项目仍保存在浏览器 IndexedDB，不随账号跨设备同步。已知约束：登录用户仍可指定服务器上任意绝对路径作为 Agent 工作目录，如需收紧应在网关或后续版本限制在 `ANTLER_WORKSPACE_ROOT` 之下。
+
 后端数据默认写入 `workspace/antler.db`；可通过 `DATABASE_URL` 和 `ANTLER_WORKSPACE_ROOT` 调整。修改 `backend/prisma/schema.prisma` 后，运行：
 
 ```bash

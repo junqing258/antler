@@ -19,8 +19,9 @@ export async function streamRun(
   reply: FastifyReply,
   afterEventId = 0,
   legacy = false,
+  userId?: string,
 ) {
-  const run = await runtime.getRun(runId);
+  const run = await runtime.getRun(runId, userId);
   if (!run) return false;
   reply.hijack();
   // Fastify's CORS/auth hooks have already placed headers on the reply. Passing

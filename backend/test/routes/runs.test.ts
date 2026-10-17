@@ -11,6 +11,7 @@ import { registerRunRoutes } from "../../src/routes/runs.js";
 function testRuntime() {
   const run: Run = {
     id: "run-1",
+userId: "",
     projectId: "project-1",
     conversationId: "conversation-1",
     input: "hello",

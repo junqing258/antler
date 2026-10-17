@@ -14,7 +14,7 @@ describe("PrismaRunStore", () => {
     clients.push(prisma);
     await prisma.$executeRawUnsafe(`
       CREATE TABLE runs (
-        id TEXT PRIMARY KEY, projectId TEXT NOT NULL, conversationId TEXT NOT NULL,
+        id TEXT PRIMARY KEY, userId TEXT NOT NULL DEFAULT '', projectId TEXT NOT NULL, conversationId TEXT NOT NULL,
         input TEXT NOT NULL, status TEXT NOT NULL, errorCode TEXT,
         createdAt DATETIME NOT NULL, startedAt DATETIME, finishedAt DATETIME
       );
@@ -29,6 +29,7 @@ describe("PrismaRunStore", () => {
     const store = new PrismaRunStore(prisma);
     await store.create({
       id: "run-1",
+userId: "",
       projectId: "project-1",
       conversationId: "conversation-1",
       input: "hello",

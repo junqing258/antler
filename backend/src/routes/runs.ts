@@ -58,7 +58,10 @@ export function registerRunRoutes(
     "/api/runs/:runId/title",
     async (request, reply) => {
       try {
-        const title = await runtime.generateTitle(request.params.runId);
+        const title = await runtime.generateTitle(
+        request.params.runId,
+        request.antlerUser?.id,
+      );
         if (title === undefined)
           return reply.code(404).send({ error: "run 不存在或上下文已过期。" });
         return { title };
@@ -105,6 +108,7 @@ export function registerRunRoutes(
     try {
       const parsedPolicy = parseSkillPolicy(skillPolicy);
       const outcome = await runtime.createRunWithSkills(message.trim(), {
+        userId: request.antlerUser?.id,
         projectId: projectId.trim(),
         conversationId,
         provider: parseProvider(provider),
@@ -154,14 +158,26 @@ export function registerRunRoutes(
     );
     if (!Number.isSafeInteger(afterEventId) || afterEventId < 0)
       return reply.code(400).send({ error: "afterEventId 无效。" });
-    if (!(await streamRun(runtime, request.params.runId, reply, afterEventId)))
+    if (
+      !(await streamRun(
+        runtime,
+        request.params.runId,
+        reply,
+        afterEventId,
+        false,
+        request.antlerUser?.id,
+      ))
+    )
       return reply.code(404).send({ error: "run 不存在。" });
   });
 
   app.post<{ Params: { runId: string } }>(
     "/api/runs/:runId/cancel",
     async (request, reply) => {
-      const run = await runtime.cancel(request.params.runId);
+      const run = await runtime.cancel(
+        request.params.runId,
+        request.antlerUser?.id,
+      );
       if (!run) return reply.code(404).send({ error: "run 不存在。" });
       return reply.code(202).send({ runId: run.id, status: run.status });
     },

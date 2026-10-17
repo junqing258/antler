@@ -24,7 +24,11 @@ export function registerTaskRoutes(
         .code(400)
         .send({ error: "conversationId 必须是非空字符串。" });
     try {
-      const task = await taskService.create(message, conversationId);
+      const task = await taskService.create(
+        message,
+        conversationId,
+        request.antlerUser?.id,
+      );
       return reply.code(202).send({
         taskId: task.id,
         runId: task.id,
@@ -41,9 +45,19 @@ export function registerTaskRoutes(
   app.get<{ Params: { taskId: string } }>(
     "/api/tasks/:taskId/events",
     async (request, reply) => {
-      const task = await taskService.get(request.params.taskId);
+      const task = await taskService.get(
+        request.params.taskId,
+        request.antlerUser?.id,
+      );
       if (!task) return reply.code(404).send({ error: "任务不存在。" });
-      await streamRun(taskService.runtime, task.id, reply, 0, true);
+      await streamRun(
+        taskService.runtime,
+        task.id,
+        reply,
+        0,
+        true,
+        request.antlerUser?.id,
+      );
     },
   );
 }

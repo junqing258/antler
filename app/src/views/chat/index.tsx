@@ -25,7 +25,7 @@ import {
   saveProviderConfig,
   type ProviderConfig,
 } from "@/lib/provider-config";
-import { serverInfo } from "@/lib/server-info";
+import { authHeaders, serverInfo } from "@/lib/server-info";
 import { createUuid } from "@/lib/utils";
 import { initializeWorkspaceProjects } from "@/lib/workspace-projects";
 import { Chat } from "@/views/chat/chat";
@@ -69,7 +69,7 @@ export function ChatView() {
     const controller = new AbortController();
     void serverInfo()
       .then((server) => fetch(`${server.baseUrl}/api/config/provider`, {
-        headers: { "x-antler-token": server.token },
+        headers: authHeaders(server),
         signal: controller.signal,
       }))
       .then(async (response) => {

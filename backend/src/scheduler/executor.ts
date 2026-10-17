@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { withRunContext } from "../run-context.js";
 import { Prisma, type PrismaClient } from "../generated/prisma/client.js";
 import type {
   ScheduledTask,
@@ -144,9 +145,10 @@ export class TaskExecutor {
       signal.addEventListener("abort", onAbort, { once: true });
     });
     try {
+      // 任务归属通过运行上下文注入，服务包装层据此把产物（如 Agent 运行）关联到创建者。
       const data: unknown = await Promise.race([
-        Promise.resolve().then(() =>
-          method.apply(service, [...(payload.args ?? []), signal]),
+        withRunContext({ userId: task.userId }, () =>
+          Promise.resolve().then(() => method.apply(service, [...(payload.args ?? []), signal])),
         ),
         aborted,
       ]);

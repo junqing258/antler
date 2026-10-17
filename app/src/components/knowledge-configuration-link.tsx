@@ -16,6 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { authHeaders } from "@/lib/server-info";
 
 type ServerInfo = { baseUrl: string; token: string };
 type RagConfig = {
@@ -61,7 +62,7 @@ function KnowledgeConfigurationForm({
       try {
         const server = await getServerInfo();
         const response = await fetch(`${server.baseUrl}/api/config`, {
-          headers: { "x-antler-token": server.token },
+          headers: authHeaders(server),
           signal: controller.signal,
         });
         if (!response.ok)
@@ -89,7 +90,7 @@ function KnowledgeConfigurationForm({
       const response = await fetch(`${server.baseUrl}/api/config/rag`, {
         method: reset ? "DELETE" : "PUT",
         headers: {
-          "x-antler-token": server.token,
+          ...authHeaders(server),
           ...(reset ? {} : { "content-type": "application/json" }),
         },
         ...(reset
@@ -267,7 +268,7 @@ export function KnowledgeConfigurationLink({
       try {
         const server = await getServerInfo();
         const response = await fetch(`${server.baseUrl}/api/config`, {
-          headers: { "x-antler-token": server.token },
+          headers: authHeaders(server),
           signal: controller.signal,
         });
         if (!response.ok)

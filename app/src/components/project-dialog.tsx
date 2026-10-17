@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { BotIcon, PuzzleIcon, SettingsIcon, XIcon } from "lucide-react";
 import { DirectoryPicker } from "@/components/directory-picker";
 import type { Project } from "@/lib/conversation-store";
+import { authHeaders } from "@/lib/server-info";
 
 type ProjectTab = "general" | "skill" | "subagent";
 type SkillFilter = "workspace" | "global" | "all";
@@ -54,7 +55,7 @@ function ProjectSkills({
           ? `?workingDirectory=${encodeURIComponent(directory)}`
           : "";
         const response = await fetch(`${server.baseUrl}/api/skills${query}`, {
-          headers: { "x-antler-token": server.token },
+          headers: authHeaders(server),
           signal: controller.signal,
         });
         const body = (await response.json()) as SkillCatalog & { error?: string };

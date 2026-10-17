@@ -30,6 +30,7 @@ import { SchedulerService } from "./scheduler/service.js";
 import { registerSchedulerRoutes } from "./routes/scheduler.js";
 import type { ServiceRegistry } from "./scheduler/types.js";
 import { registerRequestTracing } from "./plugins/request-tracing.js";
+import { currentRunUserId } from "./run-context.js";
 
 export function createApp(config: AppConfig) {
   mkdirSync(config.workspaceRoot, { recursive: true });
@@ -111,6 +112,7 @@ export function createApp(config: AppConfig) {
       "taskService",
       {
         // The executor appends AbortSignal; strip it before forwarding optional arguments.
+        // The owner user arrives through the run context (see executor.withRunContext).
         create: (...args: unknown[]) => {
           const [message, conversationId] = args.slice(0, -1);
           if (
@@ -120,13 +122,17 @@ export function createApp(config: AppConfig) {
           ) {
             throw new Error("taskService.create 参数无效");
           }
-          return taskService.create(message, conversationId);
+          return taskService.create(
+            message,
+            conversationId,
+            currentRunUserId(),
+          );
         },
         get: (...args: unknown[]) => {
           const [id] = args.slice(0, -1);
           if (typeof id !== "string" || !id)
             throw new Error("taskService.get 参数无效");
-          return taskService.get(id);
+          return taskService.get(id, currentRunUserId());
         },
       },
     ],
@@ -172,7 +178,12 @@ export function createApp(config: AppConfig) {
 
   app.setNotFoundHandler(async (request, reply) => {
     if (!request.antlerAuthorized)
-      return reply.code(401).send({ error: "未授权的本地服务请求。" });
+      return reply.code(401).send({
+        error:
+          config.authMode === "supabase"
+            ? "未登录或登录已过期。"
+            : "未授权的本地服务请求。",
+      });
     const path = request.url.split("?", 1)[0];
     if (
       config.staticDir &&

@@ -16,6 +16,7 @@
     "@assistant-ui/react": "^0.15.16",
     "@assistant-ui/react-markdown": "^0.14.12",
     "@base-ui/react": "^1.7.0",
+    "@supabase/supabase-js": "^2.118.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-opener": "^2.0.0",

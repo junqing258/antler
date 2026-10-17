@@ -31,6 +31,7 @@ export class PrismaRunStore implements RunStore {
     await this.prisma.run.create({
       data: {
         id: run.id,
+        userId: run.userId,
         projectId: run.projectId,
         conversationId: run.conversationId,
         input: run.input,
@@ -92,6 +93,7 @@ export class PrismaRunStore implements RunStore {
     if (!run) return undefined;
     return {
       id: run.id,
+      userId: run.userId,
       projectId: run.projectId,
       conversationId: run.conversationId,
       input: run.input,

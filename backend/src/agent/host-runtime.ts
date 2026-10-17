@@ -19,6 +19,7 @@ import {
 import type { RunStore } from "../runs/run-store.js";
 import { SecretGuard } from "./secret-guard.js";
 import { RunTracing } from "../telemetry/tracing.js";
+import { withRunContext } from "../run-context.js";
 
 /** 单次运行使用的模型连接配置，由适配器工厂转换为具体 provider 配置。 */
 export type ProviderRunConfig = {
@@ -31,6 +32,7 @@ export type ProviderRunConfig = {
 /** 可持久化、可返回给客户端的运行记录，不包含控制器和事件监听器。 */
 export type Run = {
   id: string;
+  userId: string;
   projectId: string;
   conversationId: string;
   input: string;
@@ -71,6 +73,7 @@ export class ConversationSkillContextMismatchError extends Error {
 /** 调用方可传入已发现的技能快照，或通过 createRunWithSkills 异步发现技能。 */
 export type CreateRunOptions = {
   projectId: string;
+  userId?: string;
   conversationId?: string;
   provider?: ProviderRunConfig;
   workingDirectory?: string;
@@ -130,6 +133,7 @@ export class AntlerHostRuntime {
     const now = new Date().toISOString();
     const run: Run = {
       id: randomUUID(),
+      userId: options.userId ?? "",
       projectId: options.projectId,
       conversationId,
       input,
@@ -162,13 +166,15 @@ export class AntlerHostRuntime {
     const tracing = new RunTracing(run, (value) => active.secretGuard.redact(value));
     active.tracing = tracing;
     // 入队后异步启动，使调用方无需等待知识检索或模型响应。
-    queueMicrotask(() => void tracing.withContext(async () => {
-      try {
-        await this.execute(active);
-      } finally {
-        tracing.finish(active.run.status, active.run.errorCode);
-      }
-    }));
+    queueMicrotask(() =>
+      void tracing.withContext(async () => {
+        try {
+          await withRunContext({ userId: run.userId }, () => this.execute(active));
+        } finally {
+          tracing.finish(active.run.status, active.run.errorCode);
+        }
+      }),
+    );
     return run;
   }
   /** 按策略发现技能并生成快照，同时向调用方返回技能加载诊断。 */
@@ -204,13 +210,16 @@ export class AntlerHostRuntime {
     return { run, skillDiagnostics: snapshot.diagnostics };
   }
   /** 优先读取内存中的最新状态；重启前的运行则从持久化存储读取。 */
-  async getRun(runId: string) {
-    return this.runs.get(runId)?.run ?? (await this.runStore?.get(runId));
+  async getRun(runId: string, userId?: string) {
+    const run = this.runs.get(runId)?.run ?? (await this.runStore?.get(runId));
+    if (!run || (userId !== undefined && run.userId !== userId)) return undefined;
+    return run;
   }
   /** 标题独立于运行终态；同一运行的重复请求复用结果，失败可重试。 */
-  async generateTitle(runId: string): Promise<string | undefined> {
+  async generateTitle(runId: string, userId?: string): Promise<string | undefined> {
     const active = this.runs.get(runId);
-    if (!active) return undefined;
+    if (!active || (userId !== undefined && active.run.userId !== userId))
+      return undefined;
     if (
       active.run.status !== "succeeded" ||
       active.run.input.trim() === "/compact"
@@ -251,9 +260,10 @@ export class AntlerHostRuntime {
     return () => active.listeners.delete(listener);
   }
   /** 发出取消信号，最终状态由执行流程统一收尾后写入。 */
-  async cancel(runId: string) {
+  async cancel(runId: string, userId?: string) {
     const active = this.runs.get(runId);
-    if (!active) return undefined;
+    if (!active || (userId !== undefined && active.run.userId !== userId))
+      return undefined;
     if (!isTerminalRunStatus(active.run.status)) active.controller.abort();
     return active.run;
   }

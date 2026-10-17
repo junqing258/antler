@@ -43,6 +43,7 @@ enum KnowledgeJobStatus {
 
 model Run {
   id             String     @id
+  userId         String     @default("")
   projectId      String
   conversationId String
   input          String
@@ -56,6 +57,7 @@ model Run {
 
   @@index([projectId, createdAt])
   @@index([conversationId, createdAt])
+  @@index([userId, createdAt])
   @@map("runs")
 }
 
@@ -200,6 +202,7 @@ enum TaskExecutionStatus {
 
 model ScheduledTask {
   id              String            @id @default(uuid())
+  userId          String            @default("")
   name            String
   description     String?
   type            ScheduledTaskType
@@ -215,11 +218,13 @@ model ScheduledTask {
   updatedAt       DateTime          @updatedAt
   executions      TaskExecution[]
 
+  @@index([userId, createdAt])
   @@map("scheduled_tasks")
 }
 
 model TaskExecution {
   id           String              @id @default(uuid())
+  userId       String              @default("")
   taskId       String
   status       TaskExecutionStatus @default(running)
   startedAt    DateTime            @default(now())

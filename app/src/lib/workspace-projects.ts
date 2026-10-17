@@ -1,4 +1,5 @@
 import { ensureWorkspaceProject, type Project } from "@/lib/conversation-store";
+import { authHeaders } from "@/lib/server-info";
 
 type ServerInfo = { baseUrl: string; token: string };
 
@@ -10,7 +11,7 @@ export async function initializeWorkspaceProjects(
     const response = await fetch(
       `${server.baseUrl}/api/directories?path=Stock-Analysis`,
       {
-        headers: { "x-antler-token": server.token },
+        headers: authHeaders(server),
         signal: AbortSignal.timeout(5_000),
       },
     );
