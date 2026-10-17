@@ -41,16 +41,10 @@ ANTLER_SUPABASE_URL=https://<project-ref>.supabase.co
 # ANTLER_SUPABASE_PUBLISHABLE_KEY=<publishable key>
 ```
 
-前端环境变量（`app/.env` 或部署构建环境）：
-
-```dotenv
-VITE_SUPABASE_URL=https://<project-ref>.supabase.co
-VITE_SUPABASE_ANON_KEY=<anon key>
-```
-
+前端无需单独配置：启动时从 `GET /api/auth-config` 获取认证配置（含 Supabase URL 与 publishable key），随后在浏览器直连 Supabase 完成邮箱密码登录。`ANTLER_AUTH_MODE=supabase` 时本地开发与 Web 部署行为一致。
 数据隔离：`runs`、`scheduled_tasks`、`task_executions` 均记录归属用户；local 模式写入空字符串，查询不过滤。会话与项目仍保存在浏览器 IndexedDB，不随账号跨设备同步。已知约束：登录用户仍可指定服务器上任意绝对路径作为 Agent 工作目录，如需收紧应在网关或后续版本限制在 `ANTLER_WORKSPACE_ROOT` 之下。
 
-后端数据默认写入 `workspace/antler.db`；可通过 `DATABASE_URL` 和 `ANTLER_WORKSPACE_ROOT` 调整。修改 `backend/prisma/schema.prisma` 后，运行：
+后端数据存放在 Postgres（推荐 Supabase）中，启动前必须设置 `DATABASE_URL` 指向 Postgres 连接串（应用运行可使用事务池化连接；`prisma migrate deploy` 需要直连或会话池化连接）。`ANTLER_WORKSPACE_ROOT` 仍决定 Agent 工作空间目录。修改 `backend/prisma/schema.prisma` 后，运行：
 
 ```bash
 pnpm --filter @antler/server db:migrate -- --name <migration-name>

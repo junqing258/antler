@@ -61,7 +61,9 @@ export function registerHttpHooks(app: FastifyInstance, config: AppConfig) {
       // Supabase 模式：API 需要 Bearer Token，静态资源与探活保持公开。
       const path = request.url.split("?", 1)[0];
       request.antlerAuthorized =
-        path === "/health" || isPublicWebRequest(request, config.staticDir);
+        path === "/health" ||
+        path === "/api/auth-config" ||
+        isPublicWebRequest(request, config.staticDir);
       if (request.antlerAuthorized) return;
       const token = bearerToken(request);
       if (!token) return;
@@ -78,6 +80,7 @@ export function registerHttpHooks(app: FastifyInstance, config: AppConfig) {
     }
     request.antlerAuthorized =
       isAuthorized(request, config.accessToken) ||
+      request.url.split("?", 1)[0] === "/api/auth-config" ||
       isPublicWebRequest(request, config.staticDir);
   });
 

@@ -1,13 +1,11 @@
-import { mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
 import { config } from "../src/config/env.js";
 
 // Migrate before onReady recovery touches the database, including on first boot.
-const url = config.databaseUrl;
-if (url?.startsWith("file:")) {
-  mkdirSync(dirname(resolve(url.slice(5))), { recursive: true });
+if (!config.databaseUrl) {
+  console.error("缺少 DATABASE_URL 环境变量：后端需要指向 Postgres 的连接串。");
+  process.exit(1);
 }
 const require = createRequire(import.meta.url);
 const result = spawnSync(

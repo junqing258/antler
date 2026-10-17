@@ -1,42 +1,14 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { execFile } from "node:child_process";
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { createDatabase } from "../../src/plugins/database.js";
 
-export async function migratedWorkspace() {
-  const root = await mkdtemp(join(tmpdir(), "antler-scheduler-"));
-  const file = join(root, "antler.db");
-  try {
-    // Prisma's engine cannot create a new SQLite file through a ../ URL on this host.
-    await writeFile(file, "");
-    const require = createRequire(import.meta.url);
-    await promisify(execFile)(
-      process.execPath,
-      [require.resolve("prisma/build/index.js"), "migrate", "deploy"],
-      {
-        cwd: fileURLToPath(new URL("../../", import.meta.url)),
-        env: {
-          ...process.env,
-          DATABASE_URL: `file:${file}`,
-          ANTLER_WORKSPACE_ROOT: root,
-        },
-      },
-    );
-    return { root, file };
-  } catch (error) {
-    await rm(root, { recursive: true, force: true });
-    throw error;
-  }
-}
-
-export async function schedulerDatabase() {
-  const prisma = createDatabase();
-  // Apply every migration in order so the schema stays current with prisma/migrations.
+/** Open a PGlite database and apply every migration from prisma/migrations in order. */
+export async function schedulerDatabase(url?: string) {
+  const prisma = createDatabase(url);
+  await prisma.$connect();
   const migrationsDir = fileURLToPath(
     new URL("../../prisma/migrations", import.meta.url),
   );
@@ -49,6 +21,19 @@ export async function schedulerDatabase() {
     }
   }
   return prisma;
+}
+
+/** A temp directory backed by a migrated file-based PGlite database. */
+export async function migratedWorkspace() {
+  const root = await mkdtemp(join(tmpdir(), "antler-scheduler-"));
+  const file = join(root, "antler.db");
+  try {
+    (await schedulerDatabase(`file:${file}`)).$disconnect();
+  } catch (error) {
+    await rm(root, { recursive: true, force: true });
+    throw error;
+  }
+  return { root, file };
 }
 
 export function deferred<T = unknown>() {

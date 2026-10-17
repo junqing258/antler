@@ -15,6 +15,7 @@ import {
 import { AssistantThread } from "@/components/assistant-ui/thread";
 import { useAntlerRuntime } from "@/components/assistant-ui/use-antler-runtime";
 import { KnowledgeConfigurationLink } from "@/components/knowledge-configuration-link";
+import { currentUserProfile } from "@/lib/auth";
 import type { SettingsTab } from "@/components/settings-dialog";
 import { Drawer, DrawerContent, DrawerTrigger } from "@/components/ui/drawer";
 import type { Conversation, Project } from "@/lib/conversation-store";
@@ -91,6 +92,12 @@ export function Chat({
     updateLayout();
     media.addEventListener("change", updateLayout);
     return () => media.removeEventListener("change", updateLayout);
+  }, []);
+  const [user, setUser] = useState<{ email: string; initial: string }>();
+  useEffect(() => {
+    void currentUserProfile().then((profile) => {
+      if (profile) setUser(profile);
+    });
   }, []);
   const navigate = (action: () => void) => {
     setNavigationOpen(false);
@@ -256,8 +263,15 @@ export function Chat({
           aria-label="个人资料"
           onClick={() => navigate(() => onOpenSettings("profile"))}
         >
-          <span className="grid size-7 place-items-center rounded-full bg-[#e8f3ef] text-xs font-semibold text-[#087d61]">U</span>
-          {/* <span className="user-details"><strong>User</strong><small>User</small></span> */}
+          <span className="grid size-7 place-items-center rounded-full bg-[#e8f3ef] text-xs font-semibold text-[#087d61]">
+            {user?.initial ?? "U"}
+          </span>
+          {user && (
+            <span className="flex min-w-0 flex-col leading-tight">
+              <strong className="truncate text-[13px] font-semibold">{user.email.split("@")[0]}</strong>
+              <small className="truncate text-[10px] text-[#777]">{user.email}</small>
+            </span>
+          )}
         </button>
         <button
           className="grid size-7 place-items-center rounded-md border-0 bg-transparent text-[#777] hover:bg-[#eaeaea] hover:text-[#333]"

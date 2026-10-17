@@ -23,6 +23,7 @@ import { mkdirSync } from "node:fs";
 import { registerDatabase } from "./plugins/database.js";
 import { PrismaRunStore } from "./runs/run-store.js";
 import { registerConfigRoutes } from "./routes/config.js";
+import { registerAuthConfigRoutes } from "./routes/auth-config.js";
 import { RagConfigStore } from "./config/rag-config.js";
 import { TaskExecutor } from "./scheduler/executor.js";
 import { CronScheduler } from "./scheduler/scheduler.js";
@@ -156,6 +157,7 @@ export function createApp(config: AppConfig) {
   registerSkillRoutes(app, skillRegistry);
   registerDirectoryRoutes(app, config.workspaceRoot);
   registerConfigRoutes(app, ragConfig, config);
+  registerAuthConfigRoutes(app, config);
   registerSchedulerRoutes(app, schedulerService);
 
   if (config.staticDir) {

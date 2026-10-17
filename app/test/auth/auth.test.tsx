@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   onSessionChange: vi.fn(
     (_callback: (authenticated: boolean) => void) => () => {},
   ),
+  loadAuthConfig: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -15,6 +16,10 @@ vi.mock("@/lib/auth", () => ({
   signUp: mocks.signUp,
   currentSession: mocks.currentSession,
   onSessionChange: mocks.onSessionChange,
+}));
+
+vi.mock("@/lib/server-info", () => ({
+  loadAuthConfig: mocks.loadAuthConfig,
 }));
 
 import { AuthGate } from "@/auth/auth-gate";
@@ -26,6 +31,8 @@ beforeEach(() => {
   mocks.currentSession.mockReset();
   mocks.onSessionChange.mockReset();
   mocks.onSessionChange.mockImplementation(() => () => {});
+  mocks.loadAuthConfig.mockReset();
+  mocks.loadAuthConfig.mockResolvedValue("supabase");
 });
 
 afterEach(() => {
@@ -51,7 +58,7 @@ describe("LoginView", () => {
     });
   });
 
-  it("切换注册模式后调用注册", async () => {
+  it("注册成功后隐藏表单并展示确认邮件指引", async () => {
     render(<LoginView />);
     fireEvent.click(screen.getByRole("button", { name: "没有账号？注册" }));
     fireEvent.change(screen.getByLabelText(/邮箱/), {
@@ -64,9 +71,16 @@ describe("LoginView", () => {
     await waitFor(() => {
       expect(mocks.signUp).toHaveBeenCalledWith("bob@example.com", "secret123");
     });
-    expect(
-      await screen.findByText(/如开启了邮箱确认请查收邮件后登录/),
-    ).toBeInTheDocument();
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("注册成功");
+    expect(status).toHaveTextContent("bob@example.com");
+    // 表单与注册按钮已隐藏，仅保留“返回登录”。
+    expect(screen.queryByLabelText(/邮箱/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/密码/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "注册" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "返回登录" }));
+    expect(screen.getByRole("button", { name: "登录" })).toBeInTheDocument();
+    expect(screen.getByLabelText(/邮箱/)).toBeInTheDocument();
   });
 });
 

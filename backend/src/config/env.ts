@@ -70,6 +70,5 @@ export const config: AppConfig = {
   agentsDir: process.env.ANTLER_AGENTS_DIR
     ? resolve(projectRoot, process.env.ANTLER_AGENTS_DIR)
     : undefined,
-  databaseUrl:
-    process.env.DATABASE_URL ?? `file:${resolve(workspaceRoot, "antler.db")}`,
+  databaseUrl: process.env.DATABASE_URL,
 };

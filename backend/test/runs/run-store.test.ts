@@ -1,31 +1,17 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createDatabase } from "../../src/plugins/database.js";
 import { PrismaRunStore } from "../../src/runs/run-store.js";
+import { schedulerDatabase } from "../scheduler/helpers.js";
 
 describe("PrismaRunStore", () => {
-  const clients: ReturnType<typeof createDatabase>[] = [];
+  const clients: Awaited<ReturnType<typeof schedulerDatabase>>[] = [];
 
   afterEach(async () => {
     await Promise.all(clients.splice(0).map((client) => client.$disconnect()));
   });
 
   it("persists project-scoped runs and replays events by per-run sequence", async () => {
-    const prisma = createDatabase();
+    const prisma = await schedulerDatabase();
     clients.push(prisma);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE runs (
-        id TEXT PRIMARY KEY, userId TEXT NOT NULL DEFAULT '', projectId TEXT NOT NULL, conversationId TEXT NOT NULL,
-        input TEXT NOT NULL, status TEXT NOT NULL, errorCode TEXT,
-        createdAt DATETIME NOT NULL, startedAt DATETIME, finishedAt DATETIME
-      );
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE run_events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, runId TEXT NOT NULL, seq INTEGER NOT NULL,
-        type TEXT NOT NULL, payload JSON NOT NULL, createdAt DATETIME NOT NULL,
-        UNIQUE(runId, seq)
-      );
-    `);
     const store = new PrismaRunStore(prisma);
     await store.create({
       id: "run-1",

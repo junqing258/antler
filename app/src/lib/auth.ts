@@ -1,27 +1,31 @@
-import { supabase } from "@/lib/server-info";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { supabaseClient } from "@/lib/server-info";
 
 export type AuthSession = Awaited<
-  ReturnType<NonNullable<typeof supabase>["auth"]["getSession"]>
+  ReturnType<NonNullable<SupabaseClient>["auth"]["getSession"]>
 >["data"]["session"];
 
 export async function currentSession(): Promise<AuthSession | undefined> {
-  if (!supabase) return undefined;
-  return (await supabase.auth.getSession()).data.session ?? undefined;
+  const client = supabaseClient();
+  if (!client) return undefined;
+  return (await client.auth.getSession()).data.session ?? undefined;
 }
 
 export function onSessionChange(
   callback: (authenticated: boolean) => void,
 ): () => void {
-  if (!supabase) return () => {};
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+  const client = supabaseClient();
+  if (!client) return () => {};
+  const { data } = client.auth.onAuthStateChange((_event, session) => {
     callback(Boolean(session));
   });
   return () => data.subscription.unsubscribe();
 }
 
 export async function signIn(email: string, password: string) {
-  if (!supabase) throw new Error("未配置 Supabase 登录。");
-  const { error } = await supabase.auth.signInWithPassword({
+  const client = supabaseClient();
+  if (!client) throw new Error("当前未启用登录。");
+  const { error } = await client.auth.signInWithPassword({
     email,
     password,
   });
@@ -29,11 +33,21 @@ export async function signIn(email: string, password: string) {
 }
 
 export async function signUp(email: string, password: string) {
-  if (!supabase) throw new Error("未配置 Supabase 登录。");
-  const { error } = await supabase.auth.signUp({ email, password });
+  const client = supabaseClient();
+  if (!client) throw new Error("当前未启用登录。");
+  const { error } = await client.auth.signUp({ email, password });
   if (error) throw error;
 }
 
+/** 当前登录账号的展示信息；未登录（local 模式）返回 undefined。 */
+export async function currentUserProfile(): Promise<
+  { email: string; initial: string } | undefined
+> {
+  const email = (await currentSession())?.user.email;
+  if (!email) return undefined;
+  return { email, initial: email.slice(0, 1).toUpperCase() };
+}
+
 export async function signOut() {
-  await supabase?.auth.signOut();
+  await supabaseClient()?.auth.signOut();
 }

@@ -6,6 +6,12 @@ let telemetry: ReturnType<typeof initializeTracing>;
 
 try {
   telemetry = initializeTracing();
+  if (!config.databaseUrl) {
+    // 数据库已切换为 Postgres；无连接串时宁可拒绝启动，也不能静默丢失数据。
+    throw new Error(
+      "缺少 DATABASE_URL 环境变量：后端需要指向 Postgres（例如 Supabase）的连接串。",
+    );
+  }
   const app = createApp(config);
   let closing = false;
   const shutdown = async () => {

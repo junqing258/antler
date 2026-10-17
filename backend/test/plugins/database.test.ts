@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createDatabase } from "../../src/plugins/database.js";
 
 describe("database", () => {
-  it("connects to SQLite through Prisma", async () => {
+  it("connects to PGlite through Prisma", async () => {
     const database = createDatabase();
 
     try {

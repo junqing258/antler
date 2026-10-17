@@ -49,7 +49,7 @@ it.skipIf(process.platform === "win32").each(["SIGINT", "SIGTERM"] as const)(
       await new Promise<void>((resolve, reject) => {
         timer = setTimeout(
           () => reject(new Error(`Backend did not start execution: ${output}`)),
-          3000,
+          15_000,
         );
         child!.once("error", reject);
         child!.once("exit", () =>
@@ -65,17 +65,23 @@ it.skipIf(process.platform === "win32").each(["SIGINT", "SIGTERM"] as const)(
       clearTimeout(timer);
       child.kill(signal);
       expect(await exited, output).toBe(0);
-      const executions = await prisma.taskExecution.findMany({
-        where: { taskId: task.id },
-      });
-      expect(executions).toHaveLength(1);
-      expect(executions[0]).toMatchObject({
-        status: "succeeded",
-        result: { stdout: "signal complete" },
-      });
-      expect(
-        await prisma.scheduledTask.findUnique({ where: { id: task.id } }),
-      ).toMatchObject({ enabled: false, runAt: null });
+      // PGlite 是进程内快照库：子进程的落盘数据必须用新实例读取。
+      const reopened = createDatabase(`file:${file}`);
+      try {
+        const executions = await reopened.taskExecution.findMany({
+          where: { taskId: task.id },
+        });
+        expect(executions).toHaveLength(1);
+        expect(executions[0]).toMatchObject({
+          status: "succeeded",
+          result: { stdout: "signal complete" },
+        });
+        expect(
+          await reopened.scheduledTask.findUnique({ where: { id: task.id } }),
+        ).toMatchObject({ enabled: false, runAt: null });
+      } finally {
+        await reopened.$disconnect();
+      }
     } finally {
       if (timer) clearTimeout(timer);
       if (child && child.exitCode === null && child.signalCode === null) {
