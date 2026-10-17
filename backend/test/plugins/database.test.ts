@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { schedulerDatabase } from "../scheduler/helpers.js";
 import { createDatabase } from "../../src/plugins/database.js";
 
 describe("database", () => {
@@ -12,4 +13,23 @@ describe("database", () => {
       await database.$disconnect();
     }
   });
+
+  it("migrates without internal knowledge tables or enum types", async () => {
+    const database = await schedulerDatabase();
+    try {
+      const tables = await database.$queryRaw<{ tablename: string }[]>`
+        SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+      `;
+      expect(tables.map((table) => table.tablename).sort()).toEqual([
+        "run_events", "runs", "scheduled_tasks", "task_executions",
+      ]);
+      const types = await database.$queryRaw<{ typname: string }[]>`
+        SELECT typname FROM pg_type WHERE typname LIKE 'Knowledge%'
+      `;
+      expect(types).toEqual([]);
+    } finally {
+      await database.$disconnect();
+    }
+  });
+
 });

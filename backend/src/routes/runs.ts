@@ -84,7 +84,6 @@ export function registerRunRoutes(
       provider,
       workingDirectory,
       skillPolicy,
-      knowledgePolicy,
     } = (request.body ?? {}) as {
       message?: unknown;
       projectId?: unknown;
@@ -92,7 +91,6 @@ export function registerRunRoutes(
       provider?: unknown;
       workingDirectory?: unknown;
       skillPolicy?: unknown;
-      knowledgePolicy?: unknown;
     };
     if (
       typeof message !== "string" ||
@@ -114,7 +112,6 @@ export function registerRunRoutes(
         provider: parseProvider(provider),
         workingDirectory: parseWorkingDirectory(workingDirectory),
         skillPolicy: parsedPolicy,
-        knowledgePolicy: parseKnowledgePolicy(knowledgePolicy),
       });
       const run = outcome.run;
       return reply.code(202).send({
@@ -141,8 +138,7 @@ export function registerRunRoutes(
       if (
         error instanceof Error &&
         (error.message.startsWith("供应商配置") ||
-          error.message.startsWith("工作目录") ||
-          error.message.startsWith("Knowledge policy"))
+          error.message.startsWith("工作目录"))
       )
         return reply.code(400).send({ error: error.message });
       throw error;
@@ -182,21 +178,6 @@ export function registerRunRoutes(
       return reply.code(202).send({ runId: run.id, status: run.status });
     },
   );
-}
-
-function parseKnowledgePolicy(
-  value: unknown,
-): import("../knowledge/types.js").KnowledgePolicy {
-  if (value === undefined) return { mode: "disabled" };
-  if (!value || typeof value !== "object")
-    throw new Error("Knowledge policy 无效。");
-  const policy = value as { mode?: unknown; knowledgeBaseIds?: unknown };
-  if (
-    (policy.mode === "disabled" || policy.mode === "auto") &&
-    policy.knowledgeBaseIds === undefined
-  )
-    return { mode: policy.mode };
-  throw new Error("Knowledge policy 无效。");
 }
 
 function parseSkillPolicy(

@@ -10,7 +10,7 @@ import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { RunEvent } from "../../src/agent/events.js";
 import { REDACTED } from "../../src/agent/secret-guard.js";
 
-describe("AntlerHostRuntime knowledge contract", () => {
+describe("AntlerHostRuntime execution contract", () => {
   it("makes bundled skills available to a Web run by default", async () => {
     const root = await mkdtemp(join(tmpdir(), "antler-web-skills-"));
     const runAdapter = vi.fn(async () => undefined);
@@ -43,7 +43,7 @@ describe("AntlerHostRuntime knowledge contract", () => {
     }
   });
 
-  it("emits an empty knowledge result before model execution and persists its event", async () => {
+  it("persists model execution events in sequence", async () => {
     const events: { id: number; type: string }[] = [];
     const store: RunStore = {
       create: vi.fn(async () => undefined),
@@ -57,7 +57,6 @@ describe("AntlerHostRuntime knowledge contract", () => {
       get: vi.fn(async () => undefined),
       getEvents: vi.fn(async () => []),
       recoverInterrupted: vi.fn(async () => undefined),
-      saveKnowledgeHits: vi.fn(async () => undefined),
     };
     const adapter = {
       run: vi.fn(async () => undefined),
@@ -75,13 +74,12 @@ describe("AntlerHostRuntime knowledge contract", () => {
     });
     await vi.waitFor(() =>
       expect(events.map((event) => event.type)).toEqual([
-        "knowledge.retrieved",
         "run.started",
         "run.completed",
       ]),
     );
 
-    expect(events.map((event) => event.id)).toEqual([1, 2, 3]);
+    expect(events.map((event) => event.id)).toEqual([1, 2]);
     expect(store.create).toHaveBeenCalledWith(
       expect.objectContaining({ projectId: "project-1" }),
     );
@@ -97,7 +95,7 @@ describe("AntlerHostRuntime knowledge contract", () => {
 });
 
 describe("AntlerHostRuntime compaction", () => {
-  it("dispatches /compact separately, skips knowledge retrieval and reports the summary", async () => {
+  it("dispatches /compact separately and reports the summary", async () => {
     const adapter = {
       run: vi.fn(),
       compact: vi.fn(async () => ({
@@ -107,13 +105,9 @@ describe("AntlerHostRuntime compaction", () => {
         afterBytes: 100,
       })),
     };
-    const knowledge = { retrieve: vi.fn() };
     const runtime = new AntlerHostRuntime(
       () => adapter as unknown as PiAgentAdapter,
       { maxRunDurationMs: 1000, maxEvents: 10 },
-      undefined,
-      undefined,
-      knowledge,
     );
     const run = await runtime.createRun("/compact", {
       projectId: "project",
@@ -126,7 +120,6 @@ describe("AntlerHostRuntime compaction", () => {
       expect.any(AbortSignal),
     );
     expect(adapter.run).not.toHaveBeenCalled();
-    expect(knowledge.retrieve).not.toHaveBeenCalled();
     const events = await runtime.getEvents(run.id);
     expect(events.map((event) => event.type)).toEqual([
       "run.started",
@@ -187,7 +180,6 @@ describe("AntlerHostRuntime secret protection", () => {
       get: vi.fn(async () => undefined),
       getEvents: vi.fn(async () => []),
       recoverInterrupted: vi.fn(async () => undefined),
-      saveKnowledgeHits: vi.fn(async () => undefined),
     };
     const adapter = {
       async run(

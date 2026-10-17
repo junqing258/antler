@@ -128,7 +128,6 @@ describe("POST /api/runs workingDirectory", () => {
       provider: undefined,
       workingDirectory: process.cwd(),
       skillPolicy: { mode: "auto" },
-      knowledgePolicy: { mode: "disabled" },
     });
     await app.close();
   });
@@ -184,7 +183,7 @@ describe("POST /api/runs workingDirectory", () => {
     await app.close();
   });
 
-  it("requires a project ID and rejects unreleased knowledge policies", async () => {
+  it("requires a project ID", async () => {
     const app = Fastify();
     const runtime = testRuntime();
     registerRunRoutes(app, runtime as unknown as AntlerHostRuntime);
@@ -196,20 +195,6 @@ describe("POST /api/runs workingDirectory", () => {
     });
     expect(missingProject.statusCode).toBe(400);
 
-    const invalidKnowledge = await app.inject({
-      method: "POST",
-      url: "/api/runs",
-      payload: {
-        message: "hello",
-        projectId: "project-1",
-        conversationId: "conversation-1",
-        knowledgePolicy: { mode: "selected", knowledgeBaseIds: ["kb-1"] },
-      },
-    });
-    expect(invalidKnowledge.statusCode).toBe(400);
-    expect(invalidKnowledge.json()).toEqual({
-      error: "Knowledge policy 无效。",
-    });
     await app.close();
   });
 });

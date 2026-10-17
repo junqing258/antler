@@ -1,6 +1,6 @@
 # Antler
 
-Antler 是一个 Web Agent 项目。前端使用 React + Vite，后端使用 Fastify；浏览器通过 HTTP API 创建任务，并通过 SSE 接收流式输出。后端使用 Prisma + SQLite 保存运行记录；知识库由外部 Antler RAG 服务管理。
+Antler 是一个 Web Agent 项目。前端使用 React + Vite，后端使用 Fastify；浏览器通过 HTTP API 创建任务，并通过 SSE 接收流式输出。后端使用 Prisma + PostgreSQL 保存运行记录；知识库由外部 Antler RAG 服务管理。
 
 项目演示：[http://47.100.210.56:3210/](http://47.100.210.56:3210/)
 
@@ -124,3 +124,5 @@ Web 部署会直接公开后端端口。公网部署请通过防火墙限制访�
 pnpm check
 pnpm test
 ```
+
+内部 knowledge 模块已移除，初始化迁移不再创建知识库表。已部署的数据库在执行 `pnpm --filter @antler/server db:deploy` 后，会通过清理迁移删除旧的 7 张知识库表及相关枚举（包括其中的数据），运行记录和外部 RAG 配置保留。

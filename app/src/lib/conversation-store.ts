@@ -17,7 +17,6 @@ export type Project = {
   id: string;
   name: string;
   workingDirectory: string;
-  knowledgePolicy?: "disabled" | "auto";
   createdAt: number;
   updatedAt: number;
 };
@@ -243,21 +242,6 @@ export async function updateProject(
     ...current,
     name: changes.name.trim(),
     workingDirectory: changes.workingDirectory.trim(),
-    updatedAt: Date.now(),
-  };
-  await withStore(PROJECTS_STORE, "readwrite", (store) => store.put(project));
-  return project;
-}
-
-export async function updateProjectKnowledgePolicy(
-  id: string,
-  knowledgePolicy: "disabled" | "auto",
-): Promise<Project> {
-  const current = await getProject(id);
-  if (!current) throw new Error("项目不存在");
-  const project: Project = {
-    ...current,
-    knowledgePolicy,
     updatedAt: Date.now(),
   };
   await withStore(PROJECTS_STORE, "readwrite", (store) => store.put(project));

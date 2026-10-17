@@ -16,31 +16,6 @@ enum RunStatus {
   cancelled
 }
 
-enum KnowledgeSourceType {
-  text
-  file
-  directory
-}
-enum KnowledgeSourceStatus {
-  pending
-  indexing
-  ready
-  degraded
-  failed
-  archived
-}
-enum KnowledgeJobStatus {
-  queued
-  scanning
-  parsing
-  chunking
-  committing
-  succeeded
-  failed
-  cancelled
-  interrupted
-}
-
 model Run {
   id             String     @id
   userId         String     @default("")
@@ -53,29 +28,11 @@ model Run {
   startedAt      DateTime?
   finishedAt     DateTime?
   events         RunEvent[]
-  knowledgeHits  RunKnowledgeHit[]
 
   @@index([projectId, createdAt])
   @@index([conversationId, createdAt])
   @@index([userId, createdAt])
   @@map("runs")
-}
-
-model RunKnowledgeHit {
-  id String @id
-  runId String
-  chunkId String?
-  citationKey String
-  rank Int
-  lexicalScore Float?
-  finalScore Float
-  titleSnapshot String
-  locatorSnapshot Json
-  textSnapshot String
-  createdAt DateTime @default(now())
-  run Run @relation(fields:[runId], references:[id], onDelete:Cascade)
-  @@unique([runId, citationKey])
-  @@map("run_knowledge_hits")
 }
 
 model RunEvent {
@@ -90,101 +47,6 @@ model RunEvent {
   @@unique([runId, seq])
   @@index([runId, seq])
   @@map("run_events")
-}
-
-model KnowledgeBase {
-  id String @id
-  projectId String
-  name String
-  description String?
-  isDefault Boolean @default(false)
-  retrievalConfig Json
-  indexVersion Int @default(0)
-  archivedAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  sources KnowledgeSource[]
-  @@index([projectId, updatedAt])
-  @@map("knowledge_bases")
-}
-model KnowledgeSource {
-  id String @id
-  knowledgeBaseId String
-  type KnowledgeSourceType
-  uri String?
-  displayName String
-  config Json
-  status KnowledgeSourceStatus @default(pending)
-  contentHash String?
-  lastIndexedAt DateTime?
-  errorCode String?
-  archivedAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  knowledgeBase KnowledgeBase @relation(fields:[knowledgeBaseId], references:[id], onDelete:Cascade)
-  documents KnowledgeDocument[]
-  jobs KnowledgeIngestionJob[]
-  @@index([knowledgeBaseId, updatedAt])
-  @@map("knowledge_sources")
-}
-model KnowledgeDocument {
-  id String @id
-  sourceId String
-  logicalPath String
-  title String
-  mimeType String
-  contentHash String
-  metadata Json
-  deletedAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  source KnowledgeSource @relation(fields:[sourceId], references:[id], onDelete:Cascade)
-  chunks KnowledgeChunk[]
-  @@unique([sourceId, logicalPath])
-  @@map("knowledge_documents")
-}
-model KnowledgeChunk {
-  id String @id
-  documentId String
-  ordinal Int
-  text String
-  tokenCount Int
-  headingPath String?
-  locator Json
-  contentHash String
-  chunkerVersion Int
-  indexVersion Int
-  createdAt DateTime @default(now())
-  document KnowledgeDocument @relation(fields:[documentId], references:[id], onDelete:Cascade)
-  @@unique([documentId, ordinal, indexVersion])
-  @@map("knowledge_chunks")
-}
-model KnowledgeIngestionJob {
-  id String @id
-  sourceId String
-  status KnowledgeJobStatus @default(queued)
-  phase String @default("queued")
-  processed Int @default(0)
-  total Int?
-  errorCode String?
-  cancelRequested Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  source KnowledgeSource @relation(fields:[sourceId], references:[id], onDelete:Cascade)
-  events KnowledgeIngestionEvent[]
-  @@index([sourceId, createdAt])
-  @@map("knowledge_ingestion_jobs")
-}
-model KnowledgeIngestionEvent {
-  id Int @id @default(autoincrement())
-  jobId String
-  seq Int
-  type String
-  payload Json
-  createdAt DateTime @default(now())
-  job KnowledgeIngestionJob @relation(fields:[jobId], references:[id], onDelete:Cascade)
-  @@unique([jobId, seq])
-  @@map("knowledge_ingestion_events")
 }
 
 enum ScheduledTaskType {

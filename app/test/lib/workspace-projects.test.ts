@@ -4,7 +4,6 @@ import {
   createProject,
   listProjects,
   updateProject,
-  updateProjectKnowledgePolicy,
 } from "@/lib/conversation-store";
 import { initializeWorkspaceProjects } from "../../src/lib/workspace-projects";
 
@@ -63,11 +62,10 @@ describe("workspace project initialization", () => {
 
   it("preserves changes made to an automatically added project", async () => {
     const project = await initializeWorkspaceProjects(getServerInfo);
-    await updateProject(project!.id, {
+    const edited = await updateProject(project!.id, {
       name: "My research",
       workingDirectory: "/srv/custom/research",
     });
-    const edited = await updateProjectKnowledgePolicy(project!.id, "auto");
 
     expect(await initializeWorkspaceProjects(getServerInfo)).toEqual(edited);
     expect(await listProjects()).toHaveLength(2);

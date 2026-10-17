@@ -11,11 +11,6 @@ import type { SkillPolicy, SkillSnapshot } from "../skills/types.js";
 import { DISABLED_SKILL_SNAPSHOT } from "../skills/types.js";
 import { SkillRegistry } from "../skills/skill-registry.js";
 import { createSkillSnapshot } from "../skills/skill-policy.js";
-import {
-  EmptyKnowledgeContext,
-  type KnowledgeContextPort,
-  type KnowledgePolicy,
-} from "../knowledge/types.js";
 import type { RunStore } from "../runs/run-store.js";
 import { SecretGuard } from "./secret-guard.js";
 import { RunTracing } from "../telemetry/tracing.js";
@@ -52,7 +47,6 @@ type ActiveRun = {
   adapter: PiAgentAdapter;
   title?: Promise<string>;
   skillSnapshot: SkillSnapshot;
-  knowledgePolicy: KnowledgePolicy;
   secretGuard: SecretGuard;
   tracing?: RunTracing;
   // 按输出类型与内容块索引隔离缓冲，避免正文和思考内容互相拼接。
@@ -79,10 +73,9 @@ export type CreateRunOptions = {
   workingDirectory?: string;
   skillPolicy?: SkillPolicy;
   skillSnapshot?: SkillSnapshot;
-  knowledgePolicy?: KnowledgePolicy;
 };
 export type HostRuntimeConfig = { maxRunDurationMs: number; maxEvents: number };
-/** 管理运行状态、知识检索和事件发布，将 Pi 事件转换为客户端使用的运行事件。 */
+/** 管理运行状态和事件发布，将 Pi 事件转换为客户端使用的运行事件。 */
 export class AntlerHostRuntime {
   private readonly runs = new Map<string, ActiveRun>();
   // 会话到当前运行的映射，用于拒绝同一会话的并发运行。
@@ -100,7 +93,6 @@ export class AntlerHostRuntime {
     private readonly config: HostRuntimeConfig,
     private readonly skills?: SkillRegistry,
     private readonly runStore?: RunStore,
-    private readonly knowledge: KnowledgeContextPort = new EmptyKnowledgeContext(),
   ) {}
   /** 创建并持久化 queued 记录，再调度后台执行；返回值不等待模型调用完成。 */
   async createRun(input: string, options: CreateRunOptions): Promise<Run> {
@@ -159,13 +151,12 @@ export class AntlerHostRuntime {
         ]),
       streams: new Map(),
       skillSnapshot: snapshot,
-      knowledgePolicy: options.knowledgePolicy ?? { mode: "disabled" },
     };
     this.runs.set(run.id, active);
     this.activeConversations.set(conversationId, run.id);
     const tracing = new RunTracing(run, (value) => active.secretGuard.redact(value));
     active.tracing = tracing;
-    // 入队后异步启动，使调用方无需等待知识检索或模型响应。
+    // 入队后异步启动，使调用方无需等待模型响应。
     queueMicrotask(() =>
       void tracing.withContext(async () => {
         try {
@@ -271,7 +262,7 @@ export class AntlerHostRuntime {
   async recoverInterrupted() {
     await this.runStore?.recoverInterrupted();
   }
-  /** 依次检索知识、调用模型并收尾；取消信号优先于模型成功或异常结果。 */
+  /** 调用模型并收尾；取消信号优先于模型成功或异常结果。 */
   private async execute(active: ActiveRun) {
     const { run } = active;
     if (active.controller.signal.aborted)
@@ -297,28 +288,6 @@ export class AntlerHostRuntime {
         await this.finish(active, "succeeded");
         return;
       }
-      // 知识命中既用于模型提示词，也保存用于引用展示；保存前先脱敏。
-      const knowledgeContext = await this.knowledge.retrieve({
-        projectId: run.projectId,
-        input: run.input,
-        policy: active.knowledgePolicy,
-      });
-      await this.runStore?.saveKnowledgeHits(
-        run.id,
-        active.secretGuard.sanitize(knowledgeContext.hits),
-      );
-      await this.emit(active, "knowledge.retrieved", {
-        mode: knowledgeContext.mode,
-        hits: knowledgeContext.hits.map(
-          ({ citationKey, title, locator, snippet, score }) => ({
-            citationKey,
-            title,
-            locator,
-            snippet,
-            score,
-          }),
-        ),
-      });
       await this.emit(
         active,
         "run.started",
@@ -331,9 +300,7 @@ export class AntlerHostRuntime {
         this.config.maxRunDurationMs,
       );
       await active.adapter.run(
-        knowledgeContext.prompt
-          ? `${knowledgeContext.prompt}\n\nUser question: ${run.input}`
-          : run.input,
+        run.input,
         run.conversationId,
         active.skillSnapshot,
         active.controller.signal,

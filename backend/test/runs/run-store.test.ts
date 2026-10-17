@@ -15,7 +15,7 @@ describe("PrismaRunStore", () => {
     const store = new PrismaRunStore(prisma);
     await store.create({
       id: "run-1",
-userId: "",
+      userId: "",
       projectId: "project-1",
       conversationId: "conversation-1",
       input: "hello",
@@ -25,15 +25,15 @@ userId: "",
     await store.appendEvent({
       id: 1,
       runId: "run-1",
-      type: "knowledge.retrieved",
-      payload: { mode: "disabled", hits: [] },
+      type: "run.started",
+      payload: { runId: "run-1", status: "running" },
       createdAt: new Date(0).toISOString(),
     });
     await store.appendEvent({
       id: 2,
       runId: "run-1",
-      type: "run.started",
-      payload: { runId: "run-1", status: "running" },
+      type: "run.completed",
+      payload: { runId: "run-1", status: "succeeded" },
       createdAt: new Date(0).toISOString(),
     });
 
@@ -41,7 +41,7 @@ userId: "",
       projectId: "project-1",
     });
     await expect(store.getEvents("run-1", 1)).resolves.toMatchObject([
-      { id: 2, type: "run.started" },
+      { id: 2, type: "run.completed" },
     ]);
   });
 });

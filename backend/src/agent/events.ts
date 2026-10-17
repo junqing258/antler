@@ -13,7 +13,6 @@ export type RunEventType =
   | "step.completed"
   | "tool.approval_required"
   | "tool.completed"
-  | "knowledge.retrieved"
   | "run.completed"
   | "run.failed"
   | "run.cancelled";
