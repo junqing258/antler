@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { signIn, signUp, resendSignupCode, verifySignupCode } from "@/lib/auth";
+import { signIn, signUp, resendSignupCode, verifySignupCode, createPasswordRecovery } from "@/lib/auth";
 
 function friendlyAuthError(cause: unknown): string {
   const code =
@@ -14,6 +14,13 @@ function friendlyAuthError(cause: unknown): string {
       return "邮箱或密码不正确。";
     case "email_not_confirmed":
       return "邮箱尚未验证，请切换到注册页面完成验证码验证。";
+    case "weak_password":
+      return "密码强度不足，请使用更长的密码并包含字母和数字。";
+    case "same_password":
+      return "新密码不能与原密码相同。";
+    case "session_not_found":
+    case "refresh_token_not_found":
+      return "验证会话已过期，请返回登录后重新申请重置密码。";
     case "otp_expired":
       return "验证码不正确或已过期，请检查验证码或重新发送。";
     default:
@@ -26,10 +33,14 @@ const inputClass =
 const buttonClass =
   "w-full rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50";
 
-/** 邮箱密码登录；注册时通过邮件验证码确认邮箱。 */
+/** 邮箱密码登录；注册和找回密码使用独立类型的邮件验证码。 */
 export function LoginView() {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup" | "recovery">("signin");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [recoveryVerified, setRecoveryVerified] = useState(false);
+  const [recovery] = useState(createPasswordRecovery);
+  useEffect(() => () => recovery.clear(), [recovery]);
   const [email, setEmail] = useState("");
   const [sentEmail, setSentEmail] = useState("");
   const [token, setToken] = useState("");
@@ -53,12 +64,15 @@ export function LoginView() {
     setNotice("");
     const recipient = sentEmail || email.trim();
     try {
-      if (sentEmail) await resendSignupCode(recipient);
+      if (mode === "recovery") await recovery.sendCode(recipient);
+      else if (sentEmail) await resendSignupCode(recipient);
       else await signUp(recipient, password);
       setPassword("");
       setSentEmail(recipient);
       setToken("");
-      setNotice(`验证码已发送至 ${recipient}，请在 10 分钟内输入。`);
+      setNotice(mode === "recovery"
+        ? `如果 ${recipient} 已注册，您将收到重置密码验证码，请在 10 分钟内输入。`
+        : `验证码已发送至 ${recipient}，请在 10 分钟内输入。`);
       const sentAt = Date.now();
       setNow(sentAt);
       setResendAt(sentAt + 60_000);
@@ -84,6 +98,34 @@ export function LoginView() {
       }
       return;
     }
+    if (mode === "recovery" && recoveryVerified) {
+      if (password.length < 6) {
+        setError("新密码至少需要 6 个字符。");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError("两次输入的密码不一致。");
+        return;
+      }
+      setBusy(true);
+      setError("");
+      try {
+        await recovery.updatePassword(password);
+        setEmail(sentEmail);
+        setMode("signin");
+        setSentEmail("");
+        setToken("");
+        setPassword("");
+        setConfirmPassword("");
+        setRecoveryVerified(false);
+        setNotice("密码已重置，请使用新密码登录。");
+      } catch (cause) {
+        setError(friendlyAuthError(cause));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (!sentEmail) {
       await sendCode();
       return;
@@ -95,8 +137,15 @@ export function LoginView() {
     setBusy(true);
     setError("");
     try {
-      await verifySignupCode(sentEmail, token);
-      // onAuthStateChange 会把视图切换回聊天界面。
+      if (mode === "recovery") {
+        await recovery.verifyCode(sentEmail, token);
+        setRecoveryVerified(true);
+        setToken("");
+        setNotice("邮箱验证成功，请设置新密码。");
+      } else {
+        await verifySignupCode(sentEmail, token);
+        // onAuthStateChange 会把视图切换回聊天界面。
+      }
     } catch (cause) {
       setError(friendlyAuthError(cause));
     } finally {
@@ -104,14 +153,34 @@ export function LoginView() {
     }
   };
 
+  const changeMode = (next: typeof mode) => {
+    recovery.clear();
+    setMode(next);
+    setSentEmail("");
+    setToken("");
+    setPassword("");
+    setConfirmPassword("");
+    setRecoveryVerified(false);
+    setError("");
+    setNotice("");
+  };
+  const heading = mode === "signin" ? "登录 Antler" : mode === "signup" ? "注册 Antler" : "找回密码";
+  const description = mode === "signin" ? "使用邮箱和密码登录。" : mode === "signup"
+    ? "设置密码后，输入邮件验证码完成注册。"
+    : recoveryVerified ? "设置新密码后，返回登录。" : "输入注册邮箱，通过邮件验证码重置密码。";
+  const submitLabel = mode === "signin" ? "登录" : recoveryVerified ? "重置密码"
+    : sentEmail ? (mode === "recovery" ? "验证邮箱" : "验证并完成注册")
+    : secondsLeft > 0 ? `${secondsLeft} 秒后可发送`
+    : mode === "recovery" ? "发送重置验证码" : "注册并发送验证码";
+
   return (
     <div className="grid min-h-[var(--app-viewport-height)] place-items-center bg-[#fafafa] p-4">
       <form
         onSubmit={submit}
         className="grid w-full max-w-sm gap-4 rounded-2xl border border-[#eee] bg-white p-6 shadow-sm"
       >
-        <h1 className="m-0 text-lg font-semibold text-[#222]">{mode === "signin" ? "登录 Antler" : "注册 Antler"}</h1>
-        <p className="m-0 text-xs text-[#777]">{mode === "signin" ? "使用邮箱和密码登录。" : "设置密码后，输入邮件验证码完成注册。"}</p>
+        <h1 className="m-0 text-lg font-semibold text-[#222]">{heading}</h1>
+        <p className="m-0 text-xs text-[#777]">{description}</p>
         <label className="grid gap-1.5 text-xs text-[#555]">
           邮箱
           <input
@@ -124,14 +193,14 @@ export function LoginView() {
             onChange={(event) => setEmail(event.target.value)}
           />
         </label>
-        {!sentEmail && (
+        {((!sentEmail && mode !== "recovery") || recoveryVerified) && (
           <label className="grid gap-1.5 text-xs text-[#555]">
-            密码
+            {mode === "recovery" ? "新密码" : "密码"}
             <input
               type="password"
               required
-              minLength={mode === "signup" ? 6 : undefined}
-              autoComplete={mode === "signup" ? "new-password" : "current-password"}
+              minLength={mode !== "signin" ? 6 : undefined}
+              autoComplete={mode !== "signin" ? "new-password" : "current-password"}
               className={inputClass}
               value={password}
               disabled={busy}
@@ -139,7 +208,22 @@ export function LoginView() {
             />
           </label>
         )}
-        {sentEmail && (
+        {recoveryVerified && (
+          <label className="grid gap-1.5 text-xs text-[#555]">
+            确认新密码
+            <input
+              type="password"
+              required
+              minLength={6}
+              autoComplete="new-password"
+              className={inputClass}
+              value={confirmPassword}
+              disabled={busy}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+            />
+          </label>
+        )}
+        {sentEmail && !recoveryVerified && (
           <label className="grid gap-1.5 text-xs text-[#555]">
             验证码
             <input
@@ -166,10 +250,10 @@ export function LoginView() {
             {notice}
           </p>
         )}
-        <button type="submit" className={buttonClass} disabled={busy || (mode === "signup" && !sentEmail && secondsLeft > 0)}>
-          {busy ? "请稍候…" : mode === "signin" ? "登录" : sentEmail ? "验证并完成注册" : secondsLeft > 0 ? `${secondsLeft} 秒后可发送` : "注册并发送验证码"}
+        <button type="submit" className={buttonClass} disabled={busy || (mode !== "signin" && !sentEmail && secondsLeft > 0)}>
+          {busy ? "请稍候…" : submitLabel}
         </button>
-        {sentEmail && (
+        {sentEmail && !recoveryVerified && (
           <div className="flex justify-between gap-3 text-xs text-primary">
             <button type="button" disabled={busy || secondsLeft > 0} className="disabled:opacity-50" onClick={() => void sendCode()}>
               {secondsLeft > 0 ? `${secondsLeft} 秒后可重发` : "重新发送验证码"}
@@ -185,20 +269,23 @@ export function LoginView() {
             </button>
           </div>
         )}
+        {mode === "signin" && (
+          <button
+            type="button"
+            className="border-0 bg-transparent p-0 text-xs text-primary hover:underline"
+            disabled={busy}
+            onClick={() => changeMode("recovery")}
+          >
+            忘记密码？
+          </button>
+        )}
         <button
           type="button"
           className="border-0 bg-transparent p-0 text-xs text-primary hover:underline"
           disabled={busy}
-          onClick={() => {
-            setMode(mode === "signin" ? "signup" : "signin");
-            setSentEmail("");
-            setToken("");
-            setPassword("");
-            setError("");
-            setNotice("");
-          }}
+          onClick={() => changeMode(mode === "signin" ? "signup" : "signin")}
         >
-          {mode === "signin" ? "没有账号？注册" : "已有账号？登录"}
+          {mode === "signin" ? "没有账号？注册" : mode === "recovery" ? "返回登录" : "已有账号？登录"}
         </button>
       </form>
     </div>

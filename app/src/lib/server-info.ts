@@ -13,6 +13,7 @@ function localBaseUrl() {
 
 let authModeValue: AuthMode = "local";
 let client: SupabaseClient | undefined;
+let publicAuthConfig: { url: string; publishableKey: string } | undefined;
 let loaded: Promise<void> | undefined;
 
 /** 当前认证模式；仅在 loadAuthConfig 完成后可靠。 */
@@ -22,6 +23,19 @@ export function authMode(): AuthMode {
 
 export function supabaseClient(): SupabaseClient | undefined {
   return client;
+}
+
+/** 恢复密码使用独立内存会话，验证邮件后不会提前登录主应用。 */
+export function createPasswordRecoveryClient(): SupabaseClient | undefined {
+  if (!publicAuthConfig) return undefined;
+  return createClient(publicAuthConfig.url, publicAuthConfig.publishableKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      storageKey: "antler-password-recovery",
+    },
+  });
 }
 
 /**
@@ -49,6 +63,7 @@ export async function loadAuthConfig(): Promise<AuthMode> {
             typeof config.publishableKey === "string"
           ) {
             authModeValue = "supabase";
+            publicAuthConfig = { url: config.url, publishableKey: config.publishableKey };
             client = createClient(config.url, config.publishableKey, {
               auth: { autoRefreshToken: true, persistSession: true },
             });

@@ -2,6 +2,10 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  sendRecoveryCode: vi.fn(),
+  verifyRecoveryCode: vi.fn(),
+  updatePassword: vi.fn(),
+  clearRecovery: vi.fn(),
   signUp: vi.fn(),
   signIn: vi.fn(),
   resendSignupCode: vi.fn(),
@@ -14,6 +18,12 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth", () => ({
+  createPasswordRecovery: () => ({
+    sendCode: mocks.sendRecoveryCode,
+    verifyCode: mocks.verifyRecoveryCode,
+    updatePassword: mocks.updatePassword,
+    clear: mocks.clearRecovery,
+  }),
   signUp: mocks.signUp,
   signIn: mocks.signIn,
   resendSignupCode: mocks.resendSignupCode,
@@ -30,6 +40,10 @@ import { AuthGate } from "@/auth/auth-gate";
 import { LoginView } from "@/auth/login-view";
 
 beforeEach(() => {
+  mocks.sendRecoveryCode.mockReset();
+  mocks.verifyRecoveryCode.mockReset();
+  mocks.updatePassword.mockReset();
+  mocks.clearRecovery.mockReset();
   mocks.signUp.mockReset();
   mocks.signIn.mockReset();
   mocks.resendSignupCode.mockReset();
@@ -54,6 +68,88 @@ describe("LoginView", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "注册并发送验证码" }));
   };
+
+  const startRecovery = async () => {
+    fireEvent.click(screen.getByRole("button", { name: "忘记密码？" }));
+    fireEvent.change(screen.getByLabelText("邮箱"), { target: { value: "alice@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送重置验证码" }));
+    await screen.findByLabelText("验证码");
+  };
+
+  it("通过恢复验证码设置新密码，再返回登录", async () => {
+    render(<LoginView />);
+    await startRecovery();
+    expect(mocks.sendRecoveryCode).toHaveBeenCalledWith("alice@example.com");
+    expect(mocks.signUp).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /秒后可重发/ })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("验证码"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "验证邮箱" }));
+    await screen.findByLabelText("新密码");
+    expect(mocks.verifyRecoveryCode).toHaveBeenCalledWith("alice@example.com", "123456");
+    expect(mocks.verifySignupCode).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("新密码"), { target: { value: "new-secret123" } });
+    fireEvent.change(screen.getByLabelText("确认新密码"), { target: { value: "different123" } });
+    fireEvent.click(screen.getByRole("button", { name: "重置密码" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("两次输入的密码不一致");
+    expect(mocks.updatePassword).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("确认新密码"), { target: { value: "new-secret123" } });
+    mocks.updatePassword.mockRejectedValueOnce({ code: "same_password" });
+    fireEvent.click(screen.getByRole("button", { name: "重置密码" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("不能与原密码相同");
+    fireEvent.click(screen.getByRole("button", { name: "重置密码" }));
+    expect(await screen.findByRole("button", { name: "登录" })).toBeInTheDocument();
+    expect(mocks.updatePassword).toHaveBeenLastCalledWith("new-secret123");
+    expect(screen.getByRole("status")).toHaveTextContent("密码已重置");
+    expect(screen.getByLabelText("密码")).toHaveValue("");
+    expect(mocks.signIn).not.toHaveBeenCalled();
+  });
+
+  it("恢复验证码错误时停留在验证页，返回登录清理恢复状态", async () => {
+    mocks.verifyRecoveryCode.mockRejectedValueOnce({ code: "otp_expired" });
+    render(<LoginView />);
+    await startRecovery();
+    fireEvent.change(screen.getByLabelText("验证码"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "验证邮箱" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("验证码不正确或已过期");
+    expect(screen.queryByLabelText("新密码")).not.toBeInTheDocument();
+    expect(mocks.updatePassword).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "返回登录" }));
+    expect(screen.getByRole("button", { name: "登录" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("验证码")).not.toBeInTheDocument();
+    expect(mocks.clearRecovery).toHaveBeenCalled();
+  });
+
+  it("恢复验证码倒计时结束后可重发，更换邮箱不绕过限流", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      render(<LoginView />);
+      await startRecovery();
+      fireEvent.click(screen.getByRole("button", { name: "更换邮箱" }));
+      expect(screen.getByRole("button", { name: /秒后可发送/ })).toBeDisabled();
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      fireEvent.click(screen.getByRole("button", { name: "发送重置验证码" }));
+      const input = await screen.findByLabelText("验证码");
+      fireEvent.change(input, { target: { value: "123456" } });
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      fireEvent.click(screen.getByRole("button", { name: "重新发送验证码" }));
+      await waitFor(() => expect(mocks.sendRecoveryCode).toHaveBeenCalledTimes(3));
+      expect(input).toHaveValue("");
+      expect(mocks.resendSignupCode).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("恢复邮件发送失败时显示限流提示且可重试", async () => {
+    mocks.sendRecoveryCode.mockRejectedValueOnce({ code: "over_email_send_rate_limit" });
+    render(<LoginView />);
+    fireEvent.click(screen.getByRole("button", { name: "忘记密码？" }));
+    fireEvent.change(screen.getByLabelText("邮箱"), { target: { value: "alice@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送重置验证码" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("发送过于频繁");
+    expect(screen.queryByLabelText("验证码")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "发送重置验证码" })).toBeEnabled();
+  });
 
   it("默认使用邮箱密码登录，不发送验证码", async () => {
     render(<LoginView />);

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { supabaseClient } from "@/lib/server-info";
+import { createPasswordRecoveryClient, supabaseClient } from "@/lib/server-info";
 
 export type AuthSession = Awaited<
   ReturnType<NonNullable<SupabaseClient>["auth"]["getSession"]>
@@ -52,6 +52,42 @@ export async function verifySignupCode(email: string, token: string) {
   if (!client) throw new Error("当前未启用登录。");
   const { error } = await client.auth.verifyOtp({ email, token, type: "signup" });
   if (error) throw error;
+}
+
+/** 每个表单独立持有恢复会话；取消、完成或卸载时丢弃，不写入浏览器存储。 */
+export function createPasswordRecovery() {
+  let client: SupabaseClient | undefined;
+  let verified = false;
+  const clear = () => {
+    verified = false;
+    void client?.auth.dispose();
+    client = undefined;
+  };
+  const getClient = () => {
+    client ??= createPasswordRecoveryClient();
+    if (!client) throw new Error("当前未启用登录。");
+    return client;
+  };
+  return {
+    async sendCode(email: string) {
+      verified = false;
+      const { error } = await getClient().auth.resetPasswordForEmail(email);
+      if (error) throw error;
+    },
+    async verifyCode(email: string, token: string) {
+      verified = false;
+      const { error } = await getClient().auth.verifyOtp({ email, token, type: "recovery" });
+      if (error) throw error;
+      verified = true;
+    },
+    async updatePassword(password: string) {
+      if (!verified) throw new Error("请先验证邮箱验证码。");
+      const { error } = await getClient().auth.updateUser({ password });
+      if (error) throw error;
+      clear();
+    },
+    clear,
+  };
 }
 
 /** 当前登录账号的展示信息；未登录（local 模式）返回 undefined。 */
