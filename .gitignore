@@ -5,6 +5,7 @@ target/
 .DS_Store
 .pnpm-store
 .env
+.env.deploy
 .antler/rag-config.json*
 *.db
 *.db-journal

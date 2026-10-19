@@ -25,17 +25,32 @@ export function onSessionChange(
 export async function signIn(email: string, password: string) {
   const client = supabaseClient();
   if (!client) throw new Error("当前未启用登录。");
-  const { error } = await client.auth.signInWithPassword({
-    email,
-    password,
-  });
+  const { error } = await client.auth.signInWithPassword({ email, password });
   if (error) throw error;
 }
 
 export async function signUp(email: string, password: string) {
   const client = supabaseClient();
   if (!client) throw new Error("当前未启用登录。");
-  const { error } = await client.auth.signUp({ email, password });
+  const { data, error } = await client.auth.signUp({ email, password });
+  if (error) throw error;
+  // 已验证邮箱重复注册时，Auth 可能返回不含 identities 的占位用户，实际不发邮件。
+  if (data?.user?.identities?.length === 0) {
+    throw new Error("该邮箱已注册，请返回登录；如忘记密码，需要重置密码。");
+  }
+}
+
+export async function resendSignupCode(email: string) {
+  const client = supabaseClient();
+  if (!client) throw new Error("当前未启用登录。");
+  const { error } = await client.auth.resend({ email, type: "signup" });
+  if (error) throw error;
+}
+
+export async function verifySignupCode(email: string, token: string) {
+  const client = supabaseClient();
+  if (!client) throw new Error("当前未启用登录。");
+  const { error } = await client.auth.verifyOtp({ email, token, type: "signup" });
   if (error) throw error;
 }
 

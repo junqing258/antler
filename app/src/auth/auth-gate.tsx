@@ -31,7 +31,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   if (state === "loading") {
     return (
-      <div className="grid min-h-dvh place-items-center bg-[#fafafa] text-sm text-[#777]">
+      <div className="grid min-h-[var(--app-viewport-height)] place-items-center bg-[#fafafa] text-sm text-[#777]">
         正在加载…
       </div>
     );
