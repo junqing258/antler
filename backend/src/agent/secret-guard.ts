@@ -4,8 +4,10 @@ import { parseEnv } from "node:util";
 import { getProtectedEnvFiles } from "../config/protected-env.js";
 
 export const REDACTED = "[REDACTED]";
+// Only credential-bearing names contribute values to output redaction. Ordinary
+// dotenv settings (including unknown ones) must not become global sensitive words.
 const SENSITIVE_NAME =
-  /(?:key|token|secret|private|password|passwd|credential|auth|(?:database|db|redis|mongo|postgres|mysql).*url|dsn|cookie)/i;
+  /(?:key|token|secret|private|password|passwd|credential|authorization|dsn|cookie|(?:^|_)pass$|(?:^|_)auth$|(?:database|db|redis|mongo|postgres|mysql|direct).*url)/i;
 const SKIP_DIRECTORIES = new Set([
   ".git",
   ".codegraph",
@@ -56,7 +58,7 @@ export function assertSafeFilePath(path: string) {
   }
 }
 
-/** Defense in depth for local tools and the persisted/public run transcript. */
+/** Credential filtering at tool, error and public transcript boundaries. */
 export class SecretGuard {
   private readonly secrets = new Set<string>();
   private values: string[] = [];
@@ -99,8 +101,7 @@ export class SecretGuard {
       ...process.env,
       ...this.getEnvironment?.(),
     })) {
-      if (SENSITIVE_NAME.test(name) || this.serverEnvNames.has(name))
-        this.add(value);
+      if (SENSITIVE_NAME.test(name)) this.add(value);
     }
   }
 
@@ -164,10 +165,10 @@ export class SecretGuard {
       this.add(content);
       const values = parseEnv(content);
       for (const [name, value] of Object.entries(values)) {
-        this.add(value);
+        if (SENSITIVE_NAME.test(name)) this.add(value);
         if (server) {
           this.serverEnvNames.add(name);
-          this.add(process.env[name]);
+          if (SENSITIVE_NAME.test(name)) this.add(process.env[name]);
         }
       }
       this.envFiles.set(path, {

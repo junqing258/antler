@@ -85,6 +85,7 @@ export function createApp(config: AppConfig) {
       adapter = new PiAgentAdapter({
         ...runtimeConfig,
         tavilyApiKey: config.tavilyApiKey,
+        smtp: config.smtp,
         getToolEnvironment: () => ragConfig.environment(),
         workspaceRoot,
         requestTimeoutMs: config.maxRunDurationMs,

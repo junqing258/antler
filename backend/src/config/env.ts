@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
+import type { SmtpConfig } from "../agent/email-tool.js";
 import { registerProtectedEnvFile } from "./protected-env.js";
 
 const projectRoot = fileURLToPath(new URL("../../..", import.meta.url));
@@ -26,6 +27,7 @@ export type AppConfig = {
   tavilyApiKey?: string;
   ragUrl?: string;
   ragKey?: string;
+  smtp?: SmtpConfig;
   workspaceRoot: string;
   staticDir?: string;
   model: string;
@@ -39,6 +41,20 @@ const workspaceRoot = resolve(
   projectRoot,
   process.env.ANTLER_WORKSPACE_ROOT ?? "workspace",
 );
+
+const smtpPort = Number(process.env.ANTLER_SMTP_PORT ?? 465);
+const smtp =
+  process.env.ANTLER_SMTP_HOST &&
+  process.env.ANTLER_SMTP_FROM &&
+  Number.isInteger(smtpPort)
+    ? {
+        host: process.env.ANTLER_SMTP_HOST,
+        port: smtpPort,
+        user: process.env.ANTLER_SMTP_USER,
+        pass: process.env.ANTLER_SMTP_PASS,
+        from: process.env.ANTLER_SMTP_FROM,
+      }
+    : undefined;
 
 export const config: AppConfig = {
   host: process.env.ANTLER_HOST ?? "127.0.0.1",
@@ -57,6 +73,7 @@ export const config: AppConfig = {
   tavilyApiKey: process.env.TAVILY_API_KEY,
   ragUrl: process.env.ANTLER_RAG_URL,
   ragKey: process.env.ANTLER_RAG_KEY,
+  smtp,
   workspaceRoot,
   staticDir: process.env.ANTLER_STATIC_DIR
     ? resolve(projectRoot, process.env.ANTLER_STATIC_DIR)

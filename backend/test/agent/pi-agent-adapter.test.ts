@@ -229,6 +229,30 @@ describe.each(["openai", "anthropic"] as const)(
       }
     });
 
+    it("preserves user input verbatim across turns even when it matches a configured credential", async () => {
+      const { adapter } = await setup(provider, {
+        getToolEnvironment: () => ({ CUSTOM_API_KEY: "1" }),
+      });
+      const input = `发个测试邮件到 junqing258@126.com，另一个 user@163.com。${secret}`;
+      streams[provider].mockImplementation((model, context) => {
+        const users = context.messages.filter(
+          (message) => message.role === "user",
+        );
+        expect(users[0].content).toEqual([{ type: "text", text: input }]);
+        return completed(model, [{ type: "text", text: "收到" }]);
+      });
+      for (const message of [input, "继续"]) {
+        await adapter.run(
+          message,
+          "verbatim",
+          DISABLED_SKILL_SNAPSHOT,
+          new AbortController().signal,
+          () => {},
+        );
+      }
+      expect(streams[provider]).toHaveBeenCalledTimes(2);
+    });
+
     it("replays system/tools in transcript and executes skill, workspace and search tools", async () => {
       const { root, config, adapter } = await setup(provider, {
         tavilyApiKey: "test-tavily-key",
@@ -276,7 +300,9 @@ describe.each(["openai", "anthropic"] as const)(
         expect(
           getCurrentTools(context.messages).map((tool) => tool.name),
         ).toEqual(expect.arrayContaining(tools.map((tool) => tool.name)));
-        expect(JSON.stringify(context.messages)).not.toContain(secret);
+        expect(
+          context.messages.find((message) => message.role === "user")?.content,
+        ).toEqual([{ type: "text", text: `Question ${secret}` }]);
         expect(options?.timeoutMs).toBe(1234);
         expect(options?.signal).toBeInstanceOf(AbortSignal);
         expect(model.baseUrl).toBe(
@@ -411,8 +437,7 @@ describe.each(["openai", "anthropic"] as const)(
         const transcript = JSON.stringify(context.messages);
         expect(transcript).toContain("用户主题");
         expect(transcript).toContain("助手回答");
-        expect(transcript).not.toContain(secret);
-        expect(transcript).not.toContain(secret.slice(0, 8));
+        expect(transcript).toContain(secret);
         expect(transcript.length).toBeLessThan(13_000);
         expect(options?.maxTokens).toBe(128);
         if (provider === "openai") expect(options?.apiKey).toBe(secret);
@@ -453,7 +478,7 @@ describe.each(["openai", "anthropic"] as const)(
         completed(model, [{ type: "text", text: oldDetails }]),
       );
       await adapter.run(
-        "Original goal",
+        `Original goal ${secret} junqing258@126.com`,
         "compact",
         DISABLED_SKILL_SNAPSHOT,
         new AbortController().signal,
@@ -465,6 +490,9 @@ describe.each(["openai", "anthropic"] as const)(
           "压缩会话上下文",
         );
         expect(JSON.stringify(context.messages)).toContain(oldDetails);
+        expect(JSON.stringify(context.messages)).toContain(
+          `Original goal ${secret} junqing258@126.com`,
+        );
         expect(options?.maxTokens).toBe(2048);
         return completed(model, [
           { type: "text", text: `保留原目标，继续工作。${secret}` },

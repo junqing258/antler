@@ -15,31 +15,72 @@ afterEach(async () => {
 });
 
 describe("SecretGuard", () => {
-  it("protects every variable from server-loaded environment files, even without a sensitive name", async () => {
+  it("preserves email addresses when public server settings contain digits or SMTP addresses", async () => {
+    const root = await mkdtemp(join(tmpdir(), "antler-public-env-"));
+    roots.push(root);
+    const path = join(root, ".env");
+    const address = "junqing258@126.com";
+    await writeFile(
+      path,
+      [
+        "ANTLER_TRACE_SAMPLE_RATIO=1",
+        "CUSTOM_RETRY_COUNT=2",
+        "ANTLER_AUTH_MODE=local",
+        "ANTLER_SMTP_PORT=465",
+        `ANTLER_SMTP_FROM=${address}`,
+        `ANTLER_SMTP_USER=${address}`,
+        "ANTLER_SMTP_PASS=test-smtp-password",
+      ].join("\n"),
+    );
+    vi.spyOn(protectedEnv, "getProtectedEnvFiles").mockReturnValue([path]);
+    vi.stubEnv("ANTLER_TRACE_SAMPLE_RATIO", "0");
+    const guard = new SecretGuard(root);
+    await guard.refresh();
+    guard.captureEnvironment();
+    const input = `发个测试邮件到 ${address}，另一个地址 user@163.com，采样 0/1/2 local`;
+    expect(guard.redact(input)).toBe(input);
+    expect(guard.sanitize({ to: address })).toEqual({ to: address });
+    const stream = guard.stream();
+    expect(
+      [...input].map((char) => stream.push(char)).join("") + stream.finish(),
+    ).toBe(input);
+    expect(guard.redact("test-smtp-password")).toBe(REDACTED);
+    expect(guard.toolEnvironment().ANTLER_SMTP_PASS).toBeUndefined();
+  });
+
+  it("filters all server dotenv variables from subprocesses but only redacts credential values", async () => {
     const root = await mkdtemp(join(tmpdir(), "antler-server-env-"));
     roots.push(root);
     const path = join(root, ".env");
-    await writeFile(path, "CUSTOM_VALUE=file-private-value\n");
+    await writeFile(
+      path,
+      "CUSTOM_VALUE=ordinary-setting\nCUSTOM_SECRET=file-private-value\n",
+    );
     vi.spyOn(protectedEnv, "getProtectedEnvFiles").mockReturnValue([path]);
-    vi.stubEnv("CUSTOM_VALUE", "overridden-private-value");
+    vi.stubEnv("CUSTOM_VALUE", "ordinary-override");
+    vi.stubEnv("CUSTOM_SECRET", "overridden-private-value");
     const guard = new SecretGuard();
     await guard.refresh();
     expect(guard.toolEnvironment().CUSTOM_VALUE).toBeUndefined();
+    expect(guard.toolEnvironment().CUSTOM_SECRET).toBeUndefined();
+    expect(guard.redact("ordinary-setting ordinary-override")).toBe(
+      "ordinary-setting ordinary-override",
+    );
     expect(guard.redact("file-private-value overridden-private-value")).toBe(
       `${REDACTED} ${REDACTED}`,
     );
   });
-  it("collects nested dotenv values, including quoted multiline and non-secret variable names", async () => {
+  it("collects credential fields from nested dotenv files, including quoted multiline values", async () => {
     const root = await mkdtemp(join(tmpdir(), "antler-guard-"));
     roots.push(root);
     await mkdir(join(root, "nested"));
     await writeFile(
       join(root, ".env"),
-      'export CUSTOM_VALUE="private value # retained"\nMULTILINE="first line\nsecond line"\n',
+      'export CUSTOM_SECRET="private value # retained"\nMULTILINE_TOKEN="first line\nsecond line"\n',
     );
     await writeFile(
       join(root, "nested", ".env.production"),
-      "NESTED=nested-private-value\n",
+      "NESTED_PASSWORD=nested-private-value\n",
     );
     const guard = new SecretGuard(root);
     await guard.refresh();
@@ -106,6 +147,8 @@ describe("SecretGuard", () => {
 
   it("removes server credentials while retaining explicit skill credentials and their old values for redaction", () => {
     vi.stubEnv("OPENAI_API_KEY", "server-private-key");
+    vi.stubEnv("ANTLER_SMTP_PASS", "server-smtp-password");
+    vi.stubEnv("DIRECT_URL", "postgres://user:password@db.example/test");
     vi.stubEnv("ANTLER_TEST_SETTING", "normal-setting");
     let key = "skill-old-private-key";
     const guard = new SecretGuard(undefined, () => ({ ANTLER_RAG_KEY: key }));
@@ -116,6 +159,11 @@ describe("SecretGuard", () => {
       }),
     );
     expect(guard.toolEnvironment().OPENAI_API_KEY).toBeUndefined();
+    expect(guard.toolEnvironment().ANTLER_SMTP_PASS).toBeUndefined();
+    expect(guard.toolEnvironment().DIRECT_URL).toBeUndefined();
+    expect(
+      guard.redact("server-smtp-password postgres://user:password@db.example/test"),
+    ).toBe(`${REDACTED} ${REDACTED}`);
     key = "skill-new-private-key";
     guard.captureEnvironment();
     expect(

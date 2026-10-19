@@ -5,6 +5,7 @@ import { openaiProvider } from "@earendil-works/pi-ai/providers/openai";
 import type { Model } from "@earendil-works/pi-ai";
 import { createTavilySearchTool } from "./tavily-search-tool.js";
 import { createWorkspaceTools } from "./workspace-tools.js";
+import { createEmailTool, type SmtpConfig } from "./email-tool.js";
 import type { SkillSnapshot } from "../skills/types.js";
 import { createSkillTools } from "../skills/skill-tools.js";
 import { composeSkillPrompt } from "../skills/skill-prompt.js";
@@ -20,6 +21,7 @@ export type PiAgentAdapterConfig = {
   anthropicAuthToken?: string;
   anthropicBaseUrl?: string;
   tavilyApiKey?: string;
+  smtp?: SmtpConfig;
   getToolEnvironment?: () => NodeJS.ProcessEnv;
   schedulerService?: AgentScheduler;
   workspaceRoot: string;
@@ -49,11 +51,16 @@ export class PiAgentAdapter {
     { agent: Agent; fingerprint: string }
   >();
   constructor(private readonly config: PiAgentAdapterConfig) {
-    // 工具与模型输入共用脱敏规则，覆盖配置中的凭据及工具环境中的秘密。
+    // 凭据仅用于工具输出、错误和对外记录的防泄漏，不改写用户输入。
     this.secretGuard = new SecretGuard(
       config.workspaceRoot,
       config.getToolEnvironment,
-      [config.openAiApiKey, config.anthropicAuthToken, config.tavilyApiKey],
+      [
+        config.openAiApiKey,
+        config.anthropicAuthToken,
+        config.tavilyApiKey,
+        config.smtp?.pass,
+      ],
     );
   }
   /** 技能工具使用本次快照；搜索工具仅在配置 Tavily 凭据时启用。 */
@@ -70,6 +77,9 @@ export class PiAgentAdapter {
               createTavilySearchTool(this.config.tavilyApiKey),
             ),
           ]
+        : []),
+      ...(this.config.smtp
+        ? [this.protectEmailTool(createEmailTool(this.config.smtp))]
         : []),
       ...createSkillTools(snapshot, this.secretGuard),
       ...(this.config.schedulerService
@@ -90,6 +100,25 @@ export class PiAgentAdapter {
           throw new Error(
             this.secretGuard.redact(
               error instanceof Error ? error.message : "Search failed.",
+            ),
+          );
+        }
+      },
+    };
+  }
+  /** SMTP 凭据和异常信息不能经由工具结果泄露给模型或客户端。 */
+  private protectEmailTool(
+    tool: ReturnType<typeof createEmailTool>,
+  ): ReturnType<typeof createEmailTool> {
+    return {
+      ...tool,
+      execute: async (...args) => {
+        try {
+          return this.secretGuard.sanitize(await tool.execute(...args));
+        } catch (error) {
+          throw new Error(
+            this.secretGuard.redact(
+              error instanceof Error ? error.message : "Email sending failed.",
             ),
           );
         }
@@ -130,8 +159,8 @@ export class PiAgentAdapter {
       signal.throwIfAborted();
       await summarizer.prompt(
         JSON.stringify({
-          user: this.secretGuard.redact(input).slice(0, 4000),
-          assistant: this.secretGuard.redact(response).slice(0, 8000),
+          user: input.slice(0, 4000),
+          assistant: response.slice(0, 8000),
         }),
       );
       signal.throwIfAborted();
@@ -184,16 +213,14 @@ export class PiAgentAdapter {
       (message) => message.role !== "system",
     );
     // 序列化为资料，避免历史工具声明或工具调用在摘要阶段恢复执行能力。
-    const transcript = this.secretGuard.redact(
-      JSON.stringify(
-        history.map((message) => ({
-          role: message.role,
-          content: message.content,
-          ...(message.role === "toolResult"
-            ? { toolName: message.toolName, isError: message.isError }
-            : {}),
-        })),
-      ),
+    const transcript = JSON.stringify(
+      history.map((message) => ({
+        role: message.role,
+        content: message.content,
+        ...(message.role === "toolResult"
+          ? { toolName: message.toolName, isError: message.isError }
+          : {}),
+      })),
     );
     const summarizer = new Agent({
       initialState: {
@@ -337,7 +364,7 @@ export class PiAgentAdapter {
     const abort = () => agent.abort();
     signal.addEventListener("abort", abort, { once: true });
     try {
-      await agent.prompt(this.secretGuard.redact(input));
+      await agent.prompt(input);
       // Pi 可能把失败保存在状态中而不抛出异常，需将其转交宿主处理。
       if (agent.state.errorMessage) throw new Error(agent.state.errorMessage);
       return agent.state.messages as AgentMessage[];
@@ -425,7 +452,7 @@ export class PiAgentAdapter {
     const abort = () => agent.abort();
     signal.addEventListener("abort", abort, { once: true });
     try {
-      await agent.prompt(this.secretGuard.redact(input));
+      await agent.prompt(input);
       if (agent.state.errorMessage) throw new Error(agent.state.errorMessage);
       return agent.state.messages as AgentMessage[];
     } finally {
