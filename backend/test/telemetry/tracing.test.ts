@@ -37,7 +37,7 @@ describe("tracing", () => {
   it("preserves upstream context through async handlers, runs, model calls and tools without exporting content", async () => {
     app.post("/runs/:id", async () => {
       await setTimeout(1);
-      const run = new RunTracing({ id: "run-1", conversationId: "conversation-1", projectId: "project-1" }, (value) => value.replaceAll("secret", "[REDACTED]"));
+      const run = new RunTracing({ id: "run-1", conversationId: "conversation-1", projectId: "project-1", userId: "user-secret" }, (value) => value.replaceAll("secret", "[REDACTED]"));
       await run.withContext(async () => {
         await setTimeout(1);
         run.observe({ type: "turn_start" });
@@ -77,8 +77,9 @@ describe("tracing", () => {
     expect(spans.every((span) => span.spanContext().traceId === traceId)).toBe(true);
     expect(model.attributes["gen_ai.usage.input_tokens"]).toBe(12);
     expect(model.attributes["gen_ai.request.model"]).toBe("model-[REDACTED]");
+    for (const span of [run, model, tool]) expect(span.attributes["user.id"]).toBe("user-[REDACTED]");
     const exported = JSON.stringify(spans.map((span) => ({ name: span.name, attributes: span.attributes, events: span.events })));
-    for (const secret of ["private-prompt", "private-path", "private-result", "private-query", "private-header", "private-body", "model-secret"])
+    for (const secret of ["private-prompt", "private-path", "private-result", "private-query", "private-header", "private-body", "model-secret", "user-secret"])
       expect(exported).not.toContain(secret);
     expect(log.mock.calls.flat().join("\n")).toContain(`trace_id=${traceId}`);
     expect(log.mock.calls.flat().join("\n")).not.toContain("private-query");
@@ -97,10 +98,22 @@ describe("tracing", () => {
     for (const span of spans) {
       expect(span.attributes["gen_ai.conversation.id"]).toBe(span.attributes["antler.run.id"] === "run-3" ? "session-2" : "session-1");
       expect(span.attributes["gen_ai.agent.name"]).toBe("antler");
+      expect(span.attributes["user.id"]).toBeUndefined();
       expect(span.attributes["antler.project.id"]).toBe("project-[REDACTED]");
     }
     const runs = spans.filter((span) => span.name === "agent.run");
     expect(new Set(runs.map((span) => span.spanContext().traceId)).size).toBe(3);
+  });
+
+  it.each([undefined, "", "   "])("omits missing or blank user IDs (%s)", async (userId) => {
+    const run = new RunTracing({ id: "anonymous-run", conversationId: "anonymous-session", projectId: "default", userId });
+    run.observe({ type: "turn_start" });
+    run.observe({ type: "tool_execution_start", toolCallId: "tool-1", toolName: "test", args: {} });
+    run.finish("completed");
+    await provider.forceFlush();
+    const spans = exporter.getFinishedSpans();
+    expect(spans).toHaveLength(3);
+    for (const span of spans) expect(span.attributes["user.id"]).toBeUndefined();
   });
 
   it("keeps concurrent request contexts separate and ends each request once", async () => {

@@ -80,7 +80,7 @@ export class RunTracing {
   private closed = false;
 
   constructor(
-    private readonly run: { id: string; conversationId: string; projectId: string },
+    private readonly run: { id: string; conversationId: string; projectId: string; userId?: string },
     private readonly redact: (value: string) => string = (value) => value,
   ) {
     this.span = tracer().startSpan("agent.run", {
@@ -96,6 +96,7 @@ export class RunTracing {
       "gen_ai.conversation.id": this.redact(this.run.conversationId),
       "gen_ai.agent.name": "antler",
       "antler.project.id": this.redact(this.run.projectId),
+      ...(this.run.userId?.trim() ? { "user.id": this.redact(this.run.userId) } : {}),
     };
   }
 

@@ -57,6 +57,6 @@ Antler Compose 通过 `extra_hosts: ["host.docker.internal:host-gateway"]` 注�
 
 ## LLM 会话
 
-在支持 Sessions 的 OpenObserve 版本中，进入 AI → Monitor → Sessions，使用 Stream 模式选择 `antler_traces`，并选择包含新运行的时间范围。同一业务会话每轮使用独立 Trace，通过 `gen_ai.conversation.id` 聚合；工具和模型 span 使用相同会话 ID。无需新增数据库字段或导出配置。此变更需构建并部署后端后生效，历史 span 不会自动补齐会话 ID。
+在支持 Sessions 的 OpenObserve 版本中，进入 AI → Monitor → Sessions，使用 Stream 模式选择 `antler_traces`，并选择包含新运行的时间范围。同一业务会话每轮使用独立 Trace，通过 `gen_ai.conversation.id` 聚合；工具和模型 span 使用相同会话 ID。有归属用户时，Run、模型和工具 span 同时上报经 SecretGuard 脱敏的 `user.id`，用于 Sessions 用户显示与搜索；无用户的运行不伪造用户。无需新增数据库字段或导出配置。此变更需构建并部署后端后生效，历史 span 不会自动补齐会话 ID。
 
 当前仅导出元数据，可用于会话关联及 Token、耗时和错误分析；没有导出提问和回复，因此不支持完整正文回放、首条消息展示或按正文搜索。费用需要在 OpenObserve Model Pricing 中配置对应模型的价格。
