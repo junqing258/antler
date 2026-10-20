@@ -34,7 +34,8 @@ export default defineConfig(({ mode }) => ({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         navigateFallback: 'index.html',
-        navigateFallbackDenylist: [/^\/api(?:\/|$)/, /^\/health(?:\/|$)/],
+        // 管理员认证等纯文本文件必须向服务器读取，不能回退为应用首页。
+        navigateFallbackDenylist: [/^\/api(?:\/|$)/, /^\/health(?:\/|$)/, /\.txt(?:\?|$)/i],
         cleanupOutdatedCaches: true,
       },
     }),
