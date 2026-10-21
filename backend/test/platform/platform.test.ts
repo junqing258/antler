@@ -8,20 +8,11 @@ import {
   it,
   vi,
 } from "vitest";
-import {
-  mkdtemp,
-  mkdir,
-  rm,
-  writeFile,
-  readFile,
-  readdir,
-  rename,
-  symlink,
-} from "node:fs/promises";
+import { mkdtemp, rm, writeFile, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import Fastify from "fastify";
-import { schedulerDatabase, deferred } from "../scheduler/helpers.js";
+import { schedulerDatabase } from "../scheduler/helpers.js";
 import { PlatformService } from "../../src/platform/service.js";
 import { SkillRegistry } from "../../src/skills/skill-registry.js";
 import { PlatformError, type AuthContext } from "../../src/platform/errors.js";
@@ -29,7 +20,6 @@ import { registerSkillRoutes } from "../../src/routes/skills.js";
 import { registerAgentRoutes } from "../../src/routes/agents.js";
 import { createSkillTools } from "../../src/skills/skill-tools.js";
 import { createSkillSnapshot } from "../../src/skills/skill-policy.js";
-import { acquireStorageLock } from "../../src/platform/storage-lock.js";
 import { archive, instruction, uploadBody } from "./helpers.js";
 
 const author: AuthContext = { userId: "alice", authMode: "supabase" };
@@ -217,20 +207,55 @@ describe("Agent platform", () => {
     expect(
       (await db.skill.findUniqueOrThrow({ where: { id: row.id } })).fingerprint,
     ).toBe(row.fingerprint);
+    expect(await db.skillFile.count({ where: { skillId: row.id } })).toBe(
+      row.fileCount,
+    );
     expect(await readFile(join(root, row.directory, "data.txt"), "utf8")).toBe(
       "original resource",
     );
   });
-  it("synchronizes frontmatter description and allows recovery of tampered and missing directories", async () => {
+  it("self-heals a tampered or deleted cache from the database and repairs broken rows on re-upload", async () => {
     const row = await service.upload(uploadBody(), author);
     const agent = await service.createAgent(draft([row.id]), author);
+    // A bash-modified cache file never poisons the database: the next read
+    // detects the fingerprint mismatch and reinstalls from skill_files.
     await writeFile(join(root, row.directory, "data.txt"), "tampered");
-    await expect(service.resolveAgent(agent.id, author)).rejects.toMatchObject({
-      code: "agent_skills_unavailable",
+    let resolved = await service.resolveAgent(agent.id, author);
+    try {
+      expect(JSON.stringify(resolved.skills)).not.toContain("tampered");
+    } finally {
+      resolved.release();
+    }
+    expect(await readFile(join(root, row.directory, "data.txt"), "utf8")).toBe(
+      "original resource",
+    );
+    expect(
+      (await db.skill.findUniqueOrThrow({ where: { id: row.id } })).state,
+    ).toBe("ready");
+    // Deleting the whole cache directory rebuilds it on the next read.
+    await rm(join(root, row.directory), { recursive: true, force: true });
+    resolved = await service.resolveAgent(agent.id, author);
+    resolved.release();
+    expect(await readFile(join(root, row.directory, "data.txt"), "utf8")).toBe(
+      "original resource",
+    );
+    // Only database-side inconsistency marks the row tampered.
+    await db.skillFile.deleteMany({
+      where: { skillId: row.id, path: "data.txt" },
     });
+    await service.checkSkill(row.id);
     expect(
       (await db.skill.findUniqueOrThrow({ where: { id: row.id } })).state,
     ).toBe("tampered");
+    await service.upload(uploadBody(), author, row.id);
+    resolved = await service.resolveAgent(agent.id, author);
+    resolved.release();
+    expect(
+      (await db.skill.findUniqueOrThrow({ where: { id: row.id } })).state,
+    ).toBe("ready");
+  });
+  it("synchronizes frontmatter description across re-uploads", async () => {
+    const row = await service.upload(uploadBody(), author);
     const changed = await service.upload(
       uploadBody("Updated description"),
       author,
@@ -247,14 +272,9 @@ describe("Agent platform", () => {
       row.id,
     );
     expect(same.fingerprint).toBe(changed.fingerprint);
-    await rm(join(root, row.directory), { recursive: true });
-    await service.checkSkill(row.id);
-    expect(
-      (await db.skill.findUniqueOrThrow({ where: { id: row.id } })).state,
-    ).toBe("broken");
-    await service.upload(uploadBody(), author, row.id);
-    const resolved = await service.resolveAgent(agent.id, author);
-    resolved.release();
+    expect(await db.skillFile.count({ where: { skillId: row.id } })).toBe(
+      changed.fileCount,
+    );
   });
   it("does not leak hidden draft references when rejecting skill deletion", async () => {
     const row = await service.upload(uploadBody(), author);
@@ -309,93 +329,64 @@ describe("Agent platform", () => {
       (await db.skill.findUniqueOrThrow({ where: { id: row.id } })).description,
     );
   });
-  it("compensates INSERT and UPDATE failures and preserves the old directory", async () => {
-    const create = vi
-      .spyOn(db.skill, "create")
-      .mockRejectedValueOnce(new Error("insert failed"));
-    await expect(service.upload(uploadBody(), author)).rejects.toThrow(
-      "insert failed",
-    );
-    expect(await readdir(join(root, "skills"))).toEqual([]);
-    create.mockRestore();
-    const row = await service.upload(uploadBody(), author);
-    vi.spyOn(db.skill, "update").mockRejectedValueOnce(
-      new Error("update failed"),
-    );
-    await expect(
-      service.upload(uploadBody("failed"), author, row.id),
-    ).rejects.toThrow("update failed");
-    expect(
-      await readFile(join(root, row.directory, "SKILL.md"), "utf8"),
-    ).toContain("Example skill");
-    await service.upload(uploadBody("retry"), author, row.id);
-  });
-  it("recovers update backups by UUID before clearing staging and quarantines orphan directories", async () => {
-    const a = await service.upload(uploadBody(), author);
-    const b = await service.upload(
-      {
-        name: "another",
-        archive: archive({
-          "SKILL.md": instruction().replace("sample-skill", "another"),
-        }),
-      },
-      author,
-    );
-    for (const row of [a, b]) {
-      const op = join(root, ".staging", "updates", row.id, "operation");
-      await mkdir(op, { recursive: true });
-      await rename(join(root, row.directory), join(op, "old"));
-    }
-    await mkdir(join(root, "skills", "orphan"), { recursive: true });
-    await service.recover();
-    expect(
-      await readFile(join(root, a.directory, "SKILL.md"), "utf8"),
-    ).toContain("sample-skill");
-    expect(
-      await readFile(join(root, b.directory, "SKILL.md"), "utf8"),
-    ).toContain("another");
-    expect(await readdir(join(root, ".orphaned"))).toHaveLength(1);
-    await expect(readdir(join(root, ".staging"))).rejects.toMatchObject({
-      code: "ENOENT",
+  it("commits skill and file rows atomically, leaving no half state on failure", async () => {
+    const first = await service.upload(uploadBody(), author);
+    // A unique-name violation inside the transaction rolls back the file rows too.
+    await expect(service.upload(uploadBody(), author)).rejects.toMatchObject({
+      code: "skill_name_taken",
     });
+    expect(await db.skill.count()).toBe(1);
+    expect(await db.skillFile.count()).toBe(first.fileCount);
+    expect(await readdir(join(root, "skills"))).toEqual([first.id]);
+    expect(await readdir(join(root, ".tmp")).catch(() => [])).toEqual([]);
+    // Invalid archives fail before any row is written.
+    await expect(
+      service.upload({ name: "sample-skill", archive: "not-base64!" }, author),
+    ).rejects.toMatchObject({ code: "skill_invalid" });
+    expect(await db.skill.count()).toBe(1);
   });
-  it("rejects concurrent backend storage locks and allows restart after release", async () => {
-    const workspace = join(root, "workspace"),
-      platform = join(root, "platform");
-    await mkdir(workspace);
-    const release = await acquireStorageLock(
-      platform,
-      workspace,
-      "file:test",
-      vi.fn(),
-    );
-    await writeFile(join(platform, "sentinel"), "unchanged");
-    await expect(
-      acquireStorageLock(platform, workspace, "file:other-db", vi.fn()),
-    ).rejects.toBeDefined();
-    expect(await readFile(join(platform, "sentinel"), "utf8")).toBe(
-      "unchanged",
-    );
-    await release();
-    const restarted = await acquireStorageLock(
-      platform,
-      workspace,
-      undefined,
-      vi.fn(),
-    );
-    await restarted();
-    await expect(
-      acquireStorageLock(join(workspace, "bad"), workspace, undefined, vi.fn()),
-    ).rejects.toThrow("outside");
-    await symlink(workspace, join(root, "alias"));
-    await expect(
-      acquireStorageLock(
-        join(root, "alias", "bad"),
-        workspace,
-        undefined,
-        vi.fn(),
-      ),
-    ).rejects.toThrow("outside");
+  it("rejects inconsistent database files and marks the skill tampered", async () => {
+    const row = await service.upload(uploadBody(), author);
+    await db.skillFile.update({
+      where: { skillId_path: { skillId: row.id, path: "data.txt" } },
+      data: { content: Buffer.from("corrupted") },
+    });
+    await rm(service.directory(row), { recursive: true });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await expect(service.loadSkills([row.id])).rejects.toMatchObject({ code: "agent_skills_unavailable" });
+    expect((await db.skill.findUniqueOrThrow({ where: { id: row.id } })).state).toBe("tampered");
+  });
+  it("rolls back metadata and deleted file rows when replacement fails", async () => {
+    const first = await service.upload(uploadBody(), author);
+    const originalFiles = await db.skillFile.findMany({ where: { skillId: first.id } });
+    const transaction = db.$transaction.bind(db);
+    vi.spyOn(db, "$transaction").mockImplementationOnce(((callback: any) =>
+      transaction(async (tx) => {
+        tx.skillFile.createMany = () => { throw new Error("file write failed"); };
+        return callback(tx);
+      })) as typeof db.$transaction);
+    await expect(service.upload(uploadBody("Changed"), author, first.id))
+      .rejects.toThrow("file write failed");
+    expect((await db.skill.findUniqueOrThrow({ where: { id: first.id } })).description)
+      .toBe(first.description);
+    expect(await db.skillFile.findMany({ where: { skillId: first.id } }))
+      .toEqual(originalFiles);
+  });
+  it("rebuilds committed files after cache installation fails and cascades deletion", async () => {
+    await writeFile(join(root, ".tmp"), "blocked");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const row = await service.upload(uploadBody(), author);
+    expect(await db.skillFile.count({ where: { skillId: row.id } })).toBe(2);
+    await rm(join(root, ".tmp"));
+    const lease = await service.loadSkills([row.id]);
+    try {
+      expect(await readFile(join(service.directory(row), "data.txt"), "utf8"))
+        .toBe("original resource");
+    } finally {
+      lease.release();
+    }
+    await service.deleteSkill(row.id, author);
+    expect(await db.skillFile.count()).toBe(0);
   });
   it("accepts wrapped archives, rejects unsafe paths, missing metadata, symlinks and encrypted entries", async () => {
     const good = {
@@ -435,10 +426,21 @@ describe("Agent platform", () => {
         ),
       ).rejects.toMatchObject({ code: "skill_invalid" });
   });
+  it("rejects empty path segments before writing database rows", async () => {
+    await expect(service.upload({
+      name: "sample-skill",
+      archive: archive({ "SKILL.md": instruction(), "data//file": "x" }),
+    }, author)).rejects.toMatchObject({ code: "skill_invalid", statusCode: 422 });
+    expect(await db.skill.count()).toBe(0);
+    expect(await db.skillFile.count()).toBe(0);
+  });
   it("enforces entry and single file limits before installation", async () => {
     for (const files of [
       Object.fromEntries(Array.from({ length: 201 }, (_, i) => [`f${i}`, "x"])),
       { "SKILL.md": instruction(), large: Buffer.alloc(1024 * 1024 + 1) },
+      { "SKILL.md": instruction(), ...Object.fromEntries(
+        Array.from({ length: 100 }, (_, i) => [`dir${i}/file`, "x"]),
+      ) },
     ])
       await expect(
         service.upload(

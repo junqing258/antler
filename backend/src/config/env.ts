@@ -75,6 +75,8 @@ export const config: AppConfig = {
   ragKey: process.env.ANTLER_RAG_KEY,
   smtp,
   workspaceRoot,
+  // Local cache of the skill_files table; safe to delete at any time, the
+  // contents are rebuilt from the database on the next read.
   platformRoot: resolve(
     projectRoot,
     process.env.ANTLER_PLATFORM_ROOT ?? ".antler-platform",

@@ -145,6 +145,15 @@ export class PrismaRunStore implements RunStore {
   }
 
   async recoverInterrupted() {
+    // Conversations, schedulers and active runs are in-process state; a second
+    // backend sharing this database would mark the first one's runs here.
+    const interrupted = await this.prisma.run.count({
+      where: { status: { in: ["queued", "running", "awaiting_approval"] } },
+    });
+    if (interrupted)
+      console.warn(
+        `[Runs] Marked ${interrupted} in-flight runs as interrupted at startup — only one backend should run per database.`,
+      );
     await this.prisma.run.updateMany({
       where: { status: { in: ["queued", "running", "awaiting_approval"] } },
       data: {

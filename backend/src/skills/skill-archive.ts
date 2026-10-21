@@ -1,12 +1,22 @@
 import { parse as parseYaml } from "yaml";
-import { mkdir, writeFile, readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
 import yauzl from "yauzl";
 import { parseSkill } from "./skill-loader.js";
-import { directoryFingerprint } from "./directory-fingerprint.js";
+import { filesFingerprint } from "./directory-fingerprint.js";
 import { PlatformError } from "../platform/errors.js";
 
-export async function extractSkillArchive(body: unknown, directory: string) {
+export type ParsedSkillArchive = {
+  name: string;
+  description: string;
+  disableModelInvocation: boolean;
+  files: Map<string, Uint8Array>;
+  fingerprint: string;
+  fileCount: number;
+  sizeBytes: number;
+};
+
+export async function parseSkillArchive(
+  body: unknown,
+): Promise<ParsedSkillArchive> {
   const { archive, name, description } = (body ?? {}) as Record<
     string,
     unknown
@@ -24,7 +34,7 @@ export async function extractSkillArchive(body: unknown, directory: string) {
   const buffer = Buffer.from(archive, "base64");
   if (buffer.length > 5 * 1024 * 1024)
     throw new PlatformError("skill_too_large", 422);
-  const files = new Map<string, Buffer>();
+  const files = new Map<string, Uint8Array>();
   try {
     await new Promise<void>((resolve, reject) => {
       yauzl.fromBuffer(
@@ -57,8 +67,9 @@ export async function extractSkillArchive(body: unknown, directory: string) {
                 path.includes("\0") ||
                 /^[A-Za-z]:/.test(path) ||
                 path
+                  .replace(/\/$/, "")
                   .split("/")
-                  .some((p) => p === ".." || p === "." || p === "__MACOSX") ||
+                  .some((p) => !p || p === ".." || p === "." || p === "__MACOSX") ||
                 kind === 0o120000 ||
                 (kind && kind !== 0o100000 && kind !== 0o040000) ||
                 entry.generalPurposeBitFlag & 65 ||
@@ -101,10 +112,23 @@ export async function extractSkillArchive(body: unknown, directory: string) {
         throw new PlatformError("skill_invalid", 422);
       prefix = `${top}/`;
     }
-    const raw = files.get(`${prefix}SKILL.md`)!;
+    const stripped = new Map<string, Uint8Array>();
+    for (const [path, data] of files)
+      stripped.set(path.slice(prefix.length), data);
+    // A file path that is also a directory prefix could never be materialized;
+    // disk writes used to fail this via mkdir, so reject it up front.
+    for (const path of stripped.keys())
+      for (
+        let slash = path.indexOf("/");
+        slash > 0;
+        slash = path.indexOf("/", slash + 1)
+      )
+        if (stripped.has(path.slice(0, slash)))
+          throw new PlatformError("skill_invalid", 422);
+    const raw = stripped.get("SKILL.md")!;
     if (raw.length > 64 * 1024) throw new PlatformError("skill_too_large", 422);
     // Uploads require an explicit frontmatter name; directory discovery retains its legacy fallback.
-    const normalized = raw.toString("utf8").replace(/\r\n?/g, "\n");
+    const normalized = new TextDecoder().decode(raw).replace(/\r\n?/g, "\n");
     const end = normalized.startsWith("---\n")
       ? normalized.indexOf("\n---", 3)
       : -1;
@@ -115,29 +139,20 @@ export async function extractSkillArchive(body: unknown, directory: string) {
     > | null;
     if (!metadata || metadata.name !== name)
       throw new PlatformError("skill_invalid", 422);
-    const skill = parseSkill(raw.toString("utf8"), name, "SKILL.md");
+    const skill = parseSkill(new TextDecoder().decode(raw), name, "SKILL.md");
     if (description !== undefined && description !== skill.description)
       throw new PlatformError("skill_invalid", 422);
-    await mkdir(directory, { recursive: true, mode: 0o700 });
-    for (const [path, data] of files) {
-      const target = join(directory, path.slice(prefix.length));
-      await mkdir(dirname(target), { recursive: true, mode: 0o700 });
-      await writeFile(target, data, { flag: "wx", mode: 0o600 });
-    }
-    // Re-read the installed instruction file through the same parser as the registry.
-    parseSkill(
-      await readFile(join(directory, "SKILL.md"), "utf8"),
-      name,
-      "SKILL.md",
-    );
     return {
       name,
       description: skill.description,
       disableModelInvocation: skill.disableModelInvocation,
-      ...(await directoryFingerprint(directory)),
+      files: stripped,
+      ...filesFingerprint(stripped),
     };
   } catch (error) {
     if (error instanceof PlatformError) throw error;
+    if (error instanceof Error && error.message === "skill_too_large")
+      throw new PlatformError("skill_too_large", 422);
     throw new PlatformError("skill_invalid", 422);
   }
 }

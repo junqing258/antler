@@ -2,7 +2,7 @@ import { agentWorkspace } from "./platform/agent-workspace.js";
 import { createHash } from "node:crypto";
 import { PlatformService, type RunAgentContext } from "./platform/service.js";
 import { PlatformError } from "./platform/errors.js";
-import { acquireStorageLock } from "./platform/storage-lock.js";
+import { migrateFileSkills } from "./platform/skill-files.js";
 import { registerAgentRoutes } from "./routes/agents.js";
 import {
   hasFrozenAgentFields,
@@ -25,12 +25,12 @@ import { PiAgentAdapter } from "./agent/pi-agent-adapter.js";
 import { DEFAULT_SYSTEM_PROMPT } from "./agent/system-prompt.js";
 import { registerRunRoutes } from "./routes/runs.js";
 import type { ProviderRunConfig } from "./agent/host-runtime.js";
-import { basename, resolve } from "node:path";
+import { basename, resolve, sep } from "node:path";
 import { SkillRegistry } from "./skills/skill-registry.js";
 import { registerSkillRoutes } from "./routes/skills.js";
 import { registerDirectoryRoutes } from "./routes/directories.js";
 import { mkdirSync, mkdtempSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { chmod, mkdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerDatabase } from "./plugins/database.js";
@@ -74,11 +74,9 @@ export function createApp(config: AppConfig) {
   registerRequestTracing(app);
   registerRequestLogging(app);
   let scheduler: CronScheduler | undefined;
-  let releaseStorage: (() => Promise<void>) | undefined;
   registerDatabase(app, config.databaseUrl, async () => {
     await scheduler?.stop();
     await runtime.stop();
-    await releaseStorage?.();
     if (ephemeralPlatform)
       await rm(ephemeralPlatform, { recursive: true, force: true });
   });
@@ -151,22 +149,7 @@ export function createApp(config: AppConfig) {
     return adapter;
   };
   const skillRegistry = new SkillRegistry(config.agentsDir);
-  const fatal = () => {
-    console.error(
-      "Agent platform storage lock lost or commit outcome uncertain; stopping backend.",
-    );
-    platform.halt();
-    void runtime.stop();
-    const deadline = setTimeout(() => process.exit(1), 5000);
-    deadline.unref();
-    void app.close().finally(() => process.exit(1));
-  };
-  const platform = new PlatformService(
-    app.prisma,
-    platformRoot,
-    skillRegistry,
-    fatal,
-  );
+  const platform = new PlatformService(app.prisma, platformRoot, skillRegistry);
   const runtime = new AntlerHostRuntime(
     createAdapter,
     { maxRunDurationMs: config.maxRunDurationMs, maxEvents: 10_000, authMode },
@@ -178,14 +161,15 @@ export function createApp(config: AppConfig) {
   // a configured SQLite file and marks any process-interrupted run terminal
   // before serving replay requests.
   app.addHook("onReady", async () => {
-    releaseStorage = await acquireStorageLock(
-      platformRoot,
-      config.workspaceRoot,
-      config.databaseUrl,
-      fatal,
-    );
+    await mkdir(platformRoot, { recursive: true, mode: 0o700 });
+    const actualRoot = await realpath(platformRoot);
+    const actualWorkspace = await realpath(config.workspaceRoot);
+    if (actualRoot === actualWorkspace || actualRoot.startsWith(`${actualWorkspace}${sep}`))
+      throw new Error("ANTLER_PLATFORM_ROOT must be outside ANTLER_WORKSPACE_ROOT");
+    await chmod(platformRoot, 0o700);
     if (config.databaseUrl) {
-      await platform.recover();
+      // One-time backfill of legacy on-disk skill directories into skill_files.
+      await migrateFileSkills(app.prisma, platformRoot);
       await platform.ensureBuiltinAgents();
       await runtime.recoverInterrupted();
     }

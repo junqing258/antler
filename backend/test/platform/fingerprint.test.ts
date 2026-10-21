@@ -10,7 +10,10 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
-import { directoryFingerprint } from "../../src/skills/directory-fingerprint.js";
+import {
+  directoryFingerprint,
+  filesFingerprint,
+} from "../../src/skills/directory-fingerprint.js";
 let root: string;
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });
@@ -45,5 +48,46 @@ describe("directory integrity fingerprint", () => {
     await expect(directoryFingerprint(root)).rejects.toThrow(
       "skill_path_escape",
     );
+  });
+  it("filesFingerprint is byte-identical to directoryFingerprint over the same files", async () => {
+    root = await mkdtemp(join(tmpdir(), "antler-fingerprint-"));
+    const files = new Map<string, Uint8Array>([
+      ["SKILL.md", Buffer.from("instructions")],
+      ["data.txt", Buffer.from("resource")],
+      ["nested/dir/file.txt", Buffer.from("nested")],
+      ["empty-dir-keeps-only-file-sibling", Buffer.from([0, 1, 255])],
+    ]);
+    await mkdir(join(root, "nested", "dir"), { recursive: true });
+    await mkdir(join(root, "empty"));
+    for (const [path, data] of files)
+      await writeFile(join(root, path), data);
+    const fromDirectory = await directoryFingerprint(root);
+    expect(filesFingerprint(files)).toEqual(fromDirectory);
+  });
+  it("counts implicit directories exactly as the materialized directory walk", async () => {
+    root = await mkdtemp(join(tmpdir(), "antler-fingerprint-"));
+    const files = new Map<string, Uint8Array>(Array.from(
+      { length: 100 }, (_, i) => [`dir${i}/file`, Buffer.from("x")],
+    ));
+    for (const [path, data] of files) {
+      await mkdir(join(root, path.split("/")[0]!));
+      await writeFile(join(root, path), data);
+    }
+    expect(filesFingerprint(files)).toEqual(await directoryFingerprint(root));
+    files.set("SKILL.md", Buffer.from("instructions"));
+    await writeFile(join(root, "SKILL.md"), "instructions");
+    expect(() => filesFingerprint(files)).toThrow("skill_too_large");
+    await expect(directoryFingerprint(root)).rejects.toThrow("skill_too_large");
+  });
+  it("enforces the same size limits as the directory walk", () => {
+    const many = new Map(
+      Array.from({ length: 201 }, (_, i) => [`f${i}`, Buffer.from("x")]),
+    );
+    expect(() => filesFingerprint(many)).toThrow("skill_too_large");
+    expect(() =>
+      filesFingerprint(
+        new Map([["big", Buffer.alloc(1024 * 1024 + 1)]]),
+      ),
+    ).toThrow("skill_too_large");
   });
 });

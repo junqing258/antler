@@ -135,10 +135,10 @@ pnpm test
 
 Agent 的技能是封闭集，不叠加本地技能。已发布 Agent 仍可直接编辑；提示词或技能内容变更后，旧会话下一轮返回 `agent_context_changed`，需新建会话；切换 Agent 返回 `agent_changed`。下线不打断进行中的运行，作者仍可续聊草稿，其他用户得到 404。定时任务保存时固化 Agent ID 与内容指纹，执行只允许 published；内容变化后须重新保存任务，并使用新会话。相关校验失败不自动重试。
 
-`ANTLER_PLATFORM_ROOT` 默认是仓库根的 `.antler-platform`，必须位于 `ANTLER_WORKSPACE_ROOT` 之外。服务启动将其设为 `0700`，平台目录必须单独备份。Docker 将主机 `platform/` 持久化挂载到 `/platform`，与 `workspace/` 分离；容器属主应与目录属主一致。原生依赖 `fs-ext` 提供操作系统文件锁，源码安装需要 Python、make 和 C++ 编译器（Docker 构建已安装）。v1 部署使用支持可靠 `flock` 的本地文件系统；支持 APFS/HFS、ext、XFS、Btrfs、ZFS、tmpfs/ramfs 和 Docker overlay；NFS/SMB 及未识别文件系统拒绝启动。
+`ANTLER_PLATFORM_ROOT` 默认是仓库根的 `.antler-platform`，必须位于 `ANTLER_WORKSPACE_ROOT` 之外。**平台状态的唯一事实源是数据库**：skill 文件内容存于 `skill_files` 表（上传在单个数据库事务内提交），该目录只是按需从数据库重建的本地缓存，回填完成后可整目录删除；`.tmp/` 仅在缓存安装期间短暂存在。Docker 将主机 `platform/` 挂载到 `/platform` 与 `workspace/` 分离；容器属主应与目录属主一致。
 
-v1 **仅支持单 backend 实例**。启动先取得平台根的操作系统独占文件锁；PostgreSQL 另用独立 `pg.Client` 持有固定 session advisory lock，不能使用事务池连接。Prisma 池重建不会释放该独立连接的锁；持锁连接丢失会停止服务并以失败状态退出。PGlite 跳过数据库锁，但仍需文件锁。取得锁后才恢复未完成更新、清理 staging、隔离孤儿目录和检查技能完整性，随后启动调度器与 HTTP。部署必须先停旧实例再启动新实例，禁止滚动重叠；`DEPLOY_DRY_RUN=1 scripts/deploy-apps-ssh.sh` 可只检查环境合并，不访问远端。
+v1 **每个数据库仅允许一个 backend 进程**（会话上下文、调度器和活动 run 是进程内状态；第二个实例会把活动 run 误标为中断并双重触发定时任务，启动时的 warning 日志会提示）。此约束为部署约定，不再由锁强制——平台文件与数据库不再双写，旧的单实例锁已随文件事务机制一并移除。升级先执行 `pnpm --filter @antler/server db:deploy`，首次启动时保留旧平台目录，自动把存量磁盘技能回填进 `skill_files`；确认回填完成前不要删除旧目录。数据库备份必须包含文件表；部署先停旧进程再启动新进程，禁止重叠运行。回填失败的技能标记 `broken`，重新上传即可修复。`DEPLOY_DRY_RUN=1 scripts/deploy-apps-ssh.sh` 可只检查环境合并，不访问远端。
 
-`read` / `write` / `edit` 对平台根进行路径拒绝，技能资源读取限制在单技能目录内。**bash 没有文件系统沙箱**，仍可访问进程用户可访问的绝对路径；`0700` 不能隔离同一用户启动的 bash。每轮运行前检查整个技能目录摘要，发现变化标记为 `tampered` 并拒绝运行，缺失或损坏标记为 `broken`；作者重新上传同一技能可恢复。真正隔离需在部署层让 bash 使用另一个用户或容器。运行持有技能读租约直到工具执行结束，覆盖更新与删除等待租约释放。
+`read` / `write` / `edit` 对平台根进行路径拒绝，技能资源读取限制在单技能目录内。**bash 没有文件系统沙箱**，仍可访问进程用户可访问的绝对路径；`0700` 不能隔离同一用户启动的 bash。bash 改写或删除缓存文件不会污染数据库：下次读取检测到指纹不符即从数据库重建缓存，技能保持 `ready`；只有数据库行自身不一致才会标记 `tampered`，`broken` 表示数据库内容本身不可用（如回填失败），作者重新上传同一技能可恢复。真正隔离需在部署层让 bash 使用另一个用户或容器。运行持有技能读租约直到工具执行结束，覆盖更新与删除等待租约释放。
 
 升级前没有技能上下文的普通聊天，首次成功续聊建立技能基线；此后重启也严格校验。无法据此检测升级前的技能变化。历史空属主或多属主冲突会话在 supabase 模式下拒绝自动认领，需明确迁移。`/api/runs` 不再要求 `projectId`；数据库中的旧项目字段仅为历史兼容保留，不参与会话组织。

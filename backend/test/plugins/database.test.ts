@@ -28,6 +28,7 @@ describe("database", () => {
         "run_events",
         "runs",
         "scheduled_tasks",
+        "skill_files",
         "skills",
         "task_executions",
       ]);

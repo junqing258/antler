@@ -1,10 +1,10 @@
 # Agent 平台化设计与实施计划
 
-> 状态：已实施；本地 / PGlite 验证完成，PostgreSQL 实库锁验收待独立环境执行
+> 状态：Agent Platform v1 已实施；Skill 数据库存储修订已实现，验证记录见 §10
 > 目标版本：Agent Platform v1
 > 依赖：[01 架构规划](./01-architecture-plan.md)、[02 Pi Agent 实现计划](./02-pi-agent-implementation-plan.md)、[04 技能后端设计](./04-skill-backend-design.md)
 >
-> 修订记录：2026-10-22 按评审意见修正平台目录隔离、会话 Agent 绑定、前端会话归属、下线语义、请求体上限、落盘原子性；补充最终 Agent 统一鉴权与单实例启动互斥要求；修正草稿调试误伤、定时任务指纹固化、权限判定改用 authMode；拆分技能文件与目录指纹，贯通定时执行约束，统一验收语义并补充历史会话入口；补齐会话所有者鉴权、运行创建互斥与历史空指纹兼容规则；补充技能上下文持久化与历史基线、定时任务不可重试错误传递、技能可绑定性服务端校验；补齐技能覆盖更新路径（PUT）与 `app.ts` service 包装层的约束透传要求，消除「上传即覆盖」与全局唯一名的冲突；明确 advisory lock 必须由独立 `pg.Client` 持有，并把定时任务固化字段完整性提升为 preflight 前置校验；修正技能更新恢复目录归属与缺失目录修复，统一技能读写锁及 run 读租约，补齐定时包装层固化字段约束；明确技能描述以 frontmatter 为准、引用列表按 Agent 可见性过滤，以及数据库 UUID 与运行时技能名称的转换契约；补齐已发布 Agent 编辑时的发布条件校验，禁止通过 PUT 保存空白提示词绕过发布门槛。
+> 修订记录：2026-10-22 Skill 文件迁入数据库，平台根改为可重建缓存，移除启动锁（替代下述早期锁设计）； 按评审意见修正平台目录隔离、会话 Agent 绑定、前端会话归属、下线语义、请求体上限、落盘原子性；补充最终 Agent 统一鉴权与单实例启动互斥要求；修正草稿调试误伤、定时任务指纹固化、权限判定改用 authMode；拆分技能文件与目录指纹，贯通定时执行约束，统一验收语义并补充历史会话入口；补齐会话所有者鉴权、运行创建互斥与历史空指纹兼容规则；补充技能上下文持久化与历史基线、定时任务不可重试错误传递、技能可绑定性服务端校验；补齐技能覆盖更新路径（PUT）与 `app.ts` service 包装层的约束透传要求，消除「上传即覆盖」与全局唯一名的冲突；明确 advisory lock 必须由独立 `pg.Client` 持有，并把定时任务固化字段完整性提升为 preflight 前置校验；修正技能更新恢复目录归属与缺失目录修复，统一技能读写锁及 run 读租约，补齐定时包装层固化字段约束；明确技能描述以 frontmatter 为准、引用列表按 Agent 可见性过滤，以及数据库 UUID 与运行时技能名称的转换契约；补齐已发布 Agent 编辑时的发布条件校验，禁止通过 PUT 保存空白提示词绕过发布门槛。
 
 ## 1. 目标与范围
 
@@ -45,20 +45,22 @@
 
 ## 3. 关键决策
 
-### 3.1 Skill 存文件系统目录（已定）
+### 3.1 Skill 文件存储（2026-10-22 修订：迁入数据库）
 
-上传的 Skill 解包到 backend 管理的目录，**不**落在任何 Agent 工作目录里：
+Skill 文件内容的**唯一事实源是 Postgres 的 `skill_files` 表**（`skillId + path` 复合主键，`content BYTEA`，随 Skill 行级联删除）。上传在单个 Prisma 事务内替换元数据行与文件行，不再有文件系统"事务"（旧 staging/补偿/recover 均已删除；缓存仍使用 rename 安装）。
+
+`ANTLER_PLATFORM_ROOT` 降级为**本地物化缓存**：`skills/<skill-row-id>/` 按需从数据库重建（指纹不符或缺失时原子替换），可随时整目录删除；`.tmp/` 仅在缓存安装期间短暂存在。读取侧（`SkillRegistry.listPlatform`、技能工具）继续走磁盘路径，代码不变。
 
 ```
-<ANTLER_PLATFORM_ROOT>/
+<ANTLER_PLATFORM_ROOT>/          # 纯缓存，可随时删除重建
 ├── skills/<skill-row-id>/
 │   ├── SKILL.md
 │   └── ...资源文件
-└── .staging/<uuid>/          # 仅解包期存在
+└── .tmp/<id>-<uuid>/           # 仅缓存安装期存在
 ```
 
 - `ANTLER_PLATFORM_ROOT` **必须位于工作区之外**。默认值取 `resolve(projectRoot, ".antler-platform")`，即仓库根下的隐藏目录；不得默认落在 `workspace/` 内。
-- 启动时校验：`realpath(platformRoot)` 不得是 `ANTLER_WORKSPACE_ROOT` 或其子目录，否则**拒绝启动**并打印明确错误。这是硬约束，不做降级。
+- 一次性回填：启动时（原 `recover()` 位置）`migrateFileSkills` 把存量磁盘目录按指纹校验后写入 `skill_files`；目录缺失或指纹不符的行标记 `broken`，重新上传即可修复。旧 `.staging`/`.orphaned`/`.lock` 由启动清理。
 - 目录名用数据库行 ID（uuid）。现有 `parseSkill(raw, basename(directory), filePath)` 强制 `name === directoryName`，所以平台技能**不走目录扫描**：读取 DB 元数据后，用 `skill.name` 作为逻辑 ID，磁盘路径单独放入 `LoadedSkill.directory`。为此给 registry 增加独立的 `listPlatform(rows)` 分支。**这是本次改动里唯一需要触碰 `skill-loader.ts` 契约的地方**，必须单测覆盖。
 - 读取侧复用现有 `readSkillFile` 与技能工具的资源读取、路径检查和忽略规则；文件指纹保留原契约，新增目录完整性指纹，见 §5.2。
 
@@ -73,21 +75,11 @@
 `bash` 的残余风险在 v1 **显式接受**，并配套两条缓解：
 
 1. 平台根权限设为 `0700`，属主为 backend 进程用户；若希望真正隔离，需让 bash 以另一个用户运行（`setuid`/容器 `--user`），这属于部署层改动，v1 不做。
-2. 运行期对平台技能目录计算指纹并与 DB 比对。发现被改写时，将该技能标记为 `tampered`，拒绝被新 Agent 绑定，并记录 warning 日志（不自动回滚，避免掩盖问题）。
+2. 每轮运行前校验物化缓存；目录缺失或被改写时从数据库重建。数据库文件集合与元数据指纹不符时拒绝使用；完整性检查写回 `tampered`，读取或解析失败写回 `broken`，并记录 warning。自愈不改变数据库内容与 Agent 指纹，也不能阻止进行中 run 被 bash 干扰。
 
 文档与 README 均按上表描述，**不得声称已实现完整隔离**。
 
-**v1 仅支持单实例部署**：共享卷不足以保证上传、清理及运行内存状态一致，不支持滚动更新期间新旧 backend 重叠运行。部署必须先停止旧实例，再启动新实例；备份策略需单独覆盖平台目录。
-
-启动必须先取得覆盖同一平台存储的独占锁，再做任何 self-check、目录清理、调度器启动或 HTTP 监听，并持锁直到进程退出：
-
-- PostgreSQL 部署使用专用连接持有 session advisory lock，锁键固定于平台用途，作用域为同一数据库；不得通过事务池连接持有。连接丢失时立即停止接收请求和调度任务并终止进程，不得继续上传或清理。
-  - **「专用连接」必须是独立的 `pg.Client`，不能复用 `PrismaClient`**：当前 `plugins/database.ts` 通过 `@prisma/adapter-pg` 建立的是连接池，`$queryRaw` 每次随机取连接，`pg_advisory_lock` 与 `pg_advisory_unlock` 可能落在不同连接上，锁在该会话结束时才释放或根本无法释放。实现要求：新增 `pg` 为直接依赖（目前仅为传递依赖），启动时 `new Client({ connectionString })` → `connect()` → `SELECT pg_advisory_lock($1)`，该 client 全进程唯一并持有到退出；`error` 事件、连接结束或心跳失败一律触发优雅停机后 `process.exit(1)`，不停留为只处理 HTTP 的半活状态。锁键用固定的 int64 常量，不与 run / task 等其他 advisory lock 复用同一键。
-  - PGlite 部署（本地开发、测试）不支持 advisory lock，也无需它：PGlite 是进程内嵌入式数据库，天然单实例；该场景只依赖下面的操作系统文件锁。
-  - 启动互斥的验收必须覆盖「Prisma 连接池重建后锁仍被持有」，不能只验证 `$queryRaw` 返回成功。
-- 平台根另需进程生命周期的操作系统独占文件锁，覆盖误配为不同数据库但共用目录的情况；本地 PGlite 部署也必须取得此锁。锁文件放在平台根内的固定位置，不能仅用文件存在性判断持锁，也不能按超时删除活跃锁。共享文件系统若不提供可靠的锁语义，拒绝作为 v1 平台存储。
-- 任一锁未取得就拒绝启动，不执行清理；正常退出和崩溃均由连接/操作系统释放锁。获取文件锁前仅允许创建平台根与锁文件所需的最小操作。
-- 所有清理必须在服务开始接收上传之前完成。未来支持多实例时，需要重新设计上传租约、孤儿判定和运行状态协调，不能直接移除此锁。
+**v1 仅支持每个数据库一个 backend 进程**（2026-10-22 修订）：会话上下文、调度器和活动 run 是进程内状态，共享同一数据库的第二个实例会把第一实例的活动 run 误标为中断、并双重触发定时任务。此约束自本修订起**仅靠文档约定，不再由锁强制**——原 storage-lock（flock + statfs 白名单 + PG session advisory lock + 心跳）随"文件为事实源"的设计一并移除：文件系统与数据库不再双写，advisory lock 互顶反而成为运维伤害源（见 2026-10-22 dev/线上互顶事故）。启动时的兜底信号：`recoverInterrupted` 标记非零数量 run 时输出 warning，提示检查是否有第二个实例共用数据库。
 
 ### 3.2 「仅草稿 + 状态位」（已定）
 
@@ -190,8 +182,8 @@ model AgentSkill {
 
 enum SkillState {
   ready
-  broken      // 目录缺失或损坏，禁止绑定
-  tampered    // 内容指纹与 DB 不符，禁止绑定
+  broken      // 数据缺失、无法解析或旧目录回填失败，禁止绑定
+  tampered    // 数据库文件集合与元数据指纹不符，禁止绑定
 }
 
 model Skill {
@@ -199,7 +191,7 @@ model Skill {
   ownerId     String     @default("")
   name        String     @unique               // 全局唯一，见下
   description String
-  directory   String                           // 平台根下的相对路径
+  directory   String                           // 兼容保留；缓存路径由行 ID 派生
   state       SkillState @default(ready)
   disableModelInvocation Boolean @default(false) // 从已校验 frontmatter 提取，客户端不可指定
   fileCount   Int
@@ -208,9 +200,20 @@ model Skill {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   agents      AgentSkill[]
+  files       SkillFile[]
 
   @@index([ownerId, updatedAt])
   @@map("skills")
+}
+
+model SkillFile {
+  skillId String
+  path    String // 使用 / 分隔的相对文件路径
+  content Bytes
+  skill   Skill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([skillId, path])
+  @@map("skill_files")
 }
 ```
 
@@ -235,7 +238,7 @@ catalogFingerprint String?
 
 ## 5. 后端设计
 
-### 5.1 技能包上传格式与落盘
+### 5.1 技能包上传格式与事务存储
 
 不用 multipart，直接用**单个 zip 文件的 base64 JSON**，避免给 Fastify 加 multipart 依赖：
 
@@ -251,7 +254,7 @@ content-type: application/json
 校验（按顺序，任一失败即 4xx，目录不落盘）：
 
 1. base64 解码后 ≤ 5 MiB。
-2. zip 条目数 ≤ 200，解压后总量 ≤ 20 MiB，单文件 ≤ 1 MiB（`SKILL.md` 另受现有 `MAX_SKILL_BYTES = 64 KiB` 约束；资源文件运行时受 `MAX_RESOURCE_BYTES = 256 KiB` 约束）。
+2. zip 条目数 ≤ 200，物化后的文件与目录条目合计也须 ≤ 200（包括 ZIP 未显式列出的父目录），解压后总量 ≤ 20 MiB，单文件 ≤ 1 MiB（`SKILL.md` 另受现有 `MAX_SKILL_BYTES = 64 KiB` 约束；资源文件运行时受 `MAX_RESOURCE_BYTES = 256 KiB` 约束）。
 3. 拒绝绝对路径、`..`、符号链接、加密条目、`__MACOSX/`。
 4. 必须存在根下的 `SKILL.md`（允许 zip 多一层包裹目录，自动剥掉唯一顶层目录）。
 5. 用现有 `parseSkill` 校验 frontmatter：`name` 匹配 `^[a-z0-9]+(-[a-z0-9]+)*$`、≤ 64 字符，`description` 非空且 ≤ 1024，且 `name` 与请求体一致。`description` 以已解析 frontmatter 为唯一来源：POST / PUT 均用它写入 DB；请求体的可选 `description` 仅为兼容保留，若提供则必须与解析值一致，否则返回 422 `skill_invalid`，不得用请求体覆盖文件描述。
@@ -259,40 +262,22 @@ content-type: application/json
 
 **完整性与可绑定性分开判定**：`state = ready` 仅表示文件完整，不代表可绑定。`GET /api/skills` 返回 `disableModelInvocation`、派生字段 `bindable = (state === "ready" && !disableModelInvocation)` 及不可绑定原因；技能库保留展示不可绑定项。Agent PUT 保存绑定集与 publish 均须在服务端加载并完整校验全部绑定技能，验证解析出的 `disableModelInvocation === false`（不能只信请求体或 DB 状态）；不可调用项返回 `422 skill_not_bindable`，完整性失败按技能不可用处理，且不提交部分绑定或发布状态。DB 元数据与已校验文件不一致视为损坏并拒绝使用。前端筛选不能替代该校验；`listPlatform` 仍过滤不可调用项，运行 preflight 缺项检查作为兜底。
 
-**落盘顺序（先文件、后数据库）**：
+**事务写入与缓存物化顺序**：
 
-```
-1. 解包到 <platformRoot>/.staging/<uuid>/
-2. 全部校验通过
-3. rename(.staging/<uuid> → skills/<skill-row-id>)      ← 原子、无 DB 写入
-4. INSERT skills 行
-   └─ 失败 → rm -rf skills/<skill-row-id>，向上抛错
-```
+上传先在内存完成解包、路径校验、frontmatter 解析和指纹计算，不写缓存。POST 生成 UUID；PUT 校验作者且名称必须与现有行一致，不支持改名。
 
-- `skill-row-id` 在步骤 1 之前用 `crypto.randomUUID()` 生成，从解包开始就是最终目录名，避免「先落盘到临时名、再改名」的第二次窗口。
-- 任一步失败都清空对应目录；仅在取得 §3.1 的独占锁、且尚未开放上传入口时，启动清理才可清空 `.staging`（进程中断遗留）。未取得锁的进程不得扫描或移动技能目录。
-- 启动 self-check 扫描 `skills` 表：目录不存在 → `state = "broken"`；指纹不符 → `state = "tampered"`。两种状态都拒绝被新 Agent 绑定，不自动删除记录，便于运维排查。
-- 因此不存在「先 INSERT 后 rename」导致的行指向空目录窗口：即使步骤 4 之后进程被杀，最坏结果是目录存在而 DB 无行 → 启动清理时把孤儿目录移入 `.orphaned/`，不参与绑定。
+1. 取得技能 UUID 对应的写锁。
+2. 在单个 Prisma 事务中创建或更新 `skills` 元数据，删除该技能旧 `skill_files`，批量写入全部新文件。任一步失败回滚整个事务；名称冲突映射为 `422 skill_name_taken`。
+3. 提交后尽力刷新物化缓存；失败记录 warning，上传仍成功，后续读取重建缓存。数据库提交成功后不做文件补偿或撤销元数据。
+4. 释放写锁。
 
-**内容更新（`PUT /api/skills/:id`，覆盖语义）**：`Skill.name` 全局唯一，重名上传一律 422，因此覆盖更新必须走独立入口，不能指望「删了重传」。更新复用上文校验步骤 1–6 的全部检查，`name` 必须与请求体及现有行一致（改名等同于新建，不支持）。
+缓存安装先将文件写入 `.tmp/<id>-<uuid>/`，再将旧目录移入临时备份、安装新目录，最后清理临时文件。安装失败尝试恢复旧缓存；所有安装步骤持有写锁，读取方不会看到中间状态。进程崩溃后启动清理 `.tmp`，缓存缺失或指纹不符均可从数据库重建，无需恢复文件系统事务。
 
-```
-1. 解包到 <platformRoot>/.staging/updates/<skillId>/<operationId>/new/，完成 1–6 全部校验
-2. 取得该 skillId 的写锁，重新查询行并校验作者；旧目录存在则 rename(skills/<skillId> → 同操作目录/old)
-   └─ 仅 ENOENT 表示无需备份；其他错误终止，不开始替换
-3. rename(同操作目录/new → skills/<skillId>)
-4. UPDATE skills 行（description / fingerprint / fileCount / sizeBytes / disableModelInvocation / state = "ready"），description 与 disableModelInvocation 均取自本次已校验 frontmatter
-5. 删除操作目录（包括 old），释放写锁
-```
+`broken` / `tampered` 技能可用 PUT 修复；相同内容重传不改变指纹。缓存自愈也可恢复 `ready`，但数据库内容损坏时不能靠缓存修复数据库。DELETE 删除元数据时级联删除文件行，再尽力清理缓存。
 
-- `skillId` 使用数据库行 ID，`operationId` 使用独立 UUID；恢复不依赖猜测随机 UUID 对应的技能。解包可在锁外进行，但步骤 2–5 及失败补偿必须持有同一写锁，且同一技能只允许一个操作进入替换阶段。
-- 旧目录缺失的 `broken` 技能允许跳过备份，直接安装新目录。步骤 3 失败时恢复已备份的 `old`；步骤 4 明确失败时删除新目录并恢复 `old`，无备份则恢复为目录缺失，数据库保留原值。不能清理其他操作的目录。若数据库提交结果不确定或补偿失败，停止该技能的使用与更新并终止服务，由启动恢复处理，不能继续以正常状态提供读取。
-- 两次 rename 之间确实存在最终目录缺失窗口，新目录与 DB 更新之间也存在指纹不一致窗口；这些窗口必须由下述读写锁屏蔽，不能声称单次 rename 保证整个更新原子。
-- **启动恢复早于清空 staging 和 self-check**：取得 §3.1 的独占锁后，按 `updates/<skillId>/<operationId>` 查找操作。DB 行仍存在时：最终目录缺失且 `old` 存在则恢复 `old`；最终目录存在则保留最终目录、删除 `old`，随后按 DB 指纹判定状态。步骤 3/4 之间崩溃仍会判为 `tampered`，由上传者重新 PUT 修复；缺少旧目录的修复在步骤 2/3 之间崩溃则保持 `broken`，可再次 PUT。DB 行不存在则将最终目录及残留操作移入 `.orphaned/`，不恢复为可绑定技能。恢复完成后才清理剩余 staging。多个带 `old` 的操作指向同一技能属于异常，拒绝启动并保留现场，不猜测恢复顺序。
-- `tampered` / `broken` 的技能重新成功执行 `PUT` 才回到 `ready`，无需删除引用它的 Agent。相同内容重传允许恢复状态；只有目录摘要实际变化才改变 Agent 内容指纹，不能断言每次 PUT 都会改变指纹。
 - 覆盖更新不按「被引用」拦截（与 `DELETE` 的 409 不同）：作者更新自己的技能是被允许的显式操作。内容变化后，已有会话下一轮按 §3.2 返回 `409 agent_context_changed`，定时任务要求重新保存。
 - **所有平台技能访问共用按 `skillId` 的进程内读写锁**：PUT、DELETE 与完整性状态写回取得写锁；完整性校验、Agent 保存绑定、发布校验取得读锁，从查询 DB 元数据到完成文件读取均在锁内。读校验发现损坏时，释放读锁后取得写锁，重新读取并复核当前版本才写回状态，避免旧检查结果污染更新后的 `ready` 状态。
-- **进行中 run 保持技能内容稳定**：preflight 按技能 ID 排序取得全部绑定技能的读锁，成功后将租约移交 active run，直到模型与工具执行结束才释放；失败路径同样释放。`load_skill` / `read_skill_resource` 使用该租约，不能递归获取读锁。PUT / DELETE 等待读租约结束后才进入替换阶段，因此当前 run 读到完整旧内容，后续 run 读到完整新内容。Agent 保存/发布持有多技能读锁时也按 ID 排序，锁内不等待会话占用；run 先取得会话占用再取得技能锁，避免锁顺序反转。§3.1 的启动锁不能替代这些进程内锁；bash 仍属于已接受的残余风险。
+- **进行中 run 保持技能内容稳定**：preflight 按技能 ID 排序取得全部绑定技能的读锁，成功后将租约移交 active run，直到模型与工具执行结束才释放；失败路径同样释放。`load_skill` / `read_skill_resource` 使用该租约，不能递归获取读锁。PUT / DELETE 等待读租约结束后才进入替换阶段，因此当前 run 读到完整旧内容，后续 run 读到完整新内容。Agent 保存/发布持有多技能读锁时也按 ID 排序，锁内不等待会话占用；run 先取得会话占用再取得技能锁，避免锁顺序反转。移除启动互斥不影响这些进程内锁；bash 仍属于已接受的残余风险。
 
 ### 5.2 `SkillRegistry` 扩展
 
@@ -323,7 +308,7 @@ class SkillRegistry {
 | 使用位置 | 标识 |
 |---|---|
 | Agent 创建/更新 API 的 `skillIds`、`AgentSkill.skillId`、平台技能 API 的 `id` / `:id` | `Skill.id`（数据库 UUID） |
-| 技能目录名、更新恢复、读写锁、损坏状态写回 | 数据库 UUID |
+| 技能目录名、缓存重建、读写锁、损坏状态写回 | 数据库 UUID |
 | `LoadedSkill.id`、`SkillPolicy.skillIds`、`RunAgentContext.skillIds`、`ResolvedRunAgent.skillIds`、技能工具的 `skillId` | `Skill.name`（运行时名称） |
 | Agent 内容指纹中的技能键 | 运行时名称，与 `LoadedSkill.id` 一致 |
 
@@ -339,7 +324,7 @@ Agent 保存时按 UUID 查询并验证全部绑定，禁止把名称当作数�
 
 `LoadedSkill` 新增可选 `directoryFingerprint?: string`；平台技能必须赋值，三来源技能无需赋值。目录摘要统一由一个函数计算：递归枚举全部普通文件（含 `SKILL.md`、忽略文件和被忽略资源），拒绝符号链接及特殊文件；按使用 `/` 分隔的相对路径排序，以 `JSON.stringify([[relativePath, sha256(rawBytes)], ...])` 的 UTF-8 字节计算 SHA-256，带 `sha256:` 前缀。空目录不参与摘要，新增、删除、改名或修改任一文件都改变摘要。遍历与读取继续执行条目数、总量和单文件上限，避免运行期篡改绕过上传限制。
 
-上传校验完成后将目录摘要写入 `Skill.fingerprint`。启动和每轮运行时重算并与 DB 比较；不一致即标记 `tampered` 并拒绝本轮运行，目录缺失或无法解析则标记 `broken`。`listPlatform` 只返回完整校验成功的条目；调用方必须检查绑定项是否全部返回，不能把 diagnostics 当成允许缺项的依据。`entry()` 继续只比较 `LoadedSkill.fingerprint` 与 `SKILL.md` 哈希，不能拿目录摘要替代它。每轮检查不提供运行期间的文件系统快照，仍受 §3.1 已接受的 bash 残余风险约束。
+上传校验后对内存文件集合计算同算法摘要并写入 `Skill.fingerprint`。每轮运行前重算缓存摘要；缺失或不符则取得写锁、重新查库并从文件行重建。数据库文件集合与元数据不一致时拒绝使用；完整性复核按 §3.1 写回诊断状态。`listPlatform` 只返回完整校验成功的条目；调用方必须检查绑定项是否全部返回，不能把 diagnostics 当成允许缺项的依据。`entry()` 继续只比较 `LoadedSkill.fingerprint` 与 `SKILL.md` 哈希，不能拿目录摘要替代它。每轮检查不提供运行期间的文件系统快照，仍受 §3.1 已接受的 bash 残余风险约束。
 
 
 `composeSkillPrompt` 不变：平台技能同样以 `<available_skills>` 注入名称与描述，模型按需 `load_skill`。
@@ -434,7 +419,7 @@ private async preflight(
 
 `createRun` 在构造 `ActiveRun` 之前调用 `preflight`；`createRunWithSkills` 只负责在 preflight 之上完成技能发现，不再单独做 Agent 判定。`createRun` 现有的 `policy.mode !== "disabled"` 就抛 `Skill registry unavailable` 分支改为使用本轮解析结果组装的 snapshot。
 
-**会话创建与绑定必须串行化**：两个入口统一进入同一个内部创建流程，在读取会话上下文或执行任何异步操作前，以 `conversationId` 同步登记占用。已有创建流程或运行占用该会话时返回 `409 conversation_busy`。占用覆盖归属鉴权、preflight、技能发现、run 持久化与内存绑定提交；成功后原子移交给 active run，直到运行结束才释放，不能在 preflight 返回后提前释放。preflight 本身不提交新绑定；数据库写入成功后才提交内存绑定，失败时释放创建占用且不留下新绑定。若 run 已落库而后续初始化失败，必须将其标记失败并释放占用，保留与持久化记录一致的绑定。`createRunWithSkills` 不得再调用一个重复获取占用的公开 `createRun`；两者复用持有占用的私有流程。该互斥是进程内会话级保护，与 §3.1 的启动独占锁分别实现。
+**会话创建与绑定必须串行化**：两个入口统一进入同一个内部创建流程，在读取会话上下文或执行任何异步操作前，以 `conversationId` 同步登记占用。已有创建流程或运行占用该会话时返回 `409 conversation_busy`。占用覆盖归属鉴权、preflight、技能发现、run 持久化与内存绑定提交；成功后原子移交给 active run，直到运行结束才释放，不能在 preflight 返回后提前释放。preflight 本身不提交新绑定；数据库写入成功后才提交内存绑定，失败时释放创建占用且不留下新绑定。若 run 已落库而后续初始化失败，必须将其标记失败并释放占用，保留与持久化记录一致的绑定。`createRunWithSkills` 不得再调用一个重复获取占用的公开 `createRun`；两者复用持有占用的私有流程。该互斥是进程内会话级保护，不依赖已移除的启动锁。
 
 为避免两次查找，`ResolvedRunAgent` 还须携带本轮已校验的 `platformSkills: LoadedSkill[]` 与 `diagnostics: SkillDiagnostic[]`（无 Agent 时均为空）；有 Agent 时由这些条目组装唯一的 `SkillSnapshot`，不可再次扫描或直接把 `ResolvedRunAgent` 当作 snapshot。调用方传入的 `skillPolicy` / `skillSnapshot` 仅在无 Agent 会话中生效；无 Agent 时继续比较既有 policy 与 catalogFingerprint。
 
@@ -524,7 +509,7 @@ private async preflight(
 | `DELETE` | `/api/agents/:id` | 仅作者，级联解绑 `agent_skills`，保留历史 run |
 | `GET` | `/api/skills` | **语义变更**：不再按 `workingDirectory` 扫描，改为返回平台技能（`scope: "platform"`） |
 | `POST` | `/api/skills` | 上传技能包；路由级 `bodyLimit: 7 MiB` |
-| `PUT` | `/api/skills/:id` | 覆盖更新技能内容（仅上传者）；路由级 `bodyLimit: 7 MiB`；校验与落盘顺序见 §5.1 |
+| `PUT` | `/api/skills/:id` | 覆盖更新技能内容（仅上传者）；路由级 `bodyLimit: 7 MiB`；校验与事务写入顺序见 §5.1 |
 | `DELETE` | `/api/skills/:id` | 仅上传者；被引用时 409，引用详情按 §3.3 过滤，不泄露不可见草稿 |
 | `POST` | `/api/runs` | 请求体新增可选 `agentId`，解析与校验见 §5.5 |
 | `POST` | `/api/tasks` | 请求体新增可选 `agentId`；省略时从 `conversationId` 继承，**不得清空既有绑定** |
@@ -614,7 +599,7 @@ UPDATE agents SET "ownerId" = '<supabase-user-id>' WHERE id = '<agent-id>';
 
 | 场景 | 行为 |
 |---|---|
-| Agent 绑定的技能目录丢失 / 损坏 / 被篡改 | run 创建阶段 `500 agent_skills_unavailable`，不降级；技能标记 `broken` / `tampered` |
+| Agent 绑定的技能缓存丢失 / 损坏 / 被篡改 | 从数据库重建；无法重建或数据库内容不完整时返回 `500 agent_skills_unavailable`，不降级 |
 | 已发布 Agent 经 PUT 清空提示词或改为纯空白 | `422 agent_prompt_required`，整个更新不提交，保持原内容与 published 状态；需先显式下线才能保存空白提示词 |
 | 作者在会话中途改提示词或技能 | 下一轮 `409 agent_context_changed`，前端引导新建会话 |
 | 同一会话切换到内容相同的另一个 Agent | `409 agent_changed`（身份独立校验） |
@@ -626,17 +611,17 @@ UPDATE agents SET "ownerId" = '<supabase-user-id>' WHERE id = '<agent-id>';
 | 同一技能名重复上传 | 422 `skill_name_taken` |
 | zip 解压炸弹 | 条目数 / 解压总量 / 单文件大小三重上限 |
 | 上传包接近 5 MiB | 路由级 `bodyLimit` 7 MiB 放行，业务层再按 5 MiB 校验；集成测试覆盖 |
-| 落盘 rename 失败 | 不写 DB，清空 staging，返回 500 |
-| INSERT 失败（rename 已完成） | 删除 `skills/<id>` 目录补偿，返回 500 |
-| 进程在 rename 与 INSERT 之间中断 | 启动清理把无主目录移入 `.orphaned/`，不参与绑定 |
-| 进程在解包中中断 | 下次启动取得独占锁后、开放上传前清空 `.staging/` |
-| 第二个 backend 实例启动 | 获取独占锁失败，拒绝启动；不得清理另一实例的目录 |
+| 缓存安装失败 | 数据库提交仍有效，记录 warning，后续读取重试物化 |
+| 元数据或文件行写入失败 | 同一事务全部回滚，保留旧数据 |
+| 缓存安装期间进程中断 | 下次启动清理 `.tmp`，按需从数据库重建 |
+| 内存解包期间进程中断 | 无数据库或文件系统内容变更 |
+| 第二个 backend 实例启动 | 无启动锁拦截；部署必须避免重叠运行，恢复活动 run 时输出 warning 供排查 |
 | 省略 `agentId`，继承的 Agent 已下线 / 删除 | 对最终 Agent 重新查库鉴权：非作者 404；作者放行（下线且内容未变）或 404（删除）；仅拒绝时不创建 run |
 | 提示词注入越权 | 基础安全提示词前置且声明 `agent_instructions` 不可覆盖；脱敏仍在 `SecretGuard` 层兜底 |
 | `/api/tasks` 省略 `agentId` 但会话已绑定 Agent | 按 §5.5.2 继承既有绑定，不降级为无 Agent |
 | 定时任务绑定的 Agent 已下线 / 指纹变化 | 执行记录标记失败：`draft` 拒绝执行，指纹不符记 `agent_context_changed`；不自动重试，不切换 Agent |
 | 定时任务 payload 缺固化字段，但会话已绑定 Agent | preflight 返回 `agent_frozen_fields_missing`（`retryable: false`），不创建 run；不靠「继承到 null」放行 |
-| bash 写到平台目录 | **无法阻止**（残余风险）；指纹校验标记 `tampered`，权限层面靠 `0700` 缓解 |
+| bash 写到平台目录 | **无法阻止**（残余风险）；下一轮从数据库修复缓存，当前 run 仍可能受影响；权限层面靠 `0700` 缓解 |
 | 本地模式（`userId=""`） | 单用户等价，所有 Agent 可见可编辑 |
 | 跨用户复用 conversationId | supabase 模式返回 `404 conversation_not_found`；不创建 run、不访问模型历史 |
 | 并发创建同一会话的首轮 | 同步占用会话，仅一个请求可进入创建流程，其余返回 `409 conversation_busy` |
@@ -659,14 +644,10 @@ UPDATE agents SET "ownerId" = '<supabase-user-id>' WHERE id = '<agent-id>';
 - `config/env.ts` 增加 `platformRoot`，启动时校验不在 `ANTLER_WORKSPACE_ROOT` 内。
 - `workspace-tools.ts` 的 `workspacePath()` 增加 `platform_path_denied` 拒绝。
 - `skills/types.ts` 增加 `"platform"` scope、`PlatformSkillRow` 与 `LoadedSkill.directoryFingerprint`；实现 §5.2 的目录摘要函数与 `SkillRegistry.listPlatform(rows)`，保留 `LoadedSkill.fingerprint` 的文件哈希契约。
-- 新增 `backend/src/skills/skill-archive.ts`：base64 → zip → 校验 → staging → rename → INSERT → 失败补偿。
-- 新增启动独占锁（§3.1）：先取得数据库锁与平台根文件锁，再进行 self-check、开放 HTTP 和启动调度器；锁失败拒绝启动，持锁连接丢失终止进程。数据库锁必须由独立 `pg.Client` 持有（新增 `pg` 直接依赖），不复用 Prisma 连接池；PGlite 部署跳过数据库锁。
-- **锁验证**：Prisma 连接池发生一次扩容 / 重建后锁仍被持有；独立 client 断开后进程退出且不再接受上传；PGlite 场景只依赖文件锁且启动正常。
-- **标识转换验证**：使用 UUID 与名称明显不同的技能行；前端/API 以 UUID 绑定，registry 返回名称 ID，selected policy 与 Run 持久化使用名称，模型按名称成功调用 `load_skill` / `read_skill_resource`；缺失绑定项仍被拒绝，状态写回和锁操作使用原 UUID；多技能输入顺序不影响内容指纹。
-- **指纹验证**：带资源的正常包可成功 `load_skill` / `read_skill_resource`；相同目录摘要不受枚举顺序影响；仅资源修改、新增、删除或改名也触发 `tampered`，下一轮不创建 run；三来源技能加载回归通过。
-- 新增启动 self-check：持锁且未开放上传时先执行 §5.1 的更新恢复，再清空剩余 `.staging`、孤儿目录入 `.orphaned`、标记 `broken` / `tampered`。
-- **互斥验证**：实例 A 在解包及 rename 后 INSERT 前分别暂停，启动实例 B；B 必须因锁失败退出，A 的 staging / 最终目录保持完整。另覆盖 A 崩溃后 B 可取得锁并清理遗留，以及数据库锁连接丢失时服务停止。
-- **验证**：单测覆盖正常包、多一层包裹目录、`..` 逃逸、符号链接、超限、frontmatter 名不匹配、`SKILL.md` 缺失、rename 失败、INSERT 失败、崩溃遗留 staging 清理；`workspacePath` 对平台根内的路径返回 `platform_path_denied`。
+- `skill-archive.ts` 在内存校验 ZIP；`skill-files.ts` 实现文件行读写、路径校验与旧目录回填；新增 `SkillFile` 模型和 `20261023000000_skill_files` 迁移（含 RLS）。
+- POST / PUT 在同一数据库事务内写入元数据与文件；DELETE 级联清理。缓存可删除、按需重建，安装失败不撤销数据库提交。
+- 移除 storage-lock、文件系统白名单、PG advisory lock 和相关依赖；保留真实路径隔离检查、根目录 `0700` 权限、进程内读写锁与 run 租约。
+- **验证**：UUID 与运行时名称转换、两类指纹、三来源加载回归；ZIP 路径与容量限制；事务失败回滚、级联删除；缓存丢失/篡改自愈与缓存安装失败重试；旧目录回填幂等、缺失或指纹不符标记 broken；单实例部署约束由运维保证。
 
 ### 第 3 步：提示词装配与适配器上下文
 - `system-prompt.ts` 拆 `BASE_SYSTEM_PROMPT` + `buildSystemPrompt`。
@@ -680,9 +661,8 @@ UPDATE agents SET "ownerId" = '<supabase-user-id>' WHERE id = '<agent-id>';
 - 提取 publish 与已发布 Agent PUT 共用的发布校验；PUT 校验合并后的完整配置，校验成功后才原子提交字段与技能绑定，失败保持原记录和发布状态。
 - **验证**：`agents.test.ts` / `skills.test.ts` 覆盖「不可调用技能上传成功且 ready，但 bindable=false」「绕过前端直接 PUT 绑定或发布不可调用技能 → 422 skill_not_bindable，绑定与发布状态不变」「非作者 PUT → 403」「draft 对他人 GET → 404」「删除被引用技能 → 409」「用户 B 的 draft 绑定用户 A 的技能后，A 删除技能仍为 409，但响应仅含不可见引用标记，不含 B 的草稿 ID / 名称 / 作者 / 数量；published 和自己的 draft 可返回详情，local 模式返回全部可见引用」「6.5 MiB 请求体不触发 413 而是业务 4xx」。
 - **发布条件回归验证**：草稿可保存空串与纯空白提示词，但 publish 均返回 `422 agent_prompt_required`；有效提示词发布成功后，PUT 空串或纯空白均返回同一错误，连同请求中的名称、描述及技能绑定改动全部不提交，状态与 `publishedAt` 不变；published PUT 省略提示词时以现有值校验并可正常保存，有效提示词更新后仍为 published；显式下线后可保存空白提示词，再次发布仍被拒绝。
-- **技能覆盖更新验证**：`PUT` 同名且内容变化后指纹变化、`state` 回到 `ready`；相同内容重传指纹不变但可恢复状态；`tampered` / `broken` 技能经 `PUT` 恢复可绑定；非上传者 `PUT` → 403；改名或重名 `PUT` → 422；步骤 2/3 之间与步骤 3/4 之间中断后，启动清理分别把操作目录中的 `old` 恢复回 `skills/<id>` / 删除 `old`，且状态判定与 DB 指纹一致；同一技能并发两个 `PUT` 串行执行，不出现交错 rename；用两个不同技能验证操作目录可准确恢复归属；旧目录缺失时 PUT 成功、安装/DB 更新失败后仍可重试；恢复必须先于 staging 清理。
-- **描述同步验证**：只修改 frontmatter description 后 PUT，DB 与 GET 列表返回新描述，绑定、发布和新会话 preflight 均通过；请求体 description 与文件不一致返回 422，DB 与原目录不变。
-- **读写并发验证**：在两次 rename 之间及 DB 更新前暂停 PUT，并发 preflight、绑定、发布不得读取中间状态或误写 `broken/tampered`；进行中 run 持有读租约时 PUT 等待，工具读取旧内容，run 结束后更新成功、新 run 读取新内容；覆盖 run 初始化/执行失败释放租约、多个技能反向请求无死锁、旧损坏检查不得覆盖 PUT 后的状态。
+- **技能覆盖更新验证**：同名更新同步描述、文件行与摘要；同内容可修复状态且指纹不变；非作者、改名、描述冲突均拒绝。事务失败保留旧数据，缓存刷新失败后从数据库恢复。
+- **读写并发验证**：run 读租约期间 PUT 等待，工具读取旧内容；run 结束后提交更新，新 run 使用新内容。覆盖失败释放租约、多技能锁顺序、缓存重建与更新串行化。
 
 ### 第 5 步：run 链路接入 agentId
 - `host-runtime` 新增共用 `preflight()`（§5.5.1），`createRun` 与 `createRunWithSkills` 都走它；移除 `createRun` 中「策略非 disabled 就抛错」的分支。
@@ -713,19 +693,21 @@ UPDATE agents SET "ownerId" = '<supabase-user-id>' WHERE id = '<agent-id>';
 - **验证**：`pnpm check` + 手动走查：上传 zip → 绑定 → 发布 → 另一账号可见并对话。
 
 ### 第 8 步：文档与部署
-- README 增加 Agent 平台章节、`ANTLER_PLATFORM_ROOT`（必须是工作区之外）、`0700` 权限建议、v1 单实例及锁要求、bash 残余风险。
+- README 增加 Agent 平台章节、`ANTLER_PLATFORM_ROOT`（必须是工作区之外）、`0700` 权限建议、v1 单实例部署要求、bash 残余风险。
 - `.env.deploy.example` 增加 `ANTLER_PLATFORM_ROOT`。
-- 部署脚本把平台根纳入远端保留目录（不随镜像覆盖），并保证容器内属主与权限；采用先停旧实例再启新实例的顺序，不允许滚动重叠运行。
+- 数据库备份必须包含 `skill_files`；首次升级前保留旧平台目录供回填，完成后平台根仅作为可丢弃缓存，并保证容器内属主与权限；采用先停旧实例再启新实例的顺序，不允许滚动重叠运行。
 - **验证**：`pnpm check && pnpm test` 全绿；`scripts/deploy-apps-ssh.sh` 至少 dry-run 检查变量合并。
 
 ## 9. 待确认
 
 1. **`GET /api/skills` 语义直接替换**：现有调用只在前端，已确认无外部消费者；若有第三方脚本依赖 `workingDirectory` 参数，需要保留兼容层。
 2. **Agent 默认工作目录**是否进后端（`agents.workingDirectory`）：当前设计只在前端选择，意味着同一 Agent 在不同用户机器上跑在不同目录。对「全站可用的 Agent」这可能不一致，v1 按最小改动处理。
-3. **bash 的 `tampered` 检测代价**：每次 run 前对绑定技能重算指纹，技能含大资源时会多一次全目录读取。v1 保留每轮全量校验，不得以只校验 `SKILL.md` 替代。若实测偏慢，另行设计能保持资源完整性检测的优化方案。
+3. **bash 的缓存完整性检测代价**：每次 run 前对绑定技能重算指纹，技能含大资源时会多一次全目录读取。v1 保留每轮全量校验，不得以只校验 `SKILL.md` 替代。若实测偏慢，另行设计能保持资源完整性检测的优化方案。
 
 
 ## 10. 实施记录（2026-10-22）
+
+> 以下早期文件锁、覆盖恢复与本地文件系统限制为历史记录，已由 §3.1 数据库存储修订替代；当前部署不再要求锁。首次升级必须先应用 skill_files 迁移，再在旧平台目录仍可访问时启动回填，确认迁移成功后才可删除缓存。回填失败行需重新上传，不能提前删除唯一旧文件副本。
 
 - 最终检查：`pnpm check`、`pnpm test` 通过（前端 127 项、后端 308 项，另 1 项 PostgreSQL 实库测试跳过）；前后端构建与部署脚本 dry-run 通过。
 
@@ -754,3 +736,12 @@ UPDATE agents SET "ownerId" = '<supabase-user-id>' WHERE id = '<agent-id>';
 实际部署遇到相同错误时，先用 `lsof <平台目录>/.lock` 检查持有者；同一平台存储只允许一个实例，更新应先停旧实例再启动新实例。不要删除活跃锁文件或绕过锁；需要并行的独立实例时，应配置独立的平台目录、工作区与数据库。
 
 验证：`pnpm check`、`pnpm test` 通过（前端 112 项、后端 310 项，另 1 项跳过）。SIGINT、SIGTERM 两项退出测试通过，验证时开发服务仍在运行。
+
+
+### Skill 文件迁入数据库（2026-10-22 修订完成）
+
+- 增加 `skill_files`（BYTEA、复合主键、级联删除、RLS），POST / PUT 事务替换元数据和文件行；平台根降为物化缓存，保留进程内读写锁与 run 租约。
+- 启动回填旧目录，缺失或指纹不符的技能标记 broken；缓存删除、篡改或安装失败后可重建。移除启动文件锁、PG advisory lock 和文件系统白名单，保留真实路径隔离（含符号链接）及根目录 0700。
+- 补充文件写入失败回滚、缓存失败后重建、级联删除、数据库指纹不一致拒绝使用与真实路径隔离回归。继续收尾时统一了 ZIP 与磁盘的目录条目上限，拒绝空路径段及符号链接形式的旧技能根目录，并移除根配置残留的 fs-ext 构建许可。
+- 最终验证：`pnpm check`、`pnpm test` 通过（前端 115 项、后端 318 项）；前后端生产构建、部署脚本 `DEPLOY_DRY_RUN=1` 通过。新增存储边界的定向测试 29 项通过。测试使用独立 PGlite，未迁移开发或部署数据库，未执行远端部署或 Docker 镜像构建。
+- 升级：先执行 `pnpm --filter @antler/server db:deploy`，保留原平台根启动回填并检查 broken 行；确认文件已入库后才可清理旧文件。数据库备份须包含 `skill_files`，部署仍须先停旧实例再启动新实例。

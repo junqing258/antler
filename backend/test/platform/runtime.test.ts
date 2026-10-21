@@ -8,7 +8,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import Fastify from "fastify";
@@ -175,7 +175,7 @@ describe("run preflight", () => {
       expect(await db.run.count()).toBe(3);
     },
   );
-  it("rejects tampering in resources, added files, renamed files and deleted files", async () => {
+  it("self-heals cache tampering instead of rejecting new runs", async () => {
     const skill = await service.upload(uploadBody(), auth);
     const agent = await service.createAgent(
       { ...agentInput, skillIds: [skill.id] },
@@ -187,12 +187,19 @@ describe("run preflight", () => {
     );
     await finished(first);
     await writeFile(join(root, skill.directory, "additional.txt"), "added");
-    await expect(runtime.createRun("continue", opts())).rejects.toMatchObject({
-      code: "agent_skills_unavailable",
-    });
+    // The database is the source of truth: cache changes rebuild on read and
+    // the run proceeds against restored content.
+    const continued = await runtime.createRun("continue", opts());
+    await finished(continued);
+    expect(
+      await readFile(join(root, skill.directory, "additional.txt")).catch(
+        (e: NodeJS.ErrnoException) =>
+          e.code === "ENOENT" ? "restored" : "error",
+      ),
+    ).toBe("restored");
     expect(
       (await db.skill.findUniqueOrThrow({ where: { id: skill.id } })).state,
-    ).toBe("tampered");
+    ).toBe("ready");
     await service.upload(uploadBody("new description"), auth, skill.id);
     await expect(runtime.createRun("continue", opts())).rejects.toMatchObject({
       code: "agent_context_changed",

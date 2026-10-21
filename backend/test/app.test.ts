@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, symlink, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -34,6 +34,36 @@ afterEach(async () => {
 });
 
 describe("backend Web hosting", () => {
+  it("rejects cache roots inside the real workspace and restricts valid cache permissions", async () => {
+    const root = await staticDirectory();
+    const workspaceRoot = join(root, "workspace");
+    await mkdir(workspaceRoot);
+    const alias = join(root, "alias");
+    await symlink(workspaceRoot, alias);
+    for (const platformRoot of [workspaceRoot, join(workspaceRoot, "cache"), join(alias, "cache")]) {
+      const app = createApp({
+        host: "127.0.0.1", port: 3210, provider: "openai",
+        workspaceRoot, platformRoot, model: "test-model", maxRunDurationMs: 1000,
+      });
+      try {
+        await expect(app.ready()).rejects.toThrow("must be outside");
+      } finally {
+        await app.close();
+      }
+    }
+    const platformRoot = join(root, "platform");
+    await mkdir(platformRoot, { mode: 0o755 });
+    const app = createApp({
+      host: "127.0.0.1", port: 3210, provider: "openai",
+      workspaceRoot, platformRoot, model: "test-model", maxRunDurationMs: 1000,
+    });
+    try {
+      await app.ready();
+      expect((await stat(platformRoot)).mode & 0o777).toBe(0o700);
+    } finally {
+      await app.close();
+    }
+  });
   it("lists only platform skills over HTTP while bundled skills remain available to ordinary chat", async () => {
     const workspaceRoot = await staticDirectory();
     const app = createApp({

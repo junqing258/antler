@@ -1,10 +1,19 @@
 import { BUILTIN_AGENTS } from "./builtin-agents.js";
 import { randomUUID, createHash } from "node:crypto";
-import { mkdir, readdir, rename, rm, access, lstat } from "node:fs/promises";
-import { join, resolve, sep } from "node:path";
+import { mkdir, rename, rm } from "node:fs/promises";
+import { join, sep } from "node:path";
 import type { PrismaClient } from "../generated/prisma/client.js";
 import { SkillRegistry } from "../skills/skill-registry.js";
-import { extractSkillArchive } from "../skills/skill-archive.js";
+import { parseSkillArchive } from "../skills/skill-archive.js";
+import {
+  directoryFingerprint,
+  filesFingerprint,
+} from "../skills/directory-fingerprint.js";
+import {
+  persistSkillFiles,
+  readSkillFiles,
+  writeSkillDirectory,
+} from "./skill-files.js";
 import { SkillLocks } from "./locks.js";
 import {
   PlatformError,
@@ -14,16 +23,6 @@ import {
 } from "./errors.js";
 import { buildSystemPrompt } from "../agent/system-prompt.js";
 
-const exists = (path: string) =>
-  access(path).then(
-    () => true,
-    () => false,
-  );
-const entries = (path: string) =>
-  readdir(path).catch((e: NodeJS.ErrnoException) => {
-    if (e.code === "ENOENT") return [];
-    throw e;
-  });
 export type RunAgentContext = {
   agentId: string;
   systemPrompt: string;
@@ -32,26 +31,19 @@ export type RunAgentContext = {
   agentFingerprint: string;
 };
 
+/**
+ * Agent/skill metadata lives in Postgres; skill files live in skill_files rows.
+ * The platform root is only a disposable materialized cache of those rows, so
+ * there is no filesystem state to reconcile and no cross-instance lock.
+ */
 export class PlatformService {
   readonly locks = new SkillLocks();
-  private halted = false;
-  halt() {
-    this.halted = true;
-  }
-  private healthy() {
-    if (this.halted) throw new PlatformError("platform_unavailable", 503);
-  }
   constructor(
     readonly prisma: PrismaClient,
     readonly root: string,
     readonly registry: SkillRegistry,
-    private readonly onFatal: (error: unknown) => void = (error) => {
-      console.error("Fatal platform storage error", error);
-      process.exit(1);
-    },
   ) {}
   async ensureBuiltinAgents() {
-    this.healthy();
     for (const agent of BUILTIN_AGENTS) {
       await this.prisma.agent.upsert({
         where: { id: agent.id },
@@ -65,17 +57,13 @@ export class PlatformService {
       });
     }
   }
-  directory(row: { id: string; directory: string }) {
-    const path = resolve(this.root, row.directory);
-    if (
-      path !== join(this.root, "skills", row.id) ||
-      !path.startsWith(`${this.root}${sep}`)
-    )
+  directory(row: { id: string }) {
+    const path = join(this.root, "skills", row.id);
+    if (!path.startsWith(`${this.root}${sep}`))
       throw new PlatformError("agent_skills_unavailable", 500);
     return path;
   }
   async getAgent(id: string, auth: AuthContext) {
-    this.healthy();
     const agent = await this.prisma.agent.findUnique({
       where: { id },
       include: {
@@ -87,7 +75,6 @@ export class PlatformService {
     return agent;
   }
   async listAgents(auth: AuthContext, mine = false) {
-    this.healthy();
     return this.prisma.agent.findMany({
       where:
         auth.authMode === "local"
@@ -223,17 +210,94 @@ export class PlatformService {
       release();
     }
   }
+  /**
+   * Cache materialization acquires the per-skill write lock, so it must run
+   * before the read lease below — the FIFO lock is not reentrant. Once the
+   * lease is held, uploads (which take the write lock) cannot interleave, so
+   * the (row, cache) pair stays frozen for the lease's lifetime.
+   */
+  private async ensureCache(row: { id: string; fingerprint: string }) {
+    const cached = await directoryFingerprint(this.directory(row)).catch(
+      () => undefined,
+    );
+    if (cached?.fingerprint === row.fingerprint) return;
+    const release = await this.locks.acquire([row.id], true);
+    try {
+      // The database is the source of truth; one retry absorbs an upload
+      // committing between the row and file reads.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const fresh = await this.prisma.skill.findUnique({
+          where: { id: row.id },
+        });
+        if (!fresh) throw new PlatformError("agent_skills_unavailable", 500);
+        const files = await readSkillFiles(this.prisma, fresh.id).catch(async (error) => {
+          await this.prisma.skill.update({
+            where: { id: fresh.id },
+            data: { state: "broken" },
+          });
+          console.warn(`[Platform] ${fresh.id}: broken`, error);
+          throw new PlatformError("agent_skills_unavailable", 500);
+        });
+        if (filesFingerprint(files).fingerprint === fresh.fingerprint) {
+          await this.installCache(fresh, files);
+          return;
+        }
+      }
+      await this.prisma.skill.update({
+        where: { id: row.id },
+        data: { state: "tampered" },
+      });
+      console.warn(`[Platform] ${row.id}: tampered`);
+      throw new PlatformError("agent_skills_unavailable", 500);
+    } finally {
+      release();
+    }
+  }
+  /** Atomically swap the cache directory; callers must hold the skill write lock. */
+  private async installCache(
+    row: { id: string; fingerprint: string },
+    files: ReadonlyMap<string, Uint8Array>,
+  ) {
+    if (filesFingerprint(files).fingerprint !== row.fingerprint)
+      throw new PlatformError("agent_skills_unavailable", 500);
+    const target = this.directory(row),
+      staging = join(this.root, ".tmp", `${row.id}-${randomUUID()}`),
+      previous = join(this.root, ".tmp", `${row.id}-old-${randomUUID()}`);
+    await mkdir(join(this.root, "skills"), { recursive: true, mode: 0o700 });
+    let backedUp = false;
+    try {
+      await writeSkillDirectory(staging, files);
+      try {
+        await rename(target, previous);
+        backedUp = true;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      await rename(staging, target);
+    } catch (error) {
+      if (backedUp) await rename(previous, target).catch(() => {});
+      throw error;
+    } finally {
+      await rm(staging, { recursive: true, force: true }).catch(() => {});
+      await rm(previous, { recursive: true, force: true }).catch(() => {});
+    }
+  }
   async loadSkills(ids: string[]) {
+    const rows = await this.prisma.skill.findMany({
+      where: { id: { in: ids } },
+    });
+    if (rows.length !== new Set(ids).size)
+      throw new PlatformError("agent_skills_unavailable", 500);
+    for (const row of rows) await this.ensureCache(row);
     const release = await this.locks.acquire(ids);
     try {
-      this.healthy();
-      const rows = await this.prisma.skill.findMany({
+      const fresh = await this.prisma.skill.findMany({
         where: { id: { in: ids } },
       });
-      if (rows.length !== new Set(ids).size)
+      if (fresh.length !== rows.length)
         throw new PlatformError("agent_skills_unavailable", 500);
       const catalog = await this.registry.listPlatform(
-        rows.map((row) => ({ ...row, directory: this.directory(row) })),
+        fresh.map((row) => ({ ...row, directory: this.directory(row) })),
       );
       const bad = catalog.diagnostics.filter(
         (d) => d.code !== "skill_not_bindable",
@@ -241,15 +305,15 @@ export class PlatformService {
       if (bad.length) {
         release();
         // Recheck under the write lock; stale readers must never overwrite a repaired row.
-        for (const row of rows.filter((r) =>
+        for (const row of fresh.filter((r) =>
           bad.some((d) => d.name === r.name),
         ))
           await this.checkSkill(row.id);
         throw new PlatformError("agent_skills_unavailable", 500);
       }
-      if (rows.some((r) => r.state !== "ready"))
+      if (fresh.some((r) => r.state !== "ready"))
         throw new PlatformError("agent_skills_unavailable", 500);
-      if (catalog.skills.length !== rows.length)
+      if (catalog.skills.length !== fresh.length)
         throw new PlatformError("skill_not_bindable", 422);
       return { ...catalog, release };
     } catch (error) {
@@ -281,31 +345,52 @@ export class PlatformService {
       } satisfies RunAgentContext,
     };
   }
+  /**
+   * Self-healing: reinstall the cache from the database and reset the row.
+   * `tampered` now only appears when the database rows themselves disagree;
+   * a dirty or deleted cache is repaired and the skill returns to ready.
+   */
   async checkSkill(id: string) {
     const release = await this.locks.acquire([id], true);
     try {
-      this.healthy();
       const row = await this.prisma.skill.findUnique({ where: { id } });
       if (!row) return;
-      const catalog = await this.registry.listPlatform([
-        { ...row, directory: this.directory(row) },
-      ]);
-      const diagnostic = catalog.diagnostics.find(
-        (d) => d.code === "broken" || d.code === "tampered",
-      );
+      let diagnostic: "broken" | "tampered" | undefined;
+      try {
+        const files = await readSkillFiles(this.prisma, id);
+        if (filesFingerprint(files).fingerprint !== row.fingerprint)
+          diagnostic = "tampered";
+        else {
+          await this.installCache(row, files);
+          const catalog = await this.registry.listPlatform([
+            { ...row, directory: this.directory(row) },
+          ]);
+          if (
+            catalog.diagnostics.some(
+              (d) => d.code === "broken" || d.code === "tampered",
+            )
+          )
+            diagnostic = "broken";
+        }
+      } catch {
+        diagnostic = "broken";
+      }
       if (diagnostic) {
-        console.warn(`[Platform] ${row.id}: ${diagnostic.code}`);
+        console.warn(`[Platform] ${row.id}: ${diagnostic}`);
         await this.prisma.skill.update({
           where: { id },
-          data: { state: diagnostic.code as "broken" | "tampered" },
+          data: { state: diagnostic },
         });
-      }
+      } else if (row.state !== "ready")
+        await this.prisma.skill.update({
+          where: { id },
+          data: { state: "ready" },
+        });
     } finally {
       release();
     }
   }
   async listSkills() {
-    this.healthy();
     const rows = await this.prisma.skill.findMany({
       orderBy: { updatedAt: "desc" },
     });
@@ -330,102 +415,57 @@ export class PlatformService {
     )
       throw new PlatformError("not_found", 404);
     const skillId = id ?? randomUUID();
-    const operation = id
-      ? join(this.root, ".staging", "updates", id, randomUUID())
-      : join(this.root, ".staging", skillId);
-    const stage = id ? join(operation, "new") : operation;
-    let release: (() => void) | undefined;
-    const target = join(this.root, "skills", skillId),
-      old = join(operation, "old");
-    let backedUp = false,
-      installed = false,
-      committed = false,
-      preserveOperation = false,
-      writingDatabase = false;
+    const parsed = await parseSkillArchive(body);
+    const release = await this.locks.acquire([skillId], true);
     try {
-      const metadata = await extractSkillArchive(body, stage);
-      release = await this.locks.acquire([skillId], true);
-      this.healthy();
       if (id) {
         const row = await this.prisma.skill.findUnique({ where: { id } });
         requireOwner(row, auth);
-        if (metadata.name !== row!.name)
+        if (parsed.name !== row!.name)
           throw new PlatformError("skill_invalid", 422);
-        try {
-          await rename(target, old);
-          backedUp = true;
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        }
       }
-      await mkdir(join(this.root, "skills"), { recursive: true, mode: 0o700 });
-      await rename(stage, target);
-      installed = true;
-      this.healthy();
-      writingDatabase = true;
-      const row = id
-        ? await this.prisma.skill.update({
-            where: { id },
-            data: { ...metadata, state: "ready" },
-          })
-        : await this.prisma.skill.create({
-            data: {
-              ...metadata,
-              id: skillId,
-              ownerId: auth.userId,
-              directory: `skills/${skillId}`,
-            },
-          });
-      committed = true;
-      return { ...row, diagnostics: [], bindable: !row.disableModelInvocation };
-    } catch (error) {
-      const code = (error as { code?: string }).code;
-      if (
-        writingDatabase &&
-        [
-          "P1001",
-          "P1002",
-          "P1008",
-          "P1017",
-          "P2024",
-          "ECONNRESET",
-          "ETIMEDOUT",
-        ].includes(code ?? "")
-      ) {
-        preserveOperation = true;
-        this.halted = true;
-        this.onFatal(error);
+      let row;
+      try {
+        row = await this.prisma.$transaction(async (tx) => {
+          const data = {
+            name: parsed.name,
+            description: parsed.description,
+            disableModelInvocation: parsed.disableModelInvocation,
+            state: "ready" as const,
+            fileCount: parsed.fileCount,
+            sizeBytes: parsed.sizeBytes,
+            fingerprint: parsed.fingerprint,
+          };
+          const saved = id
+            ? await tx.skill.update({ where: { id }, data })
+            : await tx.skill.create({
+                data: {
+                  ...data,
+                  id: skillId,
+                  ownerId: auth.userId,
+                  directory: `skills/${skillId}`,
+                },
+              });
+          await persistSkillFiles(tx.skillFile, skillId, parsed.files);
+          return saved;
+        });
+      } catch (error) {
+        if ((error as { code?: string }).code === "P2002")
+          throw new PlatformError("skill_name_taken", 422);
         throw error;
       }
-      if (!committed) {
-        try {
-          if (installed) await rm(target, { recursive: true, force: true });
-          if (backedUp) await rename(old, target);
-        } catch (compensationError) {
-          // Preserve the operation directory for startup recovery and terminate instead of exposing mixed state.
-          console.error("Platform compensation failed", compensationError);
-          preserveOperation = true;
-          this.halted = true;
-          this.onFatal(compensationError);
-          throw compensationError;
-        }
-      }
-      if ((error as { code?: string }).code === "P2002")
-        throw new PlatformError("skill_name_taken", 422);
-      throw error;
+      // Best-effort cache refresh while still holding the write lock; the read path self-heals.
+      await this.installCache(row, parsed.files).catch((error) =>
+        console.warn("[Platform] cache refresh failed", error),
+      );
+      return { ...row, diagnostics: [], bindable: !row.disableModelInvocation };
     } finally {
-      try {
-        if (!preserveOperation)
-          await rm(operation, { recursive: true, force: true });
-      } finally {
-        release?.();
-      }
+      release();
     }
   }
   async deleteSkill(id: string, auth: AuthContext) {
     const release = await this.locks.acquire([id], true);
     try {
-      this.healthy();
       const row = await this.prisma.skill.findUnique({
         where: { id },
         include: { agents: { include: { agent: true } } },
@@ -439,62 +479,11 @@ export class PlatformService {
         });
       }
       await this.prisma.skill.delete({ where: { id } });
-      await rm(this.directory(row!), { recursive: true, force: true });
+      await rm(this.directory(row!), { recursive: true, force: true }).catch(
+        (error) => console.warn("[Platform] cache removal failed", error),
+      );
     } finally {
       release();
     }
-  }
-  /** Called only under the lifetime storage lock, before any request or scheduler. */
-  async recover() {
-    for (const name of ["skills", ".staging", ".orphaned"]) {
-      const info = await lstat(join(this.root, name)).catch(
-        (e: NodeJS.ErrnoException) => {
-          if (e.code !== "ENOENT") throw e;
-          return undefined;
-        },
-      );
-      if (info && (!info.isDirectory() || info.isSymbolicLink()))
-        throw new Error(`Unsafe platform directory: ${name}`);
-    }
-    const rows = await this.prisma.skill.findMany();
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    const staging = join(this.root, ".staging"),
-      updates = join(staging, "updates");
-    for (const id of await entries(updates)) {
-      if (!/^[a-zA-Z0-9-]+$/.test(id))
-        throw new Error("Invalid update recovery directory");
-      const operations = await entries(join(updates, id));
-      const withOld: string[] = [];
-      for (const op of operations)
-        if (await exists(join(updates, id, op, "old"))) withOld.push(op);
-      if (withOld.length > 1)
-        throw new Error(`Ambiguous skill recovery: ${id}`);
-      const target = join(this.root, "skills", id);
-      if (byId.has(id) && !(await exists(target)) && withOld[0])
-        await rename(join(updates, id, withOld[0], "old"), target);
-      if (!byId.has(id)) {
-        await mkdir(join(this.root, ".orphaned"), {
-          recursive: true,
-          mode: 0o700,
-        });
-        await rename(
-          join(updates, id),
-          join(this.root, ".orphaned", `update-${id}-${randomUUID()}`),
-        );
-      }
-    }
-    await rm(staging, { recursive: true, force: true });
-    for (const id of await entries(join(this.root, "skills"))) {
-      if (byId.has(id)) continue;
-      await mkdir(join(this.root, ".orphaned"), {
-        recursive: true,
-        mode: 0o700,
-      });
-      await rename(
-        join(this.root, "skills", id),
-        join(this.root, ".orphaned", `${id}-${randomUUID()}`),
-      );
-    }
-    for (const row of rows) await this.checkSkill(row.id);
   }
 }

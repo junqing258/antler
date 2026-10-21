@@ -150,6 +150,7 @@ model Skill {
   ownerId                String       @default("")
   name                   String       @unique
   description            String
+  // Legacy field retained for schema compatibility; cache paths are derived from id.
   directory              String
   state                  SkillState   @default(ready)
   disableModelInvocation Boolean      @default(false)
@@ -159,7 +160,18 @@ model Skill {
   createdAt              DateTime     @default(now())
   updatedAt              DateTime     @updatedAt
   agents                 AgentSkill[]
+  files                  SkillFile[]
 
   @@index([ownerId, updatedAt])
   @@map("skills")
+}
+
+model SkillFile {
+  skillId String
+  path    String
+  content Bytes
+  skill   Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([skillId, path])
+  @@map("skill_files")
 }
