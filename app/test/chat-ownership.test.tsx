@@ -42,7 +42,7 @@ vi.mock("@/lib/server-info", () => ({
 }));
 function AgentRoute() {
   const { id } = useParams();
-  return <ChatView key={id} agentId={id} />;
+  return <ChatView key={id} agentId={id!} />;
 }
 function Location() {
   const location = useLocation();
@@ -59,7 +59,6 @@ function mount(path: string) {
       <Link to="/agents/B">Agent B</Link>
       <Location />
       <Routes>
-        <Route path="/chat" element={<ChatView />} />
         <Route path="/agents/:id" element={<AgentRoute />} />
       </Routes>
     </MemoryRouter>,
@@ -90,34 +89,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("conversation Agent ownership", () => {
-  it("restores ordinary history and filters bound Agent conversations", async () => {
-    mount("/chat?conversationId=ordinary-thread");
-    expect(
-      await screen.findByRole("heading", { name: "ordinary-thread" }),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("messages")).toHaveTextContent(
-      "ordinary-thread history",
-    );
-    expect(screen.getByTestId("conversations")).toHaveTextContent(
-      "ordinary-thread",
-    );
-    expect(screen.getByTestId("conversations")).not.toHaveTextContent(
-      "A-thread",
-    );
-    expect(screen.getByTestId("agent")).toHaveTextContent("ordinary");
-  });
-  it("redirects /chat to the Agent recorded on a restored conversation", async () => {
-    mount("/chat?conversationId=A-thread");
-    await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent(
-        "/agents/A?conversationId=A-thread",
-      ),
-    );
-    expect(
-      await screen.findByRole("heading", { name: "A-thread" }),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("agent")).toHaveTextContent("A");
-  });
   it("discards an unrelated conversation URL without rebinding or exposing its messages", async () => {
     mount("/agents/A?conversationId=B-thread");
     await waitFor(() =>

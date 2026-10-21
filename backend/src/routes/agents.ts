@@ -1,3 +1,5 @@
+import { agentWorkspace } from "../platform/agent-workspace.js";
+import { resolve } from "node:path";
 import { isBuiltinAgent } from "../platform/builtin-agents.js";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { PlatformService } from "../platform/service.js";
@@ -19,6 +21,7 @@ export function registerAgentRoutes(
   app: FastifyInstance,
   service: PlatformService,
   authMode: "local" | "supabase",
+  workspaceRoot = resolve(service.root, "../workspace"),
 ) {
   app.get("/api/agents", async (req) => {
     const auth = platformAuth(req, authMode);
@@ -34,11 +37,16 @@ export function registerAgentRoutes(
       })),
     };
   });
-  app.post("/api/agents", async (req, reply) =>
-    reply
-      .code(201)
-      .send(await service.createAgent(req.body, platformAuth(req, authMode))),
-  );
+  app.post("/api/agents", async (req, reply) => {
+    const agent = await service.createAgent(
+      req.body,
+      platformAuth(req, authMode),
+    );
+    return reply.code(201).send({
+      ...agent,
+      defaultWorkspace: agentWorkspace(workspaceRoot, agent.id),
+    });
+  });
   app.get<{ Params: { id: string } }>("/api/agents/:id", async (req) => {
     const auth = platformAuth(req, authMode);
     const agent = await service.getAgent(req.params.id, auth);
@@ -50,6 +58,7 @@ export function registerAgentRoutes(
       editable: canEdit(agent, auth),
       builtin: isBuiltinAgent(agent.id),
       hasConversations,
+      defaultWorkspace: agentWorkspace(workspaceRoot, agent.id),
     };
   });
   app.put<{ Params: { id: string } }>("/api/agents/:id", async (req) =>

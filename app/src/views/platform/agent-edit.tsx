@@ -48,7 +48,9 @@ export function AgentEditPage() {
           setDescription(value.description);
           setPrompt(value.systemPrompt);
           setSkillIds(value.skills?.map((s) => s.skillId) ?? []);
-          setWorkspace(agentWorkspace(value.id));
+          setWorkspace(
+            agentWorkspace(value.id) || value.defaultWorkspace || "",
+          );
           setHasConversations(
             value.hasConversations ||
               conversations.some((c) => c.agentId === id),
@@ -83,9 +85,18 @@ export function AgentEditPage() {
       );
       localStorage.setItem(
         `antler.agent.workspace.${value.id}`,
-        workspace.trim(),
+        workspace.trim() ||
+          value.defaultWorkspace ||
+          agent?.defaultWorkspace ||
+          "",
       );
-      setAgent({ ...value, editable: true });
+      setWorkspace(
+        workspace.trim() ||
+          value.defaultWorkspace ||
+          agent?.defaultWorkspace ||
+          "",
+      );
+      setAgent({ ...agent, ...value, editable: true });
       setDirty(false);
       if (!id) navigate(`/agents/${value.id}/edit`, { replace: true });
     } catch (e) {
@@ -109,7 +120,7 @@ export function AgentEditPage() {
         kind === "delete" ? "DELETE" : "POST",
       );
       if (kind === "delete") navigate("/");
-      else setAgent({ ...value, editable: true });
+      else setAgent({ ...agent, ...value, editable: true });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -216,12 +227,13 @@ export function AgentEditPage() {
             默认工作目录
             <input
               className={control}
-              placeholder="留空使用默认工作区"
+              placeholder="保存后自动生成独立工作目录"
               value={workspace}
               onChange={(e) => setWorkspace(e.target.value)}
             />
             <small className="font-normal text-[#888]">
-              仅保存在当前浏览器中。
+              留空时自动生成此 Agent
+              的独立工作目录；自定义目录仅保存在当前浏览器中。
             </small>
           </label>
           <button className={primary} type="submit">

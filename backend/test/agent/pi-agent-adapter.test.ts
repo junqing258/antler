@@ -172,7 +172,8 @@ describe.each(["openai", "anthropic"] as const)(
       const app = createApp({
         host: "127.0.0.1",
         port: 3210,
-        workspaceRoot: root,
+        workspaceRoot: join(root, "workspace"),
+        platformRoot: join(root, "platform"),
         databaseUrl: `file:${file}`,
         provider,
         model: provider === "openai" ? "gpt-4.1-mini" : "gateway-private-model",

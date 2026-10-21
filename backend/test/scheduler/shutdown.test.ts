@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import { createDatabase } from "../../src/plugins/database.js";
@@ -35,7 +36,9 @@ it.skipIf(process.platform === "win32").each(["SIGINT", "SIGTERM"] as const)(
         env: {
           ...process.env,
           DATABASE_URL: `file:${file}`,
-          ANTLER_WORKSPACE_ROOT: root,
+          // Keep both directories isolated from development and outside each other.
+          ANTLER_WORKSPACE_ROOT: join(root, "workspace"),
+          ANTLER_PLATFORM_ROOT: join(root, "platform"),
           ANTLER_HOST: "127.0.0.1",
           ANTLER_PORT: "0",
           ANTLER_SCHEDULER_ENABLE_SCRIPT: "true",

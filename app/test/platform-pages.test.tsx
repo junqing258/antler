@@ -44,6 +44,7 @@ const agent = {
   _count: { skills: 0 },
 };
 beforeEach(() => {
+  localStorage.clear();
   api.mockReset();
   vi.mocked(getConversation).mockReset().mockResolvedValue(undefined);
 });
@@ -63,6 +64,37 @@ function mount(page: React.ReactNode, path = "/") {
   );
 }
 describe("Agent platform pages", () => {
+  it("opens profile and settings from the home navigation and persists configuration", async () => {
+    api.mockResolvedValue({ agents: [] });
+    mount(<AgentListPage />);
+    await screen.findByText(/还没有 Agent/);
+    fireEvent.click(screen.getByRole("button", { name: "用户信息" }));
+    expect(screen.getByRole("tab", { name: "个人资料" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("button", { name: "关闭设置" }));
+    fireEvent.click(screen.getByRole("button", { name: "设置" }));
+    expect(screen.getByRole("tab", { name: "供应商配置" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.change(screen.getByRole("textbox", { name: "名称" }), { target: { value: "My provider" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
+    expect(screen.queryByRole("heading", { name: "设置" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "设置" }));
+    expect(screen.getByRole("textbox", { name: "名称" })).toHaveValue("My provider");
+    expect(JSON.parse(localStorage.getItem("antler.provider-config.v1")!)).toMatchObject({ name: "My provider" });
+  });
+
+  it("automatically fills and stores the generated workspace after creation", async () => {
+    const defaultWorkspace = "/workspace/agents/agent-agent-id";
+    api.mockImplementation(async (path) =>
+      path === "/skills" ? { skills: [] } : { ...agent, defaultWorkspace },
+    );
+    mount(<AgentEditPage />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "保存" })).not.toBeDisabled());
+    fireEvent.change(screen.getByRole("textbox", { name: "名称" }), { target: { value: "Research" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "描述" }), { target: { value: "Research helper" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: /默认工作目录/ })).toHaveValue(defaultWorkspace));
+    expect(localStorage.getItem("antler.agent.workspace.agent-id")).toBe(defaultWorkspace);
+  });
+
   it("restores a bound conversation from the legacy chat URL", async () => {
     vi.mocked(getConversation).mockResolvedValue({
       id: "old", agentId: "bound", title: "Old", messages: [], createdAt: 1, updatedAt: 1,

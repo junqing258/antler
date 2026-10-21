@@ -1,3 +1,4 @@
+import { agentWorkspace } from "./platform/agent-workspace.js";
 import { createHash } from "node:crypto";
 import { PlatformService, type RunAgentContext } from "./platform/service.js";
 import { PlatformError } from "./platform/errors.js";
@@ -119,7 +120,12 @@ export function createApp(config: AppConfig) {
           anthropicAuthToken: config.anthropicAuthToken,
           anthropicBaseUrl: config.anthropicBaseUrl,
         };
-    const workspaceRoot = resolve(workingDirectory ?? config.workspaceRoot);
+    const workspaceRoot = resolve(
+      workingDirectory ??
+        (agent
+          ? agentWorkspace(config.workspaceRoot, agent.agentId)
+          : config.workspaceRoot),
+    );
     const systemPrompt = agent?.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
     const key = JSON.stringify({
       ...runtimeConfig,
@@ -242,7 +248,7 @@ export function createApp(config: AppConfig) {
   registerTaskRoutes(app, taskService);
   registerRunRoutes(app, runtime);
   registerSkillRoutes(app, platform, authMode);
-  registerAgentRoutes(app, platform, authMode);
+  registerAgentRoutes(app, platform, authMode, config.workspaceRoot);
   registerDirectoryRoutes(app, config.workspaceRoot);
   registerConfigRoutes(app, ragConfig, config);
   registerAuthConfigRoutes(app, config);

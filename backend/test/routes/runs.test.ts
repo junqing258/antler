@@ -192,7 +192,10 @@ describe("POST /api/runs workingDirectory", () => {
       payload: { message: "hello", conversationId: "conversation-1" },
     });
     expect(missingProject.statusCode).toBe(202);
-    expect(runtime.createRunWithSkills.mock.calls[0]![1]).not.toHaveProperty("projectId");
+    expect(runtime.createRunWithSkills).toHaveBeenCalledWith(
+      "hello",
+      expect.not.objectContaining({ projectId: expect.anything() }),
+    );
 
     await app.close();
   });

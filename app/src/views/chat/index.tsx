@@ -1,7 +1,7 @@
 import { agentWorkspace } from "@/lib/platform-api";
 import { useCallback, useEffect, useState } from "react";
 import type { ThreadMessageLike } from "@assistant-ui/react";
-import { useSearchParams, useNavigate } from "react-router";
+import { useSearchParams } from "react-router";
 import { SchedulerDialog } from "@/components/scheduler-dialog";
 import { SettingsDialog, type SettingsTab } from "@/components/settings-dialog";
 import {
@@ -27,8 +27,7 @@ function newConversationId() {
 export function ChatView({
   agentId,
   agentName,
-}: { agentId?: string; agentName?: string } = {}) {
-  const navigate = useNavigate();
+}: { agentId: string; agentName?: string }) {
   const filterConversations = useCallback(
     (items: Conversation[]) =>
       items.filter((c) => (c.agentId ?? undefined) === agentId),
@@ -85,16 +84,9 @@ export function ChatView({
         const nextConversations = await listConversations();
         if (cancelled) return;
         if (conversation && (conversation.agentId ?? undefined) !== agentId) {
-          if (!agentId && conversation.agentId) {
-            navigate(
-              `/agents/${conversation.agentId}?conversationId=${encodeURIComponent(conversationId)}`,
-              { replace: true },
-            );
-          } else {
-            const id = newConversationId();
-            setSearchParams({ conversationId: id }, { replace: true });
-            setConversationId(id);
-          }
+          const id = newConversationId();
+          setSearchParams({ conversationId: id }, { replace: true });
+          setConversationId(id);
           return;
         }
         setConversations(filterConversations(nextConversations));
@@ -112,7 +104,7 @@ export function ChatView({
     return () => {
       cancelled = true;
     };
-  }, [conversationId, agentId, filterConversations, navigate, setSearchParams]);
+  }, [conversationId, agentId, filterConversations, setSearchParams]);
   useEffect(() => {
     const urlConversationId = searchParams.get("conversationId");
     if (urlConversationId) {
@@ -181,7 +173,7 @@ export function ChatView({
           initialMessages={loadedConversation.messages}
           title={activeConversation?.title ?? agentName ?? "新会话"}
           conversations={conversations}
-          workingDirectory={agentId ? agentWorkspace(agentId) : ""}
+          workingDirectory={agentWorkspace(agentId)}
           onNewThread={startNewThread}
           onSelectThread={selectThread}
           onRenameThread={renameThread}

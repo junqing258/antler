@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { createServer, type Server } from "node:http";
 import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -45,7 +46,8 @@ describe("Supabase 多用户数据隔离", () => {
       host: "127.0.0.1",
       port: 3210,
       provider: "openai",
-      workspaceRoot: workspace.root,
+      workspaceRoot: join(workspace.root, "workspace"),
+      platformRoot: join(workspace.root, "platform"),
       databaseUrl: `file:${workspace.file}`,
       model: "test-model",
       maxRunDurationMs: 1_000,

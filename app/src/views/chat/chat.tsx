@@ -43,7 +43,7 @@ export function Chat({
   onOpenScheduler,
   onConversationSaved,
 }: {
-  agentId?: string;
+  agentId: string;
   conversationId: string;
   initialMessages: ThreadMessageLike[];
   title: string;
@@ -98,7 +98,7 @@ export function Chat({
   };
   const sidebar = (
     <>
-      <div className="relative -mt-2 flex h-[76px] shrink-0 items-center gap-3 px-[15px] text-primary after:pointer-events-none after:absolute after:right-[-12px] after:bottom-0 after:left-[-5px] after:h-px after:bg-[#f1f5f9] after:content-['']">
+      <Link to="/" aria-label="返回首页" onClick={() => setNavigationOpen(false)} className="relative -mt-2 flex h-[76px] shrink-0 items-center gap-3 px-[15px] text-primary after:pointer-events-none after:absolute after:right-[-12px] after:bottom-0 after:left-[-5px] after:h-px after:bg-[#f1f5f9] after:content-['']">
         <img
           className="size-10 shrink-0 object-contain"
           src="/antler-logo.svg"
@@ -114,7 +114,7 @@ export function Chat({
             V0.1.0
           </span>
         </div>
-      </div>
+      </Link>
       <button
         className="mt-[26px] flex w-full items-center gap-2 rounded-lg border-0 bg-[#f2f2f2] px-3 py-1 text-left text-sm text-[#222] hover:bg-[#eaeaea]"
         type="button"
@@ -123,9 +123,6 @@ export function Chat({
         <PlusIcon className="size-3.5" aria-hidden="true" />
         新建会话
       </button>
-      <Link className="mt-3 px-3 py-1 text-sm text-primary" to="/">
-        ← Agent 列表
-      </Link>
       <KnowledgeConfigurationLink getServerInfo={serverInfo} />
       <button
         className="mt-1.5 flex w-full items-center gap-2 rounded-lg border-0 bg-transparent px-3 py-1.5 text-left text-[13px] text-[#4b4b4b] hover:bg-[#f0f0f0] hover:text-[#222]"

@@ -13,6 +13,7 @@ export type PlatformSkill = {
 };
 export type PlatformAgent = {
   builtin?: boolean;
+  defaultWorkspace?: string;
   id: string;
   ownerId: string;
   name: string;
