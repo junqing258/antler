@@ -10,9 +10,11 @@ export const primary = `${control} bg-primary! text-white`;
 export function PlatformLayout({
   title,
   children,
+  background,
 }: {
   title: string;
   children: ReactNode;
+  background?: ReactNode;
 }) {
   const [settingsTab, setSettingsTab] = useState<SettingsTab>();
   const [providerConfig, setProviderConfig] = useState(loadProviderConfig);
@@ -59,10 +61,13 @@ export function PlatformLayout({
           </div>
         </nav>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-6xl px-6 py-10">
-          <h1 className="mb-8 text-3xl font-semibold tracking-tight">{title}</h1>
-          {children}
+      <div className="relative isolate min-h-0 flex-1 overflow-hidden">
+        {background}
+        <div className="relative h-full overflow-y-auto">
+          <div className="mx-auto max-w-6xl px-6 py-10">
+            <h1 className="mb-8 text-3xl font-semibold tracking-tight">{title}</h1>
+            {children}
+          </div>
         </div>
       </div>
       {settingsTab && (

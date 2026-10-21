@@ -1,0 +1,67 @@
+.home-background {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+.home-shape {
+  position: absolute;
+  width: clamp(100px, 14vw, 200px);
+  aspect-ratio: 1;
+  opacity: 0.1;
+  transform: translate(-50%, -50%);
+}
+
+.home-shape-red {
+  top: 28%;
+  left: 18%;
+  border-radius: 50%;
+  background: #ef5350;
+  animation: home-red-drift 30s ease-in-out infinite;
+}
+
+.home-shape-green {
+  top: 66%;
+  left: 50%;
+  border-radius: 22%;
+  background: #14a883;
+  animation: home-green-drift 30s ease-in-out infinite;
+}
+
+.home-shape-blue {
+  top: 28%;
+  left: 82%;
+  background: #4285f4;
+  clip-path: polygon(50% 0, 100% 90%, 0 90%);
+  animation: home-blue-drift 30s ease-in-out infinite;
+}
+
+/* Mirrored side paths and a counter-moving center keep the composition balanced. */
+@keyframes home-red-drift {
+  0%, 100% { transform: translate(-50%, -50%); }
+  25% { transform: translate(calc(-50% + 4vw), calc(-50% + 4vh)); }
+  50% { transform: translate(-50%, -50%); }
+  75% { transform: translate(calc(-50% - 4vw), calc(-50% - 4vh)); }
+}
+
+@keyframes home-green-drift {
+  0%, 100% { transform: translate(-50%, -50%) rotate(-15deg); }
+  25% { transform: translate(-50%, calc(-50% - 8vh)) rotate(20deg); }
+  50% { transform: translate(-50%, -50%) rotate(55deg); }
+  75% { transform: translate(-50%, calc(-50% + 8vh)) rotate(20deg); }
+}
+
+@keyframes home-blue-drift {
+  0%, 100% { transform: translate(-50%, -50%) rotate(-12deg); }
+  25% { transform: translate(calc(-50% - 4vw), calc(-50% + 4vh)) rotate(12deg); }
+  50% { transform: translate(-50%, -50%) rotate(-12deg); }
+  75% { transform: translate(calc(-50% + 4vw), calc(-50% - 4vh)) rotate(-36deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-shape {
+    animation: none;
+  }
+}

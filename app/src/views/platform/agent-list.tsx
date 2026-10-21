@@ -4,6 +4,7 @@ import { getConversation } from "@/lib/conversation-store";
 import { authMode } from "@/lib/server-info";
 import { platformApi, type PlatformAgent } from "@/lib/platform-api";
 import { ErrorNotice, PlatformLayout, primary } from "./layout";
+import { HomeBackground } from "@/components/home-background";
 export function AgentListPage() {
   const [agents, setAgents] = useState<PlatformAgent[]>([]);
   const [error, setError] = useState("");
@@ -52,7 +53,7 @@ export function AgentListPage() {
     };
   }, [params]);
   return (
-    <PlatformLayout title="选择你的 Agent">
+    <PlatformLayout title="选择你的 Agent" background={<HomeBackground />}>
       <div className="mb-10 flex flex-wrap items-center justify-between gap-4">
         <p className="text-[#666]">
           选择专注于任务的 Agent，或创建自己的助手。
