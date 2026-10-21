@@ -4,6 +4,7 @@ import { SettingsIcon } from "lucide-react";
 import { currentUserProfile } from "@/lib/auth";
 import { SettingsDialog, type SettingsTab } from "@/components/settings-dialog";
 import { loadProviderConfig, saveProviderConfig } from "@/lib/provider-config";
+import { KnowledgeNavLink } from "@/components/knowledge-nav-link";
 export const control =
   "rounded-lg border border-[#ddd] bg-white px-3 py-2 text-sm focus:outline-primary disabled:opacity-40";
 export const primary = `${control} bg-primary! text-white`;
@@ -39,6 +40,7 @@ export function PlatformLayout({
           </Link>
           <Link to="/">Agent</Link>
           <Link to="/skills">技能库</Link>
+          <KnowledgeNavLink />
           <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
             <button
               type="button"

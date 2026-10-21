@@ -33,8 +33,7 @@
 .home-shape-blue {
   top: 28%;
   left: 82%;
-  background: #4285f4;
-  clip-path: polygon(50% 0, 100% 90%, 0 90%);
+  fill: #4285f4;
   animation: home-blue-drift 30s ease-in-out infinite;
 }
 
