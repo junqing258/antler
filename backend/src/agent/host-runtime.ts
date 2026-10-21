@@ -1,3 +1,6 @@
+import { PlatformError, type AuthContext } from "../platform/errors.js";
+import type { PlatformService, RunAgentContext } from "../platform/service.js";
+import { normalizeSkillPolicy } from "../skills/skill-policy.js";
 import { randomUUID } from "node:crypto";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import {
@@ -30,6 +33,10 @@ export type Run = {
   userId: string;
   projectId: string;
   conversationId: string;
+  agentId?: string | null;
+  agentFingerprint?: string | null;
+  skillPolicy?: unknown;
+  catalogFingerprint?: string | null;
   input: string;
   status: RunStatus;
   errorCode?: string;
@@ -46,6 +53,7 @@ type ActiveRun = {
   timeout?: NodeJS.Timeout;
   adapter: PiAgentAdapter;
   title?: Promise<string>;
+  releaseSkills?: () => void;
   skillSnapshot: SkillSnapshot;
   secretGuard: SecretGuard;
   tracing?: RunTracing;
@@ -58,15 +66,29 @@ type ActiveRun = {
     }
   >;
 };
+export type RunAgentConstraints = {
+  expectedAgentFingerprint?: string;
+  requirePublished?: boolean;
+  requireFrozenAgentFields?: boolean;
+  frozenAgentFieldsPresent?: boolean;
+};
+export class ConversationAgentChangedError extends PlatformError {
+  constructor() {
+    super("agent_changed");
+  }
+}
 export class ConversationBusyError extends Error {}
-export class ConversationSkillContextMismatchError extends Error {
+export class ConversationSkillContextMismatchError extends PlatformError {
   constructor() {
     super("conversation_skill_context_mismatch");
   }
 }
 /** 调用方可传入已发现的技能快照，或通过 createRunWithSkills 异步发现技能。 */
 export type CreateRunOptions = {
-  projectId: string;
+  agentId?: string;
+  agentConstraints?: RunAgentConstraints;
+  /** Legacy persistence field; new callers use Agent ownership instead. */
+  projectId?: string;
   userId?: string;
   conversationId?: string;
   provider?: ProviderRunConfig;
@@ -74,140 +96,332 @@ export type CreateRunOptions = {
   skillPolicy?: SkillPolicy;
   skillSnapshot?: SkillSnapshot;
 };
-export type HostRuntimeConfig = { maxRunDurationMs: number; maxEvents: number };
+export type HostRuntimeConfig = {
+  maxRunDurationMs: number;
+  maxEvents: number;
+  authMode?: "local" | "supabase";
+};
 /** 管理运行状态和事件发布，将 Pi 事件转换为客户端使用的运行事件。 */
 export class AntlerHostRuntime {
   private readonly runs = new Map<string, ActiveRun>();
+  private readonly executions = new Set<Promise<void>>();
+  private stopping = false;
   // 会话到当前运行的映射，用于拒绝同一会话的并发运行。
   private readonly activeConversations = new Map<string, string>();
   // 运行结束后仍保留技能约束，保证后续轮次使用相同的策略和目录指纹。
   private readonly skillContexts = new Map<
     string,
-    { policy: SkillPolicy; catalogFingerprint: string }
+    {
+      userId: string;
+      policy?: SkillPolicy;
+      catalogFingerprint?: string;
+      agentId: string | null;
+      agentFingerprint: string;
+    }
   >();
   constructor(
     private readonly createAdapter: (
       config?: ProviderRunConfig,
       workingDirectory?: string,
+      agent?: RunAgentContext,
     ) => PiAgentAdapter,
     private readonly config: HostRuntimeConfig,
     private readonly skills?: SkillRegistry,
     private readonly runStore?: RunStore,
+    private readonly platform?: PlatformService,
   ) {}
-  /** 创建并持久化 queued 记录，再调度后台执行；返回值不等待模型调用完成。 */
-  async createRun(input: string, options: CreateRunOptions): Promise<Run> {
-    const conversationId = options.conversationId ?? randomUUID();
-    if (this.activeConversations.has(conversationId))
-      throw new ConversationBusyError("conversation_busy");
-    const policy = options.skillPolicy ?? { mode: "disabled" as const };
-    const workspaceRoot = options.workingDirectory ?? "";
-    const snapshot =
-      options.skillSnapshot ??
-      (policy.mode === "disabled"
-        ? { ...DISABLED_SKILL_SNAPSHOT, workspaceRoot }
-        : (() => {
-            throw new Error("Skill registry unavailable");
-          })());
-    // 技能发现需要异步读取目录；启用技能时应预先传入快照，
-    // 或通过 createRunWithSkills 完成发现后再进入此创建流程。
-    const context = this.skillContexts.get(conversationId);
+  private auth(userId?: string): AuthContext {
+    const auth = {
+      userId: userId ?? "",
+      authMode: this.config.authMode ?? "local",
+    };
+    if (auth.authMode === "supabase" && !auth.userId)
+      throw new PlatformError("unauthorized", 401);
+    return auth;
+  }
+  private async conversationContext(id: string, auth: AuthContext) {
+    let context = this.skillContexts.get(id);
+    if (!context) {
+      const owners = await this.runStore?.getConversationOwners?.(id);
+      if (
+        owners &&
+        (owners.length > 1 ||
+          (auth.authMode === "supabase" &&
+            owners.length &&
+            owners[0] !== auth.userId))
+      )
+        throw new PlatformError("conversation_not_found", 404);
+      const row = await this.runStore?.getLatestByConversation?.(id);
+      if (row) {
+        if (
+          auth.authMode === "supabase" &&
+          (!row.userId || row.userId !== auth.userId)
+        )
+          throw new PlatformError("conversation_not_found", 404);
+        const agentId = row.agentId ?? null;
+        const agentFingerprint =
+          row.agentFingerprint ?? (agentId === null ? "none" : null);
+        if (
+          !agentFingerprint ||
+          (agentId === null && agentFingerprint !== "none")
+        )
+          throw new PlatformError("conversation_context_invalid");
+        const hasPolicy =
+          row.skillPolicy !== null && row.skillPolicy !== undefined;
+        const hasFingerprint =
+          row.catalogFingerprint !== null &&
+          row.catalogFingerprint !== undefined;
+        if (hasPolicy !== hasFingerprint || (agentId !== null && !hasPolicy))
+          throw new PlatformError("conversation_context_invalid");
+        let policy: SkillPolicy | undefined;
+        try {
+          if (hasPolicy) policy = normalizeSkillPolicy(row.skillPolicy);
+        } catch {
+          throw new PlatformError("conversation_context_invalid");
+        }
+        if (
+          hasFingerprint &&
+          (typeof row.catalogFingerprint !== "string" ||
+            !row.catalogFingerprint)
+        )
+          throw new PlatformError("conversation_context_invalid");
+        context = {
+          userId: row.userId,
+          agentId,
+          agentFingerprint,
+          policy,
+          catalogFingerprint: row.catalogFingerprint ?? undefined,
+        };
+      }
+    }
     if (
       context &&
-      (JSON.stringify(context.policy) !== JSON.stringify(policy) ||
-        context.catalogFingerprint !== snapshot.catalogFingerprint)
+      auth.authMode === "supabase" &&
+      (!context.userId || context.userId !== auth.userId)
     )
-      throw new ConversationSkillContextMismatchError();
-    if (!context)
-      this.skillContexts.set(conversationId, {
-        policy,
-        catalogFingerprint: snapshot.catalogFingerprint,
-      });
-    const now = new Date().toISOString();
-    const run: Run = {
-      id: randomUUID(),
-      userId: options.userId ?? "",
-      projectId: options.projectId,
-      conversationId,
-      input,
-      status: "queued",
-      createdAt: now,
-    };
-    // 先保存运行记录，再构造执行上下文，供后续事件关联到该运行。
-    await this.runStore?.create(run);
-    const adapter = this.createAdapter(
-      options.provider,
-      options.workingDirectory,
-    );
-    const active: ActiveRun = {
-      run,
-      controller: new AbortController(),
-      events: [],
-      listeners: new Set(),
-      adapter,
-      secretGuard:
-        adapter.secretGuard ??
-        new SecretGuard(options.workingDirectory, undefined, [
-          options.provider?.apiKey,
-        ]),
-      streams: new Map(),
-      skillSnapshot: snapshot,
-    };
-    this.runs.set(run.id, active);
-    this.activeConversations.set(conversationId, run.id);
-    const tracing = new RunTracing(run, (value) => active.secretGuard.redact(value));
-    active.tracing = tracing;
-    // 入队后异步启动，使调用方无需等待模型响应。
-    queueMicrotask(() =>
-      void tracing.withContext(async () => {
-        try {
-          await withRunContext({ userId: run.userId }, () => this.execute(active));
-        } finally {
-          tracing.finish(active.run.status, active.run.errorCode);
-        }
-      }),
-    );
-    return run;
+      throw new PlatformError("conversation_not_found", 404);
+    return context;
   }
-  /** 按策略发现技能并生成快照，同时向调用方返回技能加载诊断。 */
+  private async preflight(
+    conversationId: string,
+    requestedAgentId: string | undefined,
+    auth: AuthContext,
+    constraints?: RunAgentConstraints,
+  ) {
+    const previous = await this.conversationContext(conversationId, auth);
+    const agentId = requestedAgentId ?? previous?.agentId ?? null;
+    if (agentId) {
+      if (!this.platform) throw new PlatformError("agent_not_found", 404);
+      const agent = await this.platform.getAgent(agentId, auth);
+      if (constraints?.requirePublished && agent.status !== "published")
+        throw new PlatformError("agent_not_published");
+    }
+    if (previous && agentId !== previous.agentId)
+      throw new ConversationAgentChangedError();
+    if (
+      agentId &&
+      constraints?.requireFrozenAgentFields &&
+      (!constraints.frozenAgentFieldsPresent ||
+        !constraints.expectedAgentFingerprint)
+    )
+      throw new PlatformError("agent_frozen_fields_missing");
+    const resolved = agentId
+      ? await this.platform!.resolveAgent(
+          agentId,
+          auth,
+          constraints?.requirePublished,
+        )
+      : undefined;
+    const agentFingerprint = resolved?.context.agentFingerprint ?? "none";
+    if (
+      (previous && previous.agentFingerprint !== agentFingerprint) ||
+      (constraints?.expectedAgentFingerprint &&
+        constraints.expectedAgentFingerprint !== agentFingerprint)
+    ) {
+      resolved?.release();
+      throw new PlatformError("agent_context_changed");
+    }
+    return { agentId, agentFingerprint, previous, resolved };
+  }
+  /** Resolve/freeze a scheduled task without committing a conversation binding or creating a run. */
+  async freezeAgent(
+    conversationId: string | undefined,
+    agentId: string | undefined,
+    userId?: string,
+  ) {
+    const id = conversationId ?? randomUUID();
+    if (this.activeConversations.has(id))
+      throw new ConversationBusyError("conversation_busy");
+    this.activeConversations.set(id, "preflight");
+    try {
+      const result = await this.preflight(id, agentId, this.auth(userId), {
+        requirePublished: true,
+      });
+      result.resolved?.release();
+      return {
+        agentId: result.agentId,
+        agentFingerprint: result.agentFingerprint,
+      };
+    } finally {
+      this.activeConversations.delete(id);
+    }
+  }
+  async createRun(input: string, options: CreateRunOptions): Promise<Run> {
+    return (await this.createInternal(input, options, "disabled")).run;
+  }
   async createRunWithSkills(
     input: string,
     options: CreateRunOptions,
   ): Promise<{ run: Run; skillDiagnostics: SkillSnapshot["diagnostics"] }> {
-    const policy = options.skillPolicy ?? { mode: "auto" as const };
-    const workspaceRoot = options.workingDirectory ?? "";
-    const catalog =
-      policy.mode === "disabled"
-        ? undefined
-        : await this.skills?.list(options.workingDirectory);
-    const snapshot = catalog
-      ? createSkillSnapshot(workspaceRoot, policy, catalog)
-      : { ...DISABLED_SKILL_SNAPSHOT, workspaceRoot };
-    const id = options.conversationId ?? randomUUID();
-    const context = this.skillContexts.get(id);
-    if (
-      context &&
-      (JSON.stringify(context.policy) !== JSON.stringify(policy) ||
-        context.catalogFingerprint !== snapshot.catalogFingerprint)
-    )
-      throw new ConversationSkillContextMismatchError();
-    if (this.activeConversations.has(id))
+    return this.createInternal(input, options, "auto");
+  }
+  private async createInternal(
+    input: string,
+    options: CreateRunOptions,
+    defaultMode: "auto" | "disabled",
+  ) {
+    if (this.stopping) throw new PlatformError("service_unavailable", 503);
+    const conversationId = options.conversationId ?? randomUUID();
+    if (this.activeConversations.has(conversationId))
       throw new ConversationBusyError("conversation_busy");
-    const run = await this.createRun(input, {
-      ...options,
-      conversationId: id,
-      skillPolicy: policy,
-      skillSnapshot: snapshot,
-    });
-    return { run, skillDiagnostics: snapshot.diagnostics };
+    this.activeConversations.set(conversationId, "creating");
+    let release: (() => void) | undefined;
+    let persisted: Run | undefined;
+    try {
+      const auth = this.auth(options.userId);
+      const preflight = await this.preflight(
+        conversationId,
+        options.agentId,
+        auth,
+        options.agentConstraints,
+      );
+      release = preflight.resolved?.release;
+      const policy = normalizeSkillPolicy(
+        preflight.resolved
+          ? { mode: "selected", skillIds: preflight.resolved.context.skillIds }
+          : (options.skillPolicy ?? { mode: defaultMode }),
+      );
+      const workspaceRoot = options.workingDirectory ?? "";
+      const catalog =
+        preflight.resolved ??
+        (policy.mode !== "disabled"
+          ? await this.skills?.list(options.workingDirectory)
+          : undefined);
+      let snapshot: SkillSnapshot = preflight.resolved
+        ? createSkillSnapshot(workspaceRoot, policy, preflight.resolved)
+        : (options.skillSnapshot ??
+          (catalog
+            ? createSkillSnapshot(workspaceRoot, policy, catalog)
+            : { ...DISABLED_SKILL_SNAPSHOT, workspaceRoot }));
+      snapshot = {
+        ...snapshot,
+        contextFingerprint: preflight.agentId
+          ? preflight.agentFingerprint
+          : snapshot.catalogFingerprint,
+      };
+      const previous = preflight.previous;
+      if (
+        !preflight.agentId &&
+        previous?.policy &&
+        (JSON.stringify(previous.policy) !== JSON.stringify(policy) ||
+          previous.catalogFingerprint !== snapshot.catalogFingerprint)
+      )
+        throw new ConversationSkillContextMismatchError();
+      const run: Run = {
+        id: randomUUID(),
+        userId: previous?.userId ?? auth.userId,
+        projectId: options.projectId ?? "default",
+        conversationId,
+        input,
+        status: "queued",
+        createdAt: new Date().toISOString(),
+        agentId: preflight.agentId,
+        agentFingerprint: preflight.agentFingerprint,
+        skillPolicy: policy,
+        catalogFingerprint: snapshot.catalogFingerprint,
+      };
+      if (this.stopping) throw new PlatformError("service_unavailable", 503);
+      await this.runStore?.create(run);
+      persisted = run;
+      this.skillContexts.set(conversationId, {
+        userId: run.userId,
+        policy,
+        catalogFingerprint: snapshot.catalogFingerprint,
+        agentId: preflight.agentId,
+        agentFingerprint: preflight.agentFingerprint,
+      });
+      const adapter = this.createAdapter(
+        options.provider,
+        options.workingDirectory,
+        preflight.resolved?.context,
+      );
+      const active: ActiveRun = {
+        run,
+        controller: new AbortController(),
+        events: [],
+        listeners: new Set(),
+        adapter,
+        secretGuard:
+          adapter.secretGuard ??
+          new SecretGuard(options.workingDirectory, undefined, [
+            options.provider?.apiKey,
+          ]),
+        streams: new Map(),
+        skillSnapshot: snapshot,
+        releaseSkills: release,
+      };
+      this.runs.set(run.id, active);
+      this.activeConversations.set(conversationId, run.id);
+      const tracing = new RunTracing(run, (value) =>
+        active.secretGuard.redact(value),
+      );
+      active.tracing = tracing;
+      const execution = new Promise<void>((resolve) =>
+        queueMicrotask(resolve),
+      ).then(() =>
+        tracing.withContext(async () => {
+          try {
+            await withRunContext({ userId: run.userId }, () =>
+              this.execute(active),
+            );
+          } finally {
+            active.releaseSkills?.();
+            this.activeConversations.delete(conversationId);
+            tracing.finish(active.run.status, active.run.errorCode);
+          }
+        }),
+      );
+      this.executions.add(execution);
+      void execution
+        .catch((error: unknown) =>
+          console.error("Run persistence failed", error),
+        )
+        .finally(() => this.executions.delete(execution));
+      return { run, skillDiagnostics: snapshot.diagnostics };
+    } catch (error) {
+      release?.();
+      this.activeConversations.delete(conversationId);
+      if (persisted) {
+        persisted.status = "failed";
+        persisted.errorCode = "run_initialization_failed";
+        persisted.finishedAt = new Date().toISOString();
+        await this.runStore?.update(persisted);
+      }
+      throw error;
+    }
   }
   /** 优先读取内存中的最新状态；重启前的运行则从持久化存储读取。 */
   async getRun(runId: string, userId?: string) {
     const run = this.runs.get(runId)?.run ?? (await this.runStore?.get(runId));
-    if (!run || (userId !== undefined && run.userId !== userId)) return undefined;
+    if (!run || (userId !== undefined && run.userId !== userId))
+      return undefined;
     return run;
   }
   /** 标题独立于运行终态；同一运行的重复请求复用结果，失败可重试。 */
-  async generateTitle(runId: string, userId?: string): Promise<string | undefined> {
+  async generateTitle(
+    runId: string,
+    userId?: string,
+  ): Promise<string | undefined> {
     const active = this.runs.get(runId);
     if (!active || (userId !== undefined && active.run.userId !== userId))
       return undefined;
@@ -215,7 +429,10 @@ export class AntlerHostRuntime {
       active.run.status !== "succeeded" ||
       active.run.input.trim() === "/compact"
     )
-      throw new PiAdapterError("conversation_context_empty", "当前运行无法生成标题。");
+      throw new PiAdapterError(
+        "conversation_context_empty",
+        "当前运行无法生成标题。",
+      );
     if (!active.title) {
       const response = active.events
         .filter((event) => event.type === "assistant.delta")
@@ -258,6 +475,12 @@ export class AntlerHostRuntime {
     if (!isTerminalRunStatus(active.run.status)) active.controller.abort();
     return active.run;
   }
+  async stop() {
+    this.stopping = true;
+    for (const active of this.runs.values())
+      if (!isTerminalRunStatus(active.run.status)) active.controller.abort();
+    await Promise.allSettled([...this.executions]);
+  }
   /** 委托存储层处理服务重启后遗留的未完成运行。 */
   async recoverInterrupted() {
     await this.runStore?.recoverInterrupted();
@@ -272,8 +495,16 @@ export class AntlerHostRuntime {
     try {
       await active.secretGuard.refresh();
       if (run.input.trim() === "/compact") {
-        await this.emit(active, "run.started", { runId: run.id, status: run.status }, true);
-        active.timeout = setTimeout(() => active.controller.abort(), this.config.maxRunDurationMs);
+        await this.emit(
+          active,
+          "run.started",
+          { runId: run.id, status: run.status },
+          true,
+        );
+        active.timeout = setTimeout(
+          () => active.controller.abort(),
+          this.config.maxRunDurationMs,
+        );
         const result = await active.adapter.compact(
           run.conversationId,
           active.skillSnapshot,
@@ -315,7 +546,9 @@ export class AntlerHostRuntime {
         await this.finish(active, "cancelled");
       else {
         const code =
-          error instanceof PiAdapterError ? error.code : "provider_error";
+          error instanceof PiAdapterError || error instanceof PlatformError
+            ? error.code
+            : "provider_error";
         await this.finish(
           active,
           "failed",
@@ -417,7 +650,7 @@ export class AntlerHostRuntime {
     active.run.status = status;
     active.run.errorCode = errorCode;
     active.run.finishedAt = new Date().toISOString();
-    this.activeConversations.delete(active.run.conversationId);
+
     const type: RunEventType =
       status === "succeeded"
         ? "run.completed"

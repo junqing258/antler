@@ -12,3 +12,5 @@ target/
 *.db-shm
 *.db-wal
 backend/src/generated/prisma/
+
+.antler-platform/

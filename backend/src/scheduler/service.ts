@@ -137,13 +137,46 @@ export class SchedulerService {
   constructor(
     private prisma: PrismaClient,
     private scheduler: CronScheduler,
+    private freezeAgent?: (
+      conversationId: string | undefined,
+      agentId: string | undefined,
+      userId: string,
+    ) => Promise<{ agentId: string | null; agentFingerprint: string }>,
   ) {}
 
-  async createTask(data: CreateTaskDto, userId?: string): Promise<ScheduledTask> {
+  private async freezePayload(type: string, payload: unknown, userId: string) {
+    const value = payload as import("./types.js").ServiceTaskPayload;
+    if (
+      type !== "service" ||
+      value.service !== "taskService" ||
+      value.method !== "create" ||
+      !this.freezeAgent
+    )
+      return payload;
+    const conversationId = value.args?.[1];
+    if (
+      (conversationId !== undefined && typeof conversationId !== "string") ||
+      (value.agentId !== undefined &&
+        (typeof value.agentId !== "string" || !value.agentId))
+    )
+      throw new TaskValidationError("Agent / conversationId 无效");
+    const frozen = await this.freezeAgent(
+      conversationId as string | undefined,
+      value.agentId,
+      userId,
+    );
+    const { agentId: _id, agentFingerprint: _fingerprint, ...rest } = value;
+    return frozen.agentId ? { ...rest, ...frozen } : rest;
+  }
+  async createTask(
+    data: CreateTaskDto,
+    userId?: string,
+  ): Promise<ScheduledTask> {
     validateInput(data, true);
     validatePayload(data.type, data.payload);
     // 无显式归属时继承当前运行的所属用户（Agent 工具创建的任务）。
     const owner = userId ?? currentRunUserId() ?? "";
+    const payload = await this.freezePayload(data.type, data.payload, owner);
     const task = await this.prisma.scheduledTask.create({
       data: {
         userId: owner,
@@ -152,7 +185,7 @@ export class SchedulerService {
         type: data.type,
         schedule: data.schedule,
         enabled: data.enabled ?? true,
-        payload: data.payload as unknown as Prisma.InputJsonValue,
+        payload: payload as unknown as Prisma.InputJsonValue,
         retryCount: data.retryCount ?? 0,
         retryDelay: data.retryDelay ?? 60000,
         timeout: data.timeout ?? 300000,
@@ -174,6 +207,11 @@ export class SchedulerService {
       existing.type,
       data.payload !== undefined ? data.payload : existing.payload,
     );
+    const payload = await this.freezePayload(
+      existing.type,
+      data.payload ?? existing.payload,
+      existing.userId,
+    );
     const task = await this.prisma.scheduledTask.update({
       where: { id },
       data: {
@@ -181,7 +219,7 @@ export class SchedulerService {
         description: data.description,
         schedule: data.schedule,
         enabled: data.enabled,
-        payload: data.payload as unknown as Prisma.InputJsonValue | undefined,
+        payload: payload as unknown as Prisma.InputJsonValue,
         retryCount: data.retryCount,
         retryDelay: data.retryDelay,
         timeout: data.timeout,
@@ -206,7 +244,10 @@ export class SchedulerService {
     if (!task || (userId !== undefined && task.userId !== userId)) return null;
     return task;
   }
-  private async requireTask(id: string, userId?: string): Promise<ScheduledTask> {
+  private async requireTask(
+    id: string,
+    userId?: string,
+  ): Promise<ScheduledTask> {
     const task = await this.getTask(id, userId);
     if (!task) throw new TaskNotFoundError();
     return task;
@@ -217,7 +258,10 @@ export class SchedulerService {
       : null;
   }
 
-  async listTasks(filter: TaskFilter = {}, userId?: string): Promise<TaskListResult> {
+  async listTasks(
+    filter: TaskFilter = {},
+    userId?: string,
+  ): Promise<TaskListResult> {
     const page = filter.page ?? 1;
     const requestedLimit = filter.limit ?? 20;
     integer(page, 1, Number.MAX_SAFE_INTEGER, "page");

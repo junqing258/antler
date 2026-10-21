@@ -1,3 +1,4 @@
+import { PlatformError } from "../platform/errors.js";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
@@ -10,7 +11,10 @@ import type { SkillSnapshot } from "../skills/types.js";
 import { createSkillTools } from "../skills/skill-tools.js";
 import { composeSkillPrompt } from "../skills/skill-prompt.js";
 import { SecretGuard } from "./secret-guard.js";
-import { createSchedulerTools, type AgentScheduler } from "./scheduler-tools.js";
+import {
+  createSchedulerTools,
+  type AgentScheduler,
+} from "./scheduler-tools.js";
 
 /** 模型连接、工作区工具和请求超时配置，由宿主创建适配器时注入。 */
 export type PiAgentAdapterConfig = {
@@ -25,6 +29,7 @@ export type PiAgentAdapterConfig = {
   getToolEnvironment?: () => NodeJS.ProcessEnv;
   schedulerService?: AgentScheduler;
   workspaceRoot: string;
+  platformRoot?: string;
   systemPrompt: string;
   requestTimeoutMs: number;
 };
@@ -70,6 +75,7 @@ export class PiAgentAdapter {
         this.config.workspaceRoot,
         this.config.getToolEnvironment,
         this.secretGuard,
+        this.config.platformRoot,
       ),
       ...(this.config.tavilyApiKey
         ? [
@@ -135,7 +141,10 @@ export class PiAgentAdapter {
     signal.throwIfAborted();
     const cached = this.agents.get(conversationId);
     if (!cached)
-      throw new PiAdapterError("conversation_context_empty", "会话上下文不可用。");
+      throw new PiAdapterError(
+        "conversation_context_empty",
+        "会话上下文不可用。",
+      );
     await this.secretGuard.refresh();
     const agent = cached.agent;
     const summarizer = new Agent({
@@ -178,10 +187,15 @@ export class PiAgentAdapter {
           .join(""),
       );
       const title = Array.from(
-        text.trim().split(/\r?\n/)[0]
+        text
+          .trim()
+          .split(/\r?\n/)[0]
           .replace(/^(?:标题|title)\s*[:：]\s*/i, "")
           .replace(/^[#\s"'“”「」`*]+|[\s"'“”「」`*]+$/g, ""),
-      ).slice(0, 48).join("").trim();
+      )
+        .slice(0, 48)
+        .join("")
+        .trim();
       if (!title)
         throw new PiAdapterError("title_generation_failed", "标题为空。");
       return title;
@@ -206,8 +220,14 @@ export class PiAgentAdapter {
         "conversation_context_empty",
         "当前模型没有可压缩的会话上下文，请先发送消息。服务重启或切换模型后需重新建立上下文。",
       );
-    if (cached.fingerprint !== skillSnapshot.catalogFingerprint)
-      throw new Error("skill_snapshot_changed");
+    if (
+      cached.fingerprint !==
+      (skillSnapshot.contextFingerprint ?? skillSnapshot.catalogFingerprint)
+    )
+      throw skillSnapshot.contextFingerprint &&
+        skillSnapshot.contextFingerprint !== skillSnapshot.catalogFingerprint
+        ? new PlatformError("agent_context_changed")
+        : new Error("skill_snapshot_changed");
     const agent = cached.agent;
     const history = agent.state.messages.filter(
       (message) => message.role !== "system",
@@ -329,8 +349,15 @@ export class PiAgentAdapter {
     };
     let cached = this.agents.get(conversationId);
     // Agent 的系统提示词和工具在创建时固定，技能目录变化时不能沿用旧上下文。
-    if (cached && cached.fingerprint !== skillSnapshot.catalogFingerprint)
-      throw new Error("skill_snapshot_changed");
+    if (
+      cached &&
+      cached.fingerprint !==
+        (skillSnapshot.contextFingerprint ?? skillSnapshot.catalogFingerprint)
+    )
+      throw skillSnapshot.contextFingerprint &&
+        skillSnapshot.contextFingerprint !== skillSnapshot.catalogFingerprint
+        ? new PlatformError("agent_context_changed")
+        : new Error("skill_snapshot_changed");
     if (!cached) {
       const agent = new Agent({
         initialState: {
@@ -355,7 +382,11 @@ export class PiAgentAdapter {
             },
           ),
       });
-      cached = { agent, fingerprint: skillSnapshot.catalogFingerprint };
+      cached = {
+        agent,
+        fingerprint:
+          skillSnapshot.contextFingerprint ?? skillSnapshot.catalogFingerprint,
+      };
       this.agents.set(conversationId, cached);
     }
     const agent = cached.agent;
@@ -414,8 +445,15 @@ export class PiAgentAdapter {
     };
     let cached = this.agents.get(conversationId);
     // 防止复用包含旧技能提示词和工具的 Agent。
-    if (cached && cached.fingerprint !== skillSnapshot.catalogFingerprint)
-      throw new Error("skill_snapshot_changed");
+    if (
+      cached &&
+      cached.fingerprint !==
+        (skillSnapshot.contextFingerprint ?? skillSnapshot.catalogFingerprint)
+    )
+      throw skillSnapshot.contextFingerprint &&
+        skillSnapshot.contextFingerprint !== skillSnapshot.catalogFingerprint
+        ? new PlatformError("agent_context_changed")
+        : new Error("skill_snapshot_changed");
     if (!cached) {
       const agent = new Agent({
         initialState: {
@@ -443,7 +481,11 @@ export class PiAgentAdapter {
             },
           ),
       });
-      cached = { agent, fingerprint: skillSnapshot.catalogFingerprint };
+      cached = {
+        agent,
+        fingerprint:
+          skillSnapshot.contextFingerprint ?? skillSnapshot.catalogFingerprint,
+      };
       this.agents.set(conversationId, cached);
     }
     const agent = cached.agent;

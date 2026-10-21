@@ -1,3 +1,5 @@
+import { PlatformError } from "../platform/errors.js";
+import { hasFrozenAgentFields } from "./types.js";
 import { spawn } from "node:child_process";
 import { withRunContext } from "../run-context.js";
 import { Prisma, type PrismaClient } from "../generated/prisma/client.js";
@@ -30,10 +32,20 @@ export class TaskExecutor {
     task: ScheduledTask,
     options: { retryAttempt?: number; executionId?: string } = {},
   ): Promise<TaskExecution> {
+    return (await this.executeResult(task, options)).execution;
+  }
+  async executeResult(
+    task: ScheduledTask,
+    options: { retryAttempt?: number; executionId?: string } = {},
+  ): Promise<{ execution: TaskExecution; retryable?: boolean }> {
     const execution = options.executionId
       ? { id: options.executionId }
       : await this.prisma.taskExecution.create({
-          data: { taskId: task.id, retryAttempt: options.retryAttempt ?? 0 },
+          data: {
+            taskId: task.id,
+            userId: task.userId,
+            retryAttempt: options.retryAttempt ?? 0,
+          },
         });
     const startTime = Date.now();
     const controller = new AbortController();
@@ -63,11 +75,18 @@ export class TaskExecutor {
         }
       }
     } catch (error) {
-      result = { success: false, error: errorMessage(error), duration: 0 };
+      result = {
+        success: false,
+        error: errorMessage(error),
+        duration: 0,
+        ...(error instanceof PlatformError
+          ? { errorCode: error.code, retryable: false }
+          : {}),
+      };
     } finally {
       clearTimeout(timeout);
     }
-    return this.prisma.taskExecution.update({
+    const finished = await this.prisma.taskExecution.update({
       where: { id: execution.id },
       data: {
         status: controller.signal.aborted
@@ -81,6 +100,7 @@ export class TaskExecutor {
         error: controller.signal.aborted ? "Task timed out" : result.error,
       },
     });
+    return { execution: finished, retryable: result.retryable };
   }
 
   private async executeHttp(
@@ -125,6 +145,14 @@ export class TaskExecutor {
     signal: AbortSignal,
   ): Promise<ExecutionResult> {
     const payload = task.payload as unknown as ServiceTaskPayload;
+    if (
+      payload.service === "taskService" &&
+      payload.method === "create" &&
+      (payload.agentId !== undefined ||
+        payload.agentFingerprint !== undefined) &&
+      !hasFrozenAgentFields(payload)
+    )
+      throw new PlatformError("agent_frozen_fields_missing");
     if (!this.serviceRegistry)
       throw new Error("Service registry not available");
     const service = this.serviceRegistry.get(payload.service);
@@ -148,7 +176,14 @@ export class TaskExecutor {
       // 任务归属通过运行上下文注入，服务包装层据此把产物（如 Agent 运行）关联到创建者。
       const data: unknown = await Promise.race([
         withRunContext({ userId: task.userId }, () =>
-          Promise.resolve().then(() => method.apply(service, [...(payload.args ?? []), signal])),
+          Promise.resolve().then(() =>
+            method.apply(
+              service,
+              payload.service === "taskService" && payload.method === "create"
+                ? [payload, signal]
+                : [...(payload.args ?? []), signal],
+            ),
+          ),
         ),
         aborted,
       ]);

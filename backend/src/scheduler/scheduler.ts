@@ -215,7 +215,7 @@ export class CronScheduler {
           }
         }
         const initial = await this.prisma.taskExecution.create({
-          data: { taskId },
+          data: { taskId, userId: task.userId },
         });
         executionId = initial.id;
         accepted?.resolve(initial);
@@ -269,12 +269,14 @@ export class CronScheduler {
     executionId: string,
   ): Promise<TaskExecution> {
     let current = task;
-    let execution = await this.executor.execute(current, {
+    let result = await this.executor.executeResult(current, {
       executionId,
       retryAttempt: 0,
     });
+    let execution = result.execution;
     for (
       let attempt = 1;
+      result.retryable !== false &&
       execution.status !== "succeeded" &&
       attempt <= current.retryCount &&
       this.running;
@@ -307,9 +309,10 @@ export class CronScheduler {
       if (!this.running || !fresh?.enabled || attempt > fresh.retryCount) break;
       current = fresh;
       console.log(`[Scheduler] Retrying task ${task.id}, attempt ${attempt}`);
-      execution = await this.executor.execute(current, {
+      result = await this.executor.executeResult(current, {
         retryAttempt: attempt,
       });
+      execution = result.execution;
     }
     return execution;
   }

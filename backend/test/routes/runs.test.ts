@@ -115,7 +115,6 @@ describe("POST /api/runs workingDirectory", () => {
       url: "/api/runs",
       payload: {
         message: "hello",
-        projectId: "project-1",
         conversationId: "conversation-1",
         workingDirectory: process.cwd(),
       },
@@ -123,7 +122,6 @@ describe("POST /api/runs workingDirectory", () => {
 
     expect(response.statusCode).toBe(202);
     expect(runtime.createRunWithSkills).toHaveBeenCalledWith("hello", {
-      projectId: "project-1",
       conversationId: "conversation-1",
       provider: undefined,
       workingDirectory: process.cwd(),
@@ -183,7 +181,7 @@ describe("POST /api/runs workingDirectory", () => {
     await app.close();
   });
 
-  it("requires a project ID", async () => {
+  it("accepts runs without the removed project field", async () => {
     const app = Fastify();
     const runtime = testRuntime();
     registerRunRoutes(app, runtime as unknown as AntlerHostRuntime);
@@ -193,7 +191,8 @@ describe("POST /api/runs workingDirectory", () => {
       url: "/api/runs",
       payload: { message: "hello", conversationId: "conversation-1" },
     });
-    expect(missingProject.statusCode).toBe(400);
+    expect(missingProject.statusCode).toBe(202);
+    expect(runtime.createRunWithSkills.mock.calls[0]![1]).not.toHaveProperty("projectId");
 
     await app.close();
   });

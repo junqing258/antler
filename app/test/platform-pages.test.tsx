@@ -1,0 +1,189 @@
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { MemoryRouter, Routes, Route } from "react-router";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AgentListPage } from "@/views/platform/agent-list";
+import { AgentEditPage } from "@/views/platform/agent-edit";
+import { SkillLibraryPage } from "@/views/platform/skill-library";
+import { platformApi } from "@/lib/platform-api";
+import { getConversation } from "@/lib/conversation-store";
+vi.mock("@/lib/platform-api", () => ({
+  platformApi: vi.fn(),
+  agentWorkspace: () => "",
+}));
+vi.mock("@/lib/conversation-store", () => ({
+  listConversations: async () => [],
+  getConversation: vi.fn().mockResolvedValue(undefined),
+}));
+const api = vi.mocked(platformApi);
+const skill = {
+  id: "skill-uuid",
+  name: "example",
+  description: "Skill description",
+  state: "ready",
+  bindable: true,
+  editable: true,
+  fileCount: 2,
+  sizeBytes: 512,
+  createdAt: new Date().toISOString(),
+};
+const agent = {
+  id: "agent-id",
+  ownerId: "owner",
+  name: "Research",
+  description: "Research helper",
+  systemPrompt: "Investigate",
+  status: "draft",
+  editable: true,
+  skills: [],
+  _count: { skills: 0 },
+};
+beforeEach(() => {
+  api.mockReset();
+  vi.mocked(getConversation).mockReset().mockResolvedValue(undefined);
+});
+afterEach(() => {
+  cleanup();
+});
+function mount(page: React.ReactNode, path = "/") {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="/" element={page} />
+        <Route path="/chat" element={page} />
+        <Route path="/agents/:id" element={<p>Bound Agent conversation</p>} />
+        <Route path="/agents/:id/edit" element={page} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+describe("Agent platform pages", () => {
+  it("restores a bound conversation from the legacy chat URL", async () => {
+    vi.mocked(getConversation).mockResolvedValue({
+      id: "old", agentId: "bound", title: "Old", messages: [], createdAt: 1, updatedAt: 1,
+    });
+    mount(<AgentListPage />, "/chat?conversationId=old");
+    expect(await screen.findByText("Bound Agent conversation")).toBeInTheDocument();
+    expect(api).not.toHaveBeenCalled();
+  });
+  it("returns unbound legacy chat URLs to the Agent list", async () => {
+    api.mockResolvedValue({ agents: [] });
+    mount(<AgentListPage />, "/chat?conversationId=unbound");
+    expect(await screen.findByText(/还没有 Agent/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "普通聊天 / 历史会话" })).not.toBeInTheDocument();
+  });
+  it("shows built-in assistants in their own group without edit links", async () => {
+    api.mockResolvedValue({ agents: [
+      { ...agent, id: "default", name: "默认助手", builtin: true, editable: false, status: "published" },
+      { ...agent, id: "stocks", name: "股票分析师", builtin: true, editable: false, status: "published" },
+    ] });
+    mount(<AgentListPage />);
+    expect(await screen.findByText("默认助手")).toBeInTheDocument();
+    expect(screen.getByText("股票分析师")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "内置 Agent" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "编辑" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "开始对话 →" }).map((link) => link.getAttribute("href"))).toEqual(["/agents/default", "/agents/stocks"]);
+  });
+  it("shows Agent creation without an ordinary chat entrance", async () => {
+    api.mockResolvedValue({ agents: [] });
+    mount(<AgentListPage />);
+    expect(await screen.findByText(/还没有 Agent/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "普通聊天 / 历史会话" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "新建 Agent" })).toHaveAttribute(
+      "href",
+      "/agents/new",
+    );
+  });
+  it("groups owned and public Agents and shows editing only for owned Agents", async () => {
+    api.mockResolvedValue({
+      agents: [
+        agent,
+        {
+          ...agent,
+          id: "public",
+          name: "Public",
+          editable: false,
+          status: "published",
+        },
+      ],
+    });
+    mount(<AgentListPage />);
+    await screen.findByText("Research");
+    expect(screen.getByText("Public")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "编辑" })).toHaveLength(1);
+  });
+  it("disables non-bindable skills and submits database UUIDs rather than skill names", async () => {
+    api.mockImplementation(async (path) =>
+      path === "/skills"
+        ? {
+            skills: [
+              skill,
+              {
+                ...skill,
+                id: "disabled",
+                name: "unavailable",
+                bindable: false,
+                unbindableReason: "tampered",
+              },
+            ],
+          }
+        : agent,
+    );
+    mount(<AgentEditPage />, "/agents/agent-id/edit");
+    const available = await screen.findByRole("checkbox", { name: /example/ });
+    expect(
+      screen.getByRole("checkbox", { name: /unavailable/ }),
+    ).toBeDisabled();
+    fireEvent.click(available);
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() =>
+      expect(api).toHaveBeenCalledWith(
+        "/agents/agent-id",
+        "PUT",
+        expect.objectContaining({ skillIds: ["skill-uuid"] }),
+      ),
+    );
+  });
+  it("surfaces server publish validation and does not publish unsaved edits", async () => {
+    api.mockImplementation(async (path, method) => {
+      if (path === "/skills") return { skills: [] };
+      if (method === "POST") throw new Error("agent_prompt_required");
+      return agent;
+    });
+    mount(<AgentEditPage />, "/agents/agent-id/edit");
+    const publish = await screen.findByRole("button", { name: "发布" });
+    await waitFor(() => expect(publish).not.toBeDisabled());
+    fireEvent.click(publish);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "agent_prompt_required",
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "名称" }), {
+      target: { value: "Edited" },
+    });
+    expect(publish).toBeDisabled();
+  });
+  it("rejects oversized uploads before invoking the server", async () => {
+    api.mockResolvedValue({ skills: [] });
+    mount(<SkillLibraryPage />);
+    fireEvent.change(screen.getByRole("textbox", { name: "技能名称" }), {
+      target: { value: "example" },
+    });
+    const file = new File([new Uint8Array(5 * 1024 * 1024 + 1)], "large.zip", {
+      type: "application/zip",
+    });
+    fireEvent.change(screen.getByLabelText("上传技能 ZIP"), {
+      target: { files: [file] },
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "skill_too_large",
+    );
+    expect(api.mock.calls.filter((c) => c[1] === "POST")).toHaveLength(0);
+  });
+});

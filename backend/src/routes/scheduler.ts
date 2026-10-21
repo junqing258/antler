@@ -1,3 +1,4 @@
+import { ConversationBusyError } from "../agent/host-runtime.js";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { Prisma } from "../generated/prisma/client.js";
 import type { SchedulerService } from "../scheduler/service.js";
@@ -21,6 +22,8 @@ async function respond(reply: FastifyReply, action: () => Promise<unknown>) {
   try {
     return await action();
   } catch (error) {
+    if (error instanceof ConversationBusyError)
+      return reply.code(409).send({ error: "conversation_busy" });
     if (error instanceof TaskRunningError)
       return reply.code(409).send({ error: error.message });
     if (
@@ -79,7 +82,10 @@ export function registerSchedulerRoutes(
     "/api/scheduled-tasks/:id",
     async (request, reply) =>
       respond(reply, async () => {
-        const task = await service.getTask(request.params.id, request.antlerUser?.id);
+        const task = await service.getTask(
+          request.params.id,
+          request.antlerUser?.id,
+        );
         if (!task) throw new TaskNotFoundError();
         return task;
       }),
@@ -88,7 +94,11 @@ export function registerSchedulerRoutes(
     "/api/scheduled-tasks/:id",
     async (request, reply) =>
       respond(reply, () =>
-        service.updateTask(request.params.id, request.body as UpdateTaskDto, request.antlerUser?.id),
+        service.updateTask(
+          request.params.id,
+          request.body as UpdateTaskDto,
+          request.antlerUser?.id,
+        ),
       ),
   );
   app.delete<{ Params: { id: string } }>(
@@ -102,12 +112,16 @@ export function registerSchedulerRoutes(
   app.post<{ Params: { id: string } }>(
     "/api/scheduled-tasks/:id/enable",
     async (request, reply) =>
-      respond(reply, () => service.enableTask(request.params.id, request.antlerUser?.id)),
+      respond(reply, () =>
+        service.enableTask(request.params.id, request.antlerUser?.id),
+      ),
   );
   app.post<{ Params: { id: string } }>(
     "/api/scheduled-tasks/:id/disable",
     async (request, reply) =>
-      respond(reply, () => service.disableTask(request.params.id, request.antlerUser?.id)),
+      respond(reply, () =>
+        service.disableTask(request.params.id, request.antlerUser?.id),
+      ),
   );
   app.post<{ Params: { id: string } }>(
     "/api/scheduled-tasks/:id/trigger",

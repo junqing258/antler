@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
+import { SkillRegistry } from "../src/skills/skill-registry.js";
 import { createApp } from "../src/app.js";
 
 const temporaryDirectories: string[] = [];
@@ -16,7 +17,10 @@ async function staticDirectory() {
     "<!doctype html><title>Antler Web</title>",
   );
   await writeFile(join(directory, "assets", "app.js"), 'console.log("antler")');
-  await writeFile(join(directory, "sw.js"), "self.addEventListener('install', () => {});");
+  await writeFile(
+    join(directory, "sw.js"),
+    "self.addEventListener('install', () => {});",
+  );
   await writeFile(join(directory, "manifest.webmanifest"), '{"name":"Antler"}');
   return directory;
 }
@@ -30,7 +34,7 @@ afterEach(async () => {
 });
 
 describe("backend Web hosting", () => {
-  it("exposes the bundled RAG skill for Web workspaces without a user installation", async () => {
+  it("lists only platform skills over HTTP while bundled skills remain available to ordinary chat", async () => {
     const workspaceRoot = await staticDirectory();
     const app = createApp({
       host: "127.0.0.1",
@@ -41,6 +45,17 @@ describe("backend Web hosting", () => {
       model: "test-model",
       maxRunDurationMs: 1_000,
     });
+    // This test app has no databaseUrl; apply migrations to its embedded database.
+    const { readFile, readdir } = await import("node:fs/promises");
+    const migrations = new URL("../prisma/migrations/", import.meta.url);
+    for (const dir of (await readdir(migrations)).sort()) {
+      const sql = await readFile(
+        new URL(`${dir}/migration.sql`, migrations),
+        "utf8",
+      ).catch(() => "");
+      for (const statement of sql.split(";").filter((s) => s.trim()))
+        await app.prisma.$executeRawUnsafe(statement);
+    }
     try {
       for (const url of [
         "/api/skills",
@@ -49,10 +64,17 @@ describe("backend Web hosting", () => {
         const response = await app.inject({ method: "GET", url });
         expect(response.statusCode).toBe(200);
         expect(response.json()).toMatchObject({
-          skills: [{ id: "antler-rag", scope: "bundled" }],
+          skills: [],
           diagnostics: [],
         });
       }
+      expect(
+        (
+          await new SkillRegistry(join(workspaceRoot, "no-user-skills")).list(
+            workspaceRoot,
+          )
+        ).skills.some((s) => s.id === "antler-rag"),
+      ).toBe(true);
     } finally {
       await app.close();
     }
@@ -72,12 +94,16 @@ describe("backend Web hosting", () => {
     const home = await app.inject({ method: "GET", url: "/" });
     expect(home.statusCode).toBe(200);
     expect(home.body).toContain("Antler Web");
-    expect(home.headers["cache-control"]).toBe("public, max-age=0, must-revalidate");
+    expect(home.headers["cache-control"]).toBe(
+      "public, max-age=0, must-revalidate",
+    );
 
     for (const url of ["/sw.js", "/manifest.webmanifest", "/index.html"]) {
       const response = await app.inject({ method: "GET", url });
       expect(response.statusCode).toBe(200);
-      expect(response.headers["cache-control"]).toBe("public, max-age=0, must-revalidate");
+      expect(response.headers["cache-control"]).toBe(
+        "public, max-age=0, must-revalidate",
+      );
     }
 
     const asset = await app.inject({ method: "GET", url: "/assets/app.js" });

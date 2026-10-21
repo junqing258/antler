@@ -17,17 +17,21 @@ enum RunStatus {
 }
 
 model Run {
-  id             String     @id
-  userId         String     @default("")
-  projectId      String
-  conversationId String
-  input          String
-  status         RunStatus  @default(queued)
-  errorCode      String?
-  createdAt      DateTime   @default(now())
-  startedAt      DateTime?
-  finishedAt     DateTime?
-  events         RunEvent[]
+  id                 String     @id
+  userId             String     @default("")
+  projectId          String
+  conversationId     String
+  agentId            String?
+  agentFingerprint   String?
+  skillPolicy        Json?
+  catalogFingerprint String?
+  input              String
+  status             RunStatus  @default(queued)
+  errorCode          String?
+  createdAt          DateTime   @default(now())
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  events             RunEvent[]
 
   @@index([projectId, createdAt])
   @@index([conversationId, createdAt])
@@ -63,22 +67,22 @@ enum TaskExecutionStatus {
 }
 
 model ScheduledTask {
-  id              String            @id @default(uuid())
-  userId          String            @default("")
-  name            String
-  description     String?
-  type            ScheduledTaskType
-  schedule        String            // cron 表达式或 "delay:毫秒"
-  enabled         Boolean           @default(true)
-  payload         Json
-  retryCount      Int               @default(0)
-  retryDelay      Int               @default(60000)  // 毫秒
-  timeout         Int               @default(300000) // 毫秒
-  runAt           DateTime?         // 一次性任务的预定执行时刻；NULL 表示非一次性或已领取
-  lastExecutedAt  DateTime?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  executions      TaskExecution[]
+  id             String            @id @default(uuid())
+  userId         String            @default("")
+  name           String
+  description    String?
+  type           ScheduledTaskType
+  schedule       String // cron 表达式或 "delay:毫秒"
+  enabled        Boolean           @default(true)
+  payload        Json
+  retryCount     Int               @default(0)
+  retryDelay     Int               @default(60000) // 毫秒
+  timeout        Int               @default(300000) // 毫秒
+  runAt          DateTime? // 一次性任务的预定执行时刻；NULL 表示非一次性或已领取
+  lastExecutedAt DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  executions     TaskExecution[]
 
   @@index([userId, createdAt])
   @@map("scheduled_tasks")
@@ -99,4 +103,63 @@ model TaskExecution {
 
   @@index([taskId, startedAt])
   @@map("task_executions")
+}
+
+enum AgentStatus {
+  draft
+  published
+}
+
+enum SkillState {
+  ready
+  broken
+  tampered
+}
+
+model Agent {
+  id           String       @id @default(uuid())
+  ownerId      String       @default("")
+  name         String
+  description  String
+  systemPrompt String
+  status       AgentStatus  @default(draft)
+  publishedAt  DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  skills       AgentSkill[]
+
+  @@index([status, publishedAt])
+  @@index([ownerId, updatedAt])
+  @@map("agents")
+}
+
+model AgentSkill {
+  agentId  String
+  skillId  String
+  agent    Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  skill    Skill  @relation(fields: [skillId], references: [id], onDelete: Restrict)
+  position Int    @default(0)
+
+  @@id([agentId, skillId])
+  @@index([skillId])
+  @@map("agent_skills")
+}
+
+model Skill {
+  id                     String       @id @default(uuid())
+  ownerId                String       @default("")
+  name                   String       @unique
+  description            String
+  directory              String
+  state                  SkillState   @default(ready)
+  disableModelInvocation Boolean      @default(false)
+  fileCount              Int
+  sizeBytes              Int
+  fingerprint            String
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  agents                 AgentSkill[]
+
+  @@index([ownerId, updatedAt])
+  @@map("skills")
 }

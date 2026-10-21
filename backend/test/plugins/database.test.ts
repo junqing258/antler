@@ -17,11 +17,19 @@ describe("database", () => {
   it("migrates without internal knowledge tables or enum types", async () => {
     const database = await schedulerDatabase();
     try {
-      const tables = await database.$queryRaw<{ tablename: string; rowsecurity: boolean }[]>`
+      const tables = await database.$queryRaw<
+        { tablename: string; rowsecurity: boolean }[]
+      >`
         SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname = 'public'
       `;
       expect(tables.map((table) => table.tablename).sort()).toEqual([
-        "run_events", "runs", "scheduled_tasks", "task_executions",
+        "agent_skills",
+        "agents",
+        "run_events",
+        "runs",
+        "scheduled_tasks",
+        "skills",
+        "task_executions",
       ]);
       expect(tables.every((table) => table.rowsecurity)).toBe(true);
       const types = await database.$queryRaw<{ typname: string }[]>`
@@ -32,5 +40,4 @@ describe("database", () => {
       await database.$disconnect();
     }
   });
-
 });

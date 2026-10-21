@@ -2,6 +2,8 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.spyOn(process, "loadEnvFile").mockImplementation(() => {});
+
 const projectRoot = fileURLToPath(new URL("../../..", import.meta.url));
 
 describe("backend workspace configuration", () => {
@@ -11,11 +13,14 @@ describe("backend workspace configuration", () => {
     ["1", false],
     ["TRUE", false],
     [undefined, false],
-  ])("enables scheduled scripts only for the explicit true setting (%s)", async (value, expected) => {
-    vi.stubEnv("ANTLER_SCHEDULER_ENABLE_SCRIPT", value);
-    const { config } = await import("../../src/config/env.js");
-    expect(config.schedulerEnableScript).toBe(expected);
-  });
+  ])(
+    "enables scheduled scripts only for the explicit true setting (%s)",
+    async (value, expected) => {
+      vi.stubEnv("ANTLER_SCHEDULER_ENABLE_SCRIPT", value);
+      const { config } = await import("../../src/config/env.js");
+      expect(config.schedulerEnableScript).toBe(expected);
+    },
+  );
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.resetModules();

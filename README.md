@@ -42,7 +42,7 @@ ANTLER_SUPABASE_URL=https://<project-ref>.supabase.co
 ```
 
 前端无需单独配置：启动时从 `GET /api/auth-config` 获取认证配置（含 Supabase URL 与 publishable key），随后在浏览器直连 Supabase 完成邮箱密码登录。`ANTLER_AUTH_MODE=supabase` 时本地开发与 Web 部署行为一致。
-数据隔离：`runs`、`scheduled_tasks`、`task_executions` 均记录归属用户；local 模式写入空字符串，查询不过滤。会话与项目仍保存在浏览器 IndexedDB，不随账号跨设备同步。已知约束：登录用户仍可指定服务器上任意绝对路径作为 Agent 工作目录，如需收紧应在网关或后续版本限制在 `ANTLER_WORKSPACE_ROOT` 之下。
+数据隔离：`runs`、`scheduled_tasks`、`task_executions` 均记录归属用户；local 模式写入空字符串，查询不过滤。会话仍保存在浏览器 IndexedDB，不随账号跨设备同步。已知约束：登录用户仍可指定服务器上任意绝对路径作为 Agent 工作目录，如需收紧应在网关或后续版本限制在 `ANTLER_WORKSPACE_ROOT` 之下。
 
 后端数据存放在 Postgres（推荐 Supabase）中，启动前必须设置 `DATABASE_URL` 指向 Postgres 连接串（应用运行可使用事务池化连接；`prisma migrate deploy` 需要直连或会话池化连接）。`ANTLER_WORKSPACE_ROOT` 仍决定 Agent 工作空间目录。修改 `backend/prisma/schema.prisma` 后，运行：
 
@@ -126,3 +126,19 @@ pnpm test
 ```
 
 内部 knowledge 模块已移除，初始化迁移不再创建知识库表。已部署的数据库在执行 `pnpm --filter @antler/server db:deploy` 后，会通过清理迁移删除旧的 7 张知识库表及相关枚举（包括其中的数据），运行记录和外部 RAG 配置保留。
+
+## Agent 平台
+
+首页可新建 Agent，编辑名称、描述、系统提示词并绑定平台技能，发布后对登录用户可见；作者可反复调试草稿、编辑、下线和删除。local 模式等价于本机单用户。聊天统一从 Agent 进入，会话历史按 Agent 展示，不再提供项目管理或普通聊天入口。旧聊天链接若已绑定 Agent 则跳转到对应 Agent，否则返回列表；旧本地数据保留，不自动改绑。
+
+技能库接受含 `SKILL.md` 和资源文件的 ZIP（压缩包最多 5 MiB、200 条目、解压总量 20 MiB、单文件 1 MiB，指令文件最多 64 KiB）。名称来自 frontmatter 且全局唯一；覆盖内容用 `PUT /api/skills/:id`，不可改名，无版本回滚。`disable-model-invocation: true` 可上传展示，但不能绑定。技能被引用时不可删除；错误响应只展示调用者可见的 Agent 引用。
+
+Agent 的技能是封闭集，不叠加本地技能。已发布 Agent 仍可直接编辑；提示词或技能内容变更后，旧会话下一轮返回 `agent_context_changed`，需新建会话；切换 Agent 返回 `agent_changed`。下线不打断进行中的运行，作者仍可续聊草稿，其他用户得到 404。定时任务保存时固化 Agent ID 与内容指纹，执行只允许 published；内容变化后须重新保存任务，并使用新会话。相关校验失败不自动重试。
+
+`ANTLER_PLATFORM_ROOT` 默认是仓库根的 `.antler-platform`，必须位于 `ANTLER_WORKSPACE_ROOT` 之外。服务启动将其设为 `0700`，平台目录必须单独备份。Docker 将主机 `platform/` 持久化挂载到 `/platform`，与 `workspace/` 分离；容器属主应与目录属主一致。原生依赖 `fs-ext` 提供操作系统文件锁，源码安装需要 Python、make 和 C++ 编译器（Docker 构建已安装）。v1 部署使用支持可靠 `flock` 的本地文件系统；支持 APFS/HFS、ext、XFS、Btrfs、ZFS、tmpfs/ramfs 和 Docker overlay；NFS/SMB 及未识别文件系统拒绝启动。
+
+v1 **仅支持单 backend 实例**。启动先取得平台根的操作系统独占文件锁；PostgreSQL 另用独立 `pg.Client` 持有固定 session advisory lock，不能使用事务池连接。Prisma 池重建不会释放该独立连接的锁；持锁连接丢失会停止服务并以失败状态退出。PGlite 跳过数据库锁，但仍需文件锁。取得锁后才恢复未完成更新、清理 staging、隔离孤儿目录和检查技能完整性，随后启动调度器与 HTTP。部署必须先停旧实例再启动新实例，禁止滚动重叠；`DEPLOY_DRY_RUN=1 scripts/deploy-apps-ssh.sh` 可只检查环境合并，不访问远端。
+
+`read` / `write` / `edit` 对平台根进行路径拒绝，技能资源读取限制在单技能目录内。**bash 没有文件系统沙箱**，仍可访问进程用户可访问的绝对路径；`0700` 不能隔离同一用户启动的 bash。每轮运行前检查整个技能目录摘要，发现变化标记为 `tampered` 并拒绝运行，缺失或损坏标记为 `broken`；作者重新上传同一技能可恢复。真正隔离需在部署层让 bash 使用另一个用户或容器。运行持有技能读租约直到工具执行结束，覆盖更新与删除等待租约释放。
+
+升级前没有技能上下文的普通聊天，首次成功续聊建立技能基线；此后重启也严格校验。无法据此检测升级前的技能变化。历史空属主或多属主冲突会话在 supabase 模式下拒绝自动认领，需明确迁移。`/api/runs` 不再要求 `projectId`；数据库中的旧项目字段仅为历史兼容保留，不参与会话组织。

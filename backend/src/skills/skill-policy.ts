@@ -20,6 +20,7 @@ export function createSkillSnapshot(
       workspaceRoot,
       policy,
       catalogFingerprint: "sha256:disabled",
+      contextFingerprint: "sha256:disabled",
       skills: [],
       diagnostics: [],
     };
@@ -31,7 +32,7 @@ export function createSkillSnapshot(
     .map((id) => catalog.skills.find((s) => s.id === id))
     .filter(Boolean) as LoadedSkill[];
   if (skills.length !== requested.length) throw new SkillPolicyError();
-  return {
+  const snapshot = {
     workspaceRoot,
     policy,
     skills,
@@ -45,4 +46,23 @@ export function createSkillSnapshot(
       )
       .digest("hex")}`,
   };
+  return { ...snapshot, contextFingerprint: snapshot.catalogFingerprint };
+}
+
+export function normalizeSkillPolicy(value: unknown): SkillPolicy {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("invalid_skill_context");
+  const p = value as { mode?: unknown; skillIds?: unknown };
+  if ((p.mode === "auto" || p.mode === "disabled") && p.skillIds === undefined)
+    return { mode: p.mode };
+  if (
+    p.mode === "selected" &&
+    Array.isArray(p.skillIds) &&
+    p.skillIds.every((id) => typeof id === "string" && id)
+  )
+    return {
+      mode: "selected",
+      skillIds: [...new Set(p.skillIds as string[])].sort(),
+    };
+  throw new Error("invalid_skill_context");
 }

@@ -18,6 +18,8 @@ export interface HttpTaskPayload {
 }
 
 export interface ServiceTaskPayload {
+  agentId?: string;
+  agentFingerprint?: string;
   service: string;
   method: string;
   args?: unknown[];
@@ -71,6 +73,8 @@ export interface TaskListResult {
 }
 
 export interface ExecutionResult {
+  errorCode?: string;
+  retryable?: boolean;
   success: boolean;
   data?: unknown;
   error?: string;
@@ -86,4 +90,13 @@ export class TaskNotFoundError extends Error {
   constructor() {
     super("任务不存在");
   }
+}
+
+export function hasFrozenAgentFields(payload: ServiceTaskPayload) {
+  return (
+    typeof payload.agentId === "string" &&
+    !!payload.agentId.trim() &&
+    typeof payload.agentFingerprint === "string" &&
+    !!payload.agentFingerprint.trim()
+  );
 }

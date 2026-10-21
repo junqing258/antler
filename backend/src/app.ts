@@ -1,3 +1,12 @@
+import { createHash } from "node:crypto";
+import { PlatformService, type RunAgentContext } from "./platform/service.js";
+import { PlatformError } from "./platform/errors.js";
+import { acquireStorageLock } from "./platform/storage-lock.js";
+import { registerAgentRoutes } from "./routes/agents.js";
+import {
+  hasFrozenAgentFields,
+  type ServiceTaskPayload,
+} from "./scheduler/types.js";
 import Fastify from "fastify";
 import fastifyCompress from "@fastify/compress";
 import fastifyStatic from "@fastify/static";
@@ -19,7 +28,10 @@ import { basename, resolve } from "node:path";
 import { SkillRegistry } from "./skills/skill-registry.js";
 import { registerSkillRoutes } from "./routes/skills.js";
 import { registerDirectoryRoutes } from "./routes/directories.js";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { registerDatabase } from "./plugins/database.js";
 import { PrismaRunStore } from "./runs/run-store.js";
 import { registerConfigRoutes } from "./routes/config.js";
@@ -35,16 +47,45 @@ import { currentRunUserId } from "./run-context.js";
 
 export function createApp(config: AppConfig) {
   mkdirSync(config.workspaceRoot, { recursive: true });
+  // Schema-free embedded apps have ephemeral storage just like their in-memory database.
+  const ephemeralPlatform =
+    !config.databaseUrl && !config.platformRoot
+      ? mkdtempSync(join(tmpdir(), "antler-platform-memory-"))
+      : undefined;
+  const platformRoot = resolve(
+    config.platformRoot ??
+      ephemeralPlatform ??
+      resolve(config.workspaceRoot, "../.antler-platform"),
+  );
+  const authMode = config.authMode ?? "local";
   const ragConfig = new RagConfigStore(config, config.workspaceRoot);
   const app = Fastify({ logger: false, genReqId: createRequestId });
+  app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof PlatformError)
+      return reply
+        .code(error.statusCode)
+        .send({ error: error.code, ...error.details });
+    const status = (error as { statusCode?: number }).statusCode ?? 500;
+    return reply.code(status).send({
+      error: status >= 500 ? "internal_error" : (error as Error).message,
+    });
+  });
   registerRequestTracing(app);
   registerRequestLogging(app);
   let scheduler: CronScheduler | undefined;
-  registerDatabase(app, config.databaseUrl, async () => scheduler?.stop());
+  let releaseStorage: (() => Promise<void>) | undefined;
+  registerDatabase(app, config.databaseUrl, async () => {
+    await scheduler?.stop();
+    await runtime.stop();
+    await releaseStorage?.();
+    if (ephemeralPlatform)
+      await rm(ephemeralPlatform, { recursive: true, force: true });
+  });
   const adapters = new Map<string, PiAgentAdapter>();
   const createAdapter = (
     provider?: ProviderRunConfig,
     workingDirectory?: string,
+    agent?: RunAgentContext,
   ) => {
     const runtimeConfig = provider
       ? {
@@ -79,7 +120,13 @@ export function createApp(config: AppConfig) {
           anthropicBaseUrl: config.anthropicBaseUrl,
         };
     const workspaceRoot = resolve(workingDirectory ?? config.workspaceRoot);
-    const key = JSON.stringify({ ...runtimeConfig, workspaceRoot });
+    const systemPrompt = agent?.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
+    const key = JSON.stringify({
+      ...runtimeConfig,
+      workspaceRoot,
+      agentId: agent?.agentId,
+      promptHash: createHash("sha256").update(systemPrompt).digest("hex"),
+    });
     let adapter = adapters.get(key);
     if (!adapter) {
       adapter = new PiAgentAdapter({
@@ -88,8 +135,9 @@ export function createApp(config: AppConfig) {
         smtp: config.smtp,
         getToolEnvironment: () => ragConfig.environment(),
         workspaceRoot,
+        platformRoot,
         requestTimeoutMs: config.maxRunDurationMs,
-        systemPrompt: DEFAULT_SYSTEM_PROMPT,
+        systemPrompt,
         schedulerService,
       });
       adapters.set(key, adapter);
@@ -97,37 +145,70 @@ export function createApp(config: AppConfig) {
     return adapter;
   };
   const skillRegistry = new SkillRegistry(config.agentsDir);
+  const fatal = () => {
+    console.error(
+      "Agent platform storage lock lost or commit outcome uncertain; stopping backend.",
+    );
+    platform.halt();
+    void runtime.stop();
+    const deadline = setTimeout(() => process.exit(1), 5000);
+    deadline.unref();
+    void app.close().finally(() => process.exit(1));
+  };
+  const platform = new PlatformService(
+    app.prisma,
+    platformRoot,
+    skillRegistry,
+    fatal,
+  );
   const runtime = new AntlerHostRuntime(
     createAdapter,
-    { maxRunDurationMs: config.maxRunDurationMs, maxEvents: 10_000 },
+    { maxRunDurationMs: config.maxRunDurationMs, maxEvents: 10_000, authMode },
     skillRegistry,
     new PrismaRunStore(app.prisma),
+    platform,
   );
   // Test-only in-memory apps do not run migrations. Normal server startup has
   // a configured SQLite file and marks any process-interrupted run terminal
   // before serving replay requests.
-  if (config.databaseUrl)
-    app.addHook("onReady", () => runtime.recoverInterrupted());
+  app.addHook("onReady", async () => {
+    releaseStorage = await acquireStorageLock(
+      platformRoot,
+      config.workspaceRoot,
+      config.databaseUrl,
+      fatal,
+    );
+    if (config.databaseUrl) {
+      await platform.recover();
+      await platform.ensureBuiltinAgents();
+      await runtime.recoverInterrupted();
+    }
+  });
   const taskService = new TaskService(runtime);
   const serviceRegistry: ServiceRegistry = new Map([
     [
       "taskService",
       {
-        // The executor appends AbortSignal; strip it before forwarding optional arguments.
-        // The owner user arrives through the run context (see executor.withRunContext).
-        create: (...args: unknown[]) => {
-          const [message, conversationId] = args.slice(0, -1);
+        create: (payload: ServiceTaskPayload, signal: AbortSignal) => {
+          signal.throwIfAborted();
+          const [message, conversationId] = payload.args ?? [];
           if (
             typeof message !== "string" ||
             !message.trim() ||
             (conversationId !== undefined && typeof conversationId !== "string")
-          ) {
+          )
             throw new Error("taskService.create 参数无效");
-          }
           return taskService.create(
             message,
             conversationId,
             currentRunUserId(),
+            payload.agentId,
+            {
+              expectedAgentFingerprint: payload.agentFingerprint,
+              requirePublished: true,
+              requireFrozenAgentFields: true,
+              frozenAgentFieldsPresent: hasFrozenAgentFields(payload),
+            },
           );
         },
         get: (...args: unknown[]) => {
@@ -149,13 +230,19 @@ export function createApp(config: AppConfig) {
   );
   // Schema-free in-memory test apps omit databaseUrl, just like run recovery above.
   if (config.databaseUrl) app.addHook("onReady", () => scheduler!.start());
-  const schedulerService = new SchedulerService(app.prisma, scheduler);
+  const schedulerService = new SchedulerService(
+    app.prisma,
+    scheduler,
+    (conversationId, agentId, userId) =>
+      runtime.freezeAgent(conversationId, agentId, userId),
+  );
 
   registerHttpHooks(app, config);
   registerHealthRoutes(app);
   registerTaskRoutes(app, taskService);
   registerRunRoutes(app, runtime);
-  registerSkillRoutes(app, skillRegistry);
+  registerSkillRoutes(app, platform, authMode);
+  registerAgentRoutes(app, platform, authMode);
   registerDirectoryRoutes(app, config.workspaceRoot);
   registerConfigRoutes(app, ragConfig, config);
   registerAuthConfigRoutes(app, config);
@@ -170,7 +257,11 @@ export function createApp(config: AppConfig) {
       immutable: true,
       setHeaders(reply, path) {
         // These stable URLs must be revalidated to discover new app versions.
-        if (["sw.js", "manifest.webmanifest", "index.html"].includes(basename(path)))
+        if (
+          ["sw.js", "manifest.webmanifest", "index.html"].includes(
+            basename(path),
+          )
+        )
           reply.header("cache-control", "public, max-age=0, must-revalidate");
       },
     });

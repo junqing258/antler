@@ -27,7 +27,7 @@ function DrawerContent({
           )}
           {...props}
         >
-          <DialogTitle className="sr-only">项目与会话导航</DialogTitle>
+          <DialogTitle className="sr-only">会话导航</DialogTitle>
           <DialogClose
             className="absolute right-2 top-[max(16px,env(safe-area-inset-top))] z-10 grid size-10 place-items-center rounded-lg text-[#777] hover:bg-[#eaeaea] focus-visible:outline-2 focus-visible:outline-primary"
             aria-label="关闭导航"

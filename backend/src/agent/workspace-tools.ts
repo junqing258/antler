@@ -32,10 +32,16 @@ async function workspacePath(
   workspaceRoot: string,
   path: string,
   allowMissing = false,
+  platformRoot?: string,
 ) {
   if (!path.trim()) throw new Error("Path must not be empty.");
   const candidate = resolve(workspaceRoot, path);
   assertSafeFilePath(candidate);
+  if (
+    platformRoot &&
+    (candidate === platformRoot || candidate.startsWith(`${platformRoot}/`))
+  )
+    throw new Error("platform_path_denied");
   if (
     isAbsolute(path) ||
     relative(workspaceRoot, candidate).startsWith("..") ||
@@ -49,6 +55,13 @@ async function workspacePath(
     : candidate;
   const actual = await realpath(existing);
   assertSafeFilePath(actual);
+  if (platformRoot) {
+    const platform = await realpath(platformRoot).catch(() =>
+      resolve(platformRoot),
+    );
+    if (actual === platform || actual.startsWith(`${platform}/`))
+      throw new Error("platform_path_denied");
+  }
   const root = await realpath(workspaceRoot);
   if (actual !== root && !actual.startsWith(`${root}/`)) {
     throw new Error("Path resolves outside the workspace.");
@@ -139,6 +152,7 @@ export function createWorkspaceTools(
   workspaceRoot: string,
   getEnvironment?: () => NodeJS.ProcessEnv,
   guard = new SecretGuard(workspaceRoot, getEnvironment),
+  platformRoot?: string,
 ) {
   const root = resolve(workspaceRoot);
   const tools = [
@@ -149,7 +163,7 @@ export function createWorkspaceTools(
         "Read a UTF-8 file or list a directory inside the workspace. Paths must be relative to the workspace.",
       parameters: readParameters,
       async execute(_id: string, { path, startLine, endLine }: ReadInput) {
-        const target = await workspacePath(root, path);
+        const target = await workspacePath(root, path, false, platformRoot);
         const info = await stat(target);
         if (info.isDirectory()) {
           const entries = await readdir(target, { withFileTypes: true });
@@ -185,7 +199,7 @@ export function createWorkspaceTools(
       description: "Create or overwrite a UTF-8 file inside the workspace.",
       parameters: writeParameters,
       async execute(_id: string, { path, content }: WriteInput) {
-        const target = await workspacePath(root, path, true);
+        const target = await workspacePath(root, path, true, platformRoot);
         await mkdir(dirname(target), { recursive: true });
         await writeFile(target, content, "utf8");
         return textResult(`Wrote ${content.length} characters to ${path}.`);
@@ -198,7 +212,7 @@ export function createWorkspaceTools(
         "Replace one exact, unique text fragment in a UTF-8 workspace file.",
       parameters: editParameters,
       async execute(_id: string, { path, oldText, newText }: EditInput) {
-        const target = await workspacePath(root, path);
+        const target = await workspacePath(root, path, false, platformRoot);
         const content = await readFile(target, "utf8");
         const first = content.indexOf(oldText);
         if (first === -1) throw new Error("oldText was not found in the file.");
@@ -217,8 +231,7 @@ export function createWorkspaceTools(
     {
       name: "bash",
       label: "Run bash command",
-      description:
-        `Run a bash command in a new shell starting at workspace directory ${JSON.stringify(root)}. Every call starts here; cd in a previous call does not persist. Use workspace-relative paths, and check pwd and existing project files before changing directories or creating a project folder. Commands cannot directly access environment or credential files, including .env.example. Use for builds, tests, and other development commands.`,
+      description: `Run a bash command in a new shell starting at workspace directory ${JSON.stringify(root)}. Every call starts here; cd in a previous call does not persist. Use workspace-relative paths, and check pwd and existing project files before changing directories or creating a project folder. Commands cannot directly access environment or credential files, including .env.example. Use for builds, tests, and other development commands.`,
       parameters: bashParameters,
       async execute(
         _id: string,

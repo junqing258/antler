@@ -1,3 +1,4 @@
+import { PlatformError } from "../platform/errors.js";
 import type { FastifyInstance } from "fastify";
 import type { TaskService } from "../services/task-service.js";
 import { ConversationBusyError } from "../agent/host-runtime.js";
@@ -8,9 +9,10 @@ export function registerTaskRoutes(
   taskService: TaskService,
 ) {
   app.post("/api/tasks", async (request, reply) => {
-    const { message, conversationId } = (request.body ?? {}) as {
+    const { message, conversationId, agentId } = (request.body ?? {}) as {
       message?: unknown;
       conversationId?: unknown;
+      agentId?: unknown;
     };
     if (typeof message !== "string" || !message.trim()) {
       return reply.code(400).send({ error: "message 不能为空。" });
@@ -23,11 +25,14 @@ export function registerTaskRoutes(
       return reply
         .code(400)
         .send({ error: "conversationId 必须是非空字符串。" });
+    if (agentId !== undefined && (typeof agentId !== "string" || !agentId))
+      return reply.code(400).send({ error: "agentId 无效" });
     try {
       const task = await taskService.create(
         message,
         conversationId,
         request.antlerUser?.id,
+        agentId,
       );
       return reply.code(202).send({
         taskId: task.id,
@@ -36,6 +41,8 @@ export function registerTaskRoutes(
         eventsUrl: `/api/tasks/${task.id}/events`,
       });
     } catch (error) {
+      if (error instanceof PlatformError)
+        return reply.code(error.statusCode).send({ error: error.code });
       if (error instanceof ConversationBusyError)
         return reply.code(409).send({ error: "conversation_busy" });
       throw error;

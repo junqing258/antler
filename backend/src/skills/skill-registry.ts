@@ -1,3 +1,5 @@
+import { directoryFingerprint } from "./directory-fingerprint.js";
+import type { PlatformSkillRow } from "./types.js";
 import { createHash } from "node:crypto";
 import { lstat, open, readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -54,6 +56,65 @@ export class SkillRegistry {
       new URL("../../skills/", import.meta.url),
     ),
   ) {}
+  async listPlatform(rows: PlatformSkillRow[]) {
+    const skills: LoadedSkill[] = [];
+    const diagnostics: SkillDiagnostic[] = [];
+    for (const row of rows) {
+      try {
+        const directory = await realpath(row.directory);
+        const summary = await directoryFingerprint(row.directory);
+        if (summary.fingerprint !== row.fingerprint)
+          throw new Error("tampered");
+        const filePath = join(directory, "SKILL.md");
+        const raw = await readSkillFile(filePath, directory);
+        const skill = parseSkill(raw, row.name, filePath);
+        if (
+          skill.description !== row.description ||
+          (row.disableModelInvocation !== undefined &&
+            skill.disableModelInvocation !== row.disableModelInvocation)
+        )
+          throw new Error("broken");
+        const matcher = ignore();
+        for (const name of [".gitignore", ".skillignore"]) {
+          try {
+            matcher.add(await readSkillFile(join(directory, name), directory));
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          }
+        }
+        if (matcher.ignores("SKILL.md")) throw new Error("broken");
+        if (skill.disableModelInvocation) {
+          diagnostics.push({
+            code: "skill_not_bindable",
+            name: row.name,
+            scope: "platform",
+            message: "Skill 禁止模型调用。",
+          });
+          continue;
+        }
+        skills.push({
+          id: row.name,
+          skill,
+          scope: "platform",
+          directory,
+          modelUri: `skill://${row.name}/SKILL.md`,
+          fingerprint: digest(raw),
+          directoryFingerprint: summary.fingerprint,
+        });
+      } catch (error) {
+        diagnostics.push({
+          code:
+            error instanceof Error && error.message === "tampered"
+              ? "tampered"
+              : "broken",
+          name: row.name,
+          scope: "platform",
+          message: "平台 Skill 完整性校验失败。",
+        });
+      }
+    }
+    return { skills, diagnostics };
+  }
   async list(workspaceRoot?: string) {
     const roots: Array<{ scope: SkillScope; root: string }> = [
       { scope: "user", root: join(this.agentsDir, "skills") },

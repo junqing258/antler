@@ -16,6 +16,7 @@ DEPLOY_BACKEND_IMAGE_REPO="${DEPLOY_BACKEND_IMAGE_REPO:-antler/backend}"
 DEPLOY_BACKEND_IMAGE_REF="${DEPLOY_BACKEND_IMAGE_REPO}:${DEPLOY_IMAGE_TAG}"
 DEPLOY_PLATFORM="${DEPLOY_PLATFORM:-}"
 DEPLOY_DEBUG="${DEPLOY_DEBUG:-0}"
+DEPLOY_DRY_RUN="${DEPLOY_DRY_RUN:-0}"
 DEPLOY_GZIP_LEVEL="${DEPLOY_GZIP_LEVEL:-1}"
 
 # macOS bsdtar 默认把扩展属性和 AppleDouble 元数据写进归档，远端 GNU tar 解包时
@@ -50,6 +51,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   DEPLOY_IMAGE_TAG          镜像标签；默认当前 Git 短 SHA
   DEPLOY_BACKEND_IMAGE_REPO backend 镜像名；默认 antler/backend
   DEPLOY_PLATFORM           目标平台；为空时从远端 uname 自动识别
+  DEPLOY_DRY_RUN            设为 1 只检查配置合并和持久化目录，不连接远端或构建镜像
   DEPLOY_DEBUG              设为 1 输出调试命令
   DEPLOY_GZIP_LEVEL         gzip 压缩级别（1-9）；默认 1，以传输速度优先
 
@@ -154,21 +156,23 @@ detect_platform() {
   esac
 }
 
-require_command docker
-require_command ssh
-require_command scp
-require_command gzip
-require_command pv
-require_command git
-require_command tar
 require_file "$DEPLOY_ENV_FILE"
 require_file "$DEPLOY_COMPOSE_FILE"
 if [[ "$DEPLOY_ENVIRONMENT" != "deploy" ]]; then
   require_file "$DEPLOY_ENV_OVERRIDE_FILE"
 fi
-if ! docker buildx version >/dev/null 2>&1; then
-  echo "构建目标平台镜像需要 docker buildx" >&2
-  exit 1
+if [[ "$DEPLOY_DRY_RUN" != "1" ]]; then
+  require_command docker
+  require_command ssh
+  require_command scp
+  require_command gzip
+  require_command pv
+  require_command git
+  require_command tar
+  if ! docker buildx version >/dev/null 2>&1; then
+    echo "构建目标平台镜像需要 docker buildx" >&2
+    exit 1
+  fi
 fi
 if [[ ! "$DEPLOY_GZIP_LEVEL" =~ ^[1-9]$ ]]; then
   echo "DEPLOY_GZIP_LEVEL 必须是 1 到 9 之间的整数：$DEPLOY_GZIP_LEVEL" >&2
@@ -200,6 +204,16 @@ merge_env_files "${env_sources[@]}" \
   | grep -Ev '^ANTLER_BACKEND_IMAGE=' > "$tmp_env_file" || true
 printf '\nANTLER_BACKEND_IMAGE=%s\n' "$DEPLOY_BACKEND_IMAGE_REF" >> "$tmp_env_file"
 
+if [[ "$DEPLOY_DRY_RUN" == "1" ]]; then
+  platform_root="$(read_env_file_value "$tmp_env_file" ANTLER_PLATFORM_ROOT || printf /platform)"
+  if [[ "$platform_root" != "/platform" ]]; then
+    echo "Compose 的持久化平台目录固定为 /platform，请同步修改配置与卷映射" >&2
+    exit 1
+  fi
+  printf '%s\n' "配置合并检查通过；持久化目录 workspace/、platform/；容器平台根 /platform；更新顺序 stop → up。"
+  exit 0
+fi
+
 log_step "检查远端 Docker Compose：$DEPLOY_SSH_TARGET"
 remote_sh "docker compose version >/dev/null && docker image load --help >/dev/null"
 
@@ -226,7 +240,7 @@ docker run --rm --network none --platform "$DEPLOY_PLATFORM" \
   'python3 --version; python3 -m pip --version; pip --version; uv --version; python3 -m pip check; python3 -c "import tushare; print(\"tushare\", tushare.__version__)"'
 
 log_step "创建远端目录并上传部署文件"
-remote_sh "mkdir -p $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR")/workspace"
+remote_sh "mkdir -p $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR")/workspace $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR")/platform && chmod 700 $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR")/platform"
 scp "$DEPLOY_COMPOSE_FILE" "$DEPLOY_SSH_TARGET:$DEPLOY_REMOTE_DIR/docker-compose.remote.yml"
 scp "$tmp_env_file" "$DEPLOY_SSH_TARGET:$DEPLOY_REMOTE_DIR/.env"
 
@@ -240,6 +254,9 @@ docker save "$DEPLOY_BACKEND_IMAGE_REF" | gzip "-$DEPLOY_GZIP_LEVEL" > "$tmp_ima
 image_archive_size_bytes="$(wc -c < "$tmp_image_archive" | tr -d '[:space:]')"
 log_step "压缩归档大小 $(format_mib "$image_archive_size_bytes")；传输并导入远端 Docker（进度按归档实际大小计算）"
 transfer_image
+
+log_step "停止旧 backend（平台存储禁止新旧实例重叠运行）"
+remote_sh "cd $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR") && docker compose -f docker-compose.remote.yml --env-file .env stop backend"
 
 log_step "启动服务、移除旧 Web 容器并等待健康检查"
 if ! remote_sh "cd $(quote_for_remote_sh "$DEPLOY_REMOTE_DIR") && docker compose -f docker-compose.remote.yml --env-file .env up -d --force-recreate --remove-orphans --wait --wait-timeout 300"; then

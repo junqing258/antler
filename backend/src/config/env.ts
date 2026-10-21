@@ -29,6 +29,7 @@ export type AppConfig = {
   ragKey?: string;
   smtp?: SmtpConfig;
   workspaceRoot: string;
+  platformRoot?: string;
   staticDir?: string;
   model: string;
   maxRunDurationMs: number;
@@ -60,8 +61,7 @@ export const config: AppConfig = {
   host: process.env.ANTLER_HOST ?? "127.0.0.1",
   port: Number(process.env.ANTLER_PORT ?? 3210),
   accessToken: process.env.ANTLER_ACCESS_TOKEN,
-  authMode:
-    process.env.ANTLER_AUTH_MODE === "supabase" ? "supabase" : "local",
+  authMode: process.env.ANTLER_AUTH_MODE === "supabase" ? "supabase" : "local",
   supabaseUrl: process.env.ANTLER_SUPABASE_URL,
   supabasePublishableKey: process.env.ANTLER_SUPABASE_PUBLISHABLE_KEY,
   schedulerEnableScript: process.env.ANTLER_SCHEDULER_ENABLE_SCRIPT === "true",
@@ -75,6 +75,10 @@ export const config: AppConfig = {
   ragKey: process.env.ANTLER_RAG_KEY,
   smtp,
   workspaceRoot,
+  platformRoot: resolve(
+    projectRoot,
+    process.env.ANTLER_PLATFORM_ROOT ?? ".antler-platform",
+  ),
   staticDir: process.env.ANTLER_STATIC_DIR
     ? resolve(projectRoot, process.env.ANTLER_STATIC_DIR)
     : undefined,

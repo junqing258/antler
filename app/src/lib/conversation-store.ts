@@ -1,29 +1,17 @@
 import type { ThreadMessageLike } from "@assistant-ui/react";
-import { createUuid } from "@/lib/utils";
 
 const DATABASE_NAME = "antler";
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 const CONVERSATIONS_STORE = "conversations";
-const PROJECTS_STORE = "projects";
 
 // A runtime can finish its debounced save while the user is deleting that
 // conversation. Keep a short-lived tombstone so that stale saves cannot put
 // the just-deleted record back into IndexedDB.
 const deletedConversationIds = new Set<string>();
 
-export const DEFAULT_PROJECT_ID = "default";
-
-export type Project = {
-  id: string;
-  name: string;
-  workingDirectory: string;
-  createdAt: number;
-  updatedAt: number;
-};
-
 export type Conversation = {
+  agentId?: string;
   id: string;
-  projectId: string;
   title: string;
   createdAt: number;
   updatedAt: number;
@@ -32,7 +20,7 @@ export type Conversation = {
   isTitleGenerated?: boolean;
 };
 
-type StoredConversation = Omit<Conversation, "projectId"> & {
+type StoredConversation = Conversation & {
   projectId?: string;
 };
 
@@ -44,9 +32,6 @@ function openDatabase(): Promise<IDBDatabase> {
         request.result.createObjectStore(CONVERSATIONS_STORE, {
           keyPath: "id",
         });
-      }
-      if (!request.result.objectStoreNames.contains(PROJECTS_STORE)) {
-        request.result.createObjectStore(PROJECTS_STORE, { keyPath: "id" });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -77,10 +62,9 @@ async function withStore<T>(
 }
 
 function normalizeConversation(conversation: StoredConversation): Conversation {
-  return {
-    ...conversation,
-    projectId: conversation.projectId ?? DEFAULT_PROJECT_ID,
-  };
+  // Ignore legacy grouping metadata while preserving existing records on disk.
+  const { projectId: _legacyProjectId, ...current } = conversation;
+  return current;
 }
 
 function getMessageText(message: ThreadMessageLike) {
@@ -118,7 +102,10 @@ async function updateConversation(
   const database = await openDatabase();
   try {
     return await new Promise((resolve, reject) => {
-      const transaction = database.transaction(CONVERSATIONS_STORE, "readwrite");
+      const transaction = database.transaction(
+        CONVERSATIONS_STORE,
+        "readwrite",
+      );
       const store = transaction.objectStore(CONVERSATIONS_STORE);
       const request = store.get(id);
       let result: Conversation | undefined;
@@ -145,119 +132,14 @@ async function updateConversation(
   }
 }
 
-export async function ensureDefaultProject(): Promise<Project> {
-  const existing = await getProject(DEFAULT_PROJECT_ID);
-  if (existing) return existing;
-  const now = Date.now();
-  const project: Project = {
-    id: DEFAULT_PROJECT_ID,
-    name: "默认项目",
-    workingDirectory: "",
-    createdAt: now,
-    updatedAt: now,
-  };
-  await withStore(PROJECTS_STORE, "readwrite", (store) => store.put(project));
-  return project;
-}
-
-export function getProject(id: string): Promise<Project | undefined> {
-  return withStore(PROJECTS_STORE, "readonly", (store) => store.get(id));
-}
-
-export async function listProjects(): Promise<Project[]> {
-  await ensureDefaultProject();
-  const projects = await withStore<Project[]>(
-    PROJECTS_STORE,
-    "readonly",
-    (store) => store.getAll(),
-  );
-  return projects.sort((a, b) => {
-    if (a.id === DEFAULT_PROJECT_ID) return -1;
-    if (b.id === DEFAULT_PROJECT_ID) return 1;
-    return b.updatedAt - a.updatedAt;
-  });
-}
-
-export async function createProject(
-  name: string,
-  workingDirectory: string,
-): Promise<Project> {
-  const now = Date.now();
-  const project: Project = {
-    id: createUuid(),
-    name: name.trim(),
-    workingDirectory: workingDirectory.trim(),
-    createdAt: now,
-    updatedAt: now,
-  };
-  await withStore(PROJECTS_STORE, "readwrite", (store) => store.put(project));
-  return project;
-}
-
-export async function ensureWorkspaceProject(
-  name: string,
-  workingDirectory: string,
-): Promise<Project> {
-  const id = `workspace:${name}`;
-  const database = await openDatabase();
-  try {
-    return await new Promise<Project>((resolve, reject) => {
-      // Check and insert in one transaction, including concurrent startup calls.
-      const transaction = database.transaction(PROJECTS_STORE, "readwrite");
-      const store = transaction.objectStore(PROJECTS_STORE);
-      const request = store.getAll();
-      let project: Project;
-      request.onsuccess = () => {
-        const existing = (request.result as Project[]).find(
-          (item) => item.id === id || item.workingDirectory === workingDirectory,
-        );
-        const now = Date.now();
-        project = existing ?? {
-          id,
-          name,
-          workingDirectory,
-          createdAt: now,
-          updatedAt: now,
-        };
-        if (!existing) store.put(project);
-      };
-      transaction.oncomplete = () => resolve(project);
-      transaction.onerror = () =>
-        reject(transaction.error ?? new Error("无法初始化工作目录项目"));
-      transaction.onabort = () =>
-        reject(transaction.error ?? new Error("项目初始化已中止"));
-    });
-  } finally {
-    database.close();
-  }
-}
-
-export async function updateProject(
-  id: string,
-  changes: Pick<Project, "name" | "workingDirectory">,
-): Promise<Project> {
-  const current = await getProject(id);
-  if (!current) throw new Error("项目不存在");
-  const project: Project = {
-    ...current,
-    name: changes.name.trim(),
-    workingDirectory: changes.workingDirectory.trim(),
-    updatedAt: Date.now(),
-  };
-  await withStore(PROJECTS_STORE, "readwrite", (store) => store.put(project));
-  return project;
-}
-
 export async function ensureConversation(
   id: string,
-  projectId = DEFAULT_PROJECT_ID,
 ): Promise<Conversation> {
   const existing = await getConversation(id);
   if (existing) return existing;
   const now = Date.now();
   const conversation: Conversation = {
     id,
-    projectId,
     title: "新会话",
     createdAt: now,
     updatedAt: now,
@@ -283,7 +165,7 @@ export async function getConversation(
 export async function saveConversationMessages(
   id: string,
   messages: ThreadMessageLike[],
-  projectId = DEFAULT_PROJECT_ID,
+  agentId?: string,
 ): Promise<Conversation | undefined> {
   if (deletedConversationIds.has(id)) return undefined;
   return updateConversation(id, (current) => {
@@ -293,7 +175,7 @@ export async function saveConversationMessages(
     return {
       ...current,
       id,
-      projectId: current?.projectId ?? projectId,
+      agentId: current ? current.agentId : agentId,
       title: getTitle(
         messages,
         current?.title ?? "新会话",
@@ -330,14 +212,6 @@ export async function listConversations(): Promise<Conversation[]> {
     (store) => store.getAll(),
   );
   const conversations = stored.map(normalizeConversation);
-  const legacy = stored.filter((conversation) => !conversation.projectId);
-  await Promise.all(
-    legacy.map((conversation) =>
-      withStore(CONVERSATIONS_STORE, "readwrite", (store) =>
-        store.put(normalizeConversation(conversation)),
-      ),
-    ),
-  );
   return conversations.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
@@ -347,7 +221,12 @@ export async function renameConversation(
 ): Promise<Conversation> {
   const conversation = await updateConversation(id, (current) => {
     if (!current) throw new Error("会话不存在");
-    return { ...current, title, updatedAt: Date.now(), isTitleManuallySet: true };
+    return {
+      ...current,
+      title,
+      updatedAt: Date.now(),
+      isTitleManuallySet: true,
+    };
   });
   if (!conversation) throw new Error("会话不存在");
   return conversation;

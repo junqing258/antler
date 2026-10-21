@@ -1,4 +1,8 @@
-import type { AntlerHostRuntime, Run } from "../agent/host-runtime.js";
+import type {
+  AntlerHostRuntime,
+  Run,
+  RunAgentConstraints,
+} from "../agent/host-runtime.js";
 
 export class TaskService {
   constructor(readonly runtime: AntlerHostRuntime) {}
@@ -7,10 +11,13 @@ export class TaskService {
     message: string,
     conversationId?: string,
     userId?: string,
+    agentId?: string,
+    agentConstraints?: RunAgentConstraints,
   ): Promise<Run> {
     return this.runtime.createRun(message.trim(), {
       userId: userId || undefined,
-      projectId: "default",
+      agentId,
+      agentConstraints,
       conversationId,
     });
   }

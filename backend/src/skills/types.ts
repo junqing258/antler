@@ -6,7 +6,7 @@ export type Skill = {
   disableModelInvocation: boolean;
 };
 
-export type SkillScope = "workspace" | "user" | "bundled";
+export type SkillScope = "workspace" | "user" | "bundled" | "platform";
 export type LoadedSkill = {
   id: string;
   skill: Skill;
@@ -14,6 +14,7 @@ export type LoadedSkill = {
   directory: string;
   modelUri: string;
   fingerprint: string;
+  directoryFingerprint?: string;
 };
 export type SkillDiagnostic = {
   code: string;
@@ -29,6 +30,7 @@ export type SkillSnapshot = {
   workspaceRoot: string;
   policy: SkillPolicy;
   catalogFingerprint: string;
+  contextFingerprint: string;
   skills: readonly LoadedSkill[];
   diagnostics: readonly SkillDiagnostic[];
 };
@@ -36,6 +38,16 @@ export const DISABLED_SKILL_SNAPSHOT: SkillSnapshot = {
   workspaceRoot: "",
   policy: { mode: "disabled" },
   catalogFingerprint: "sha256:disabled",
+  contextFingerprint: "sha256:disabled",
   skills: [],
   diagnostics: [],
+};
+
+export type PlatformSkillRow = {
+  id: string;
+  name: string;
+  description: string;
+  directory: string;
+  fingerprint: string;
+  disableModelInvocation?: boolean;
 };

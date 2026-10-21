@@ -138,6 +138,34 @@ function completed(
 describe.each(["openai", "anthropic"] as const)(
   "Pi 1.1.0 %s adapter",
   (provider) => {
+    it("checks contextFingerprint independently of an unchanged skill catalog", async () => {
+      const { adapter, root } = await setup(provider);
+      streams[provider].mockImplementation((model) =>
+        completed(model, [{ type: "text", text: "Done." }], "stop"),
+      );
+      const snapshot = {
+        ...DISABLED_SKILL_SNAPSHOT,
+        workspaceRoot: root,
+        contextFingerprint: "agent-context-v1",
+      };
+      await adapter.run(
+        "first",
+        "context-test",
+        snapshot,
+        new AbortController().signal,
+        async () => {},
+      );
+      await expect(
+        adapter.run(
+          "next",
+          "context-test",
+          { ...snapshot, contextFingerprint: "agent-context-v2" },
+          new AbortController().signal,
+          async () => {},
+        ),
+      ).rejects.toMatchObject({ code: "agent_context_changed" });
+    });
+
     it("creates platform tasks through a real run and can submit the scheduled Agent run", async () => {
       const { root, file } = await migratedWorkspace();
       roots.push(root);
@@ -428,10 +456,20 @@ describe.each(["openai", "anthropic"] as const)(
       streams[provider].mockImplementation((model) =>
         completed(model, [{ type: "text", text: "Original answer" }]),
       );
-      await adapter.run("Original goal", "title", DISABLED_SKILL_SNAPSHOT, new AbortController().signal, () => {});
+      await adapter.run(
+        "Original goal",
+        "title",
+        DISABLED_SKILL_SNAPSHOT,
+        new AbortController().signal,
+        () => {},
+      );
       streams[provider].mockImplementation((model, context, options) => {
         expect(model.id).toBe(config.model);
-        expect(model.baseUrl).toBe(provider === "openai" ? config.openAiBaseUrl : config.anthropicBaseUrl);
+        expect(model.baseUrl).toBe(
+          provider === "openai"
+            ? config.openAiBaseUrl
+            : config.anthropicBaseUrl,
+        );
         expect(getCurrentTools(context.messages)).toEqual([]);
         expect(getCurrentSystemPrompt(context.messages)).toContain("简短标题");
         const transcript = JSON.stringify(context.messages);
@@ -442,34 +480,68 @@ describe.each(["openai", "anthropic"] as const)(
         expect(options?.maxTokens).toBe(128);
         if (provider === "openai") expect(options?.apiKey).toBe(secret);
         else expect(options?.headers?.Authorization).toBe(`Bearer ${secret}`);
-        return completed(model, [{ type: "text", text: `“主题概括 ${secret}”\n额外解释` }]);
+        return completed(model, [
+          { type: "text", text: `“主题概括 ${secret}”\n额外解释` },
+        ]);
       });
-      expect(await adapter.generateTitle("title", `用户主题 ${secret}${"a".repeat(3980)}${secret}end`, `助手回答 ${secret}${"b".repeat(7980)}${secret}end`, new AbortController().signal))
-        .toBe(`主题概括 ${REDACTED}`);
+      expect(
+        await adapter.generateTitle(
+          "title",
+          `用户主题 ${secret}${"a".repeat(3980)}${secret}end`,
+          `助手回答 ${secret}${"b".repeat(7980)}${secret}end`,
+          new AbortController().signal,
+        ),
+      ).toBe(`主题概括 ${REDACTED}`);
       streams[provider].mockImplementation((model, context) => {
         expect(JSON.stringify(context.messages)).toContain("Original goal");
         expect(JSON.stringify(context.messages)).toContain("Original answer");
         expect(JSON.stringify(context.messages)).not.toContain("用户主题");
-        expect(getCurrentTools(context.messages).map((tool) => tool.name)).toContain("read");
+        expect(
+          getCurrentTools(context.messages).map((tool) => tool.name),
+        ).toContain("read");
         return completed(model, [{ type: "text", text: "Continued." }]);
       });
-      await adapter.run("Continue", "title", DISABLED_SKILL_SNAPSHOT, new AbortController().signal, () => {});
+      await adapter.run(
+        "Continue",
+        "title",
+        DISABLED_SKILL_SNAPSHOT,
+        new AbortController().signal,
+        () => {},
+      );
     });
 
-    it.each(["empty", "error", "long", "abort"])("handles %s title generation", async (outcome) => {
-      const { adapter } = await setup(provider);
-      streams[provider].mockImplementation((model) => completed(model, [{ type: "text", text: "Answer" }]));
-      await adapter.run("Goal", "title", DISABLED_SKILL_SNAPSHOT, new AbortController().signal, () => {});
-      const controller = new AbortController();
-      streams[provider].mockImplementation((model) => {
-        if (outcome === "error") throw new Error(`Remote error ${secret}`);
-        if (outcome === "abort") controller.abort();
-        return completed(model, [{ type: "text", text: outcome === "long" ? "题".repeat(100) : "" }]);
-      });
-      const result = adapter.generateTitle("title", "Goal", "Answer", controller.signal);
-      if (outcome === "long") expect(await result).toBe("题".repeat(48));
-      else await expect(result).rejects.toThrow();
-    });
+    it.each(["empty", "error", "long", "abort"])(
+      "handles %s title generation",
+      async (outcome) => {
+        const { adapter } = await setup(provider);
+        streams[provider].mockImplementation((model) =>
+          completed(model, [{ type: "text", text: "Answer" }]),
+        );
+        await adapter.run(
+          "Goal",
+          "title",
+          DISABLED_SKILL_SNAPSHOT,
+          new AbortController().signal,
+          () => {},
+        );
+        const controller = new AbortController();
+        streams[provider].mockImplementation((model) => {
+          if (outcome === "error") throw new Error(`Remote error ${secret}`);
+          if (outcome === "abort") controller.abort();
+          return completed(model, [
+            { type: "text", text: outcome === "long" ? "题".repeat(100) : "" },
+          ]);
+        });
+        const result = adapter.generateTitle(
+          "title",
+          "Goal",
+          "Answer",
+          controller.signal,
+        );
+        if (outcome === "long") expect(await result).toBe("题".repeat(48));
+        else await expect(result).rejects.toThrow();
+      },
+    );
 
     it("compacts history and uses only the summary with original instructions/tools on the next run", async () => {
       const { adapter } = await setup(provider);

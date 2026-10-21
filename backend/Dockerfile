@@ -4,7 +4,9 @@ ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 # Corepack downloads pnpm before pnpm can read the registry in .npmrc.
 ENV COREPACK_NPM_REGISTRY=https://registry.npmmirror.com
-RUN corepack enable
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/* \
+  && corepack enable
 
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./

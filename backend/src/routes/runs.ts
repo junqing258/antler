@@ -1,3 +1,4 @@
+import { PlatformError } from "../platform/errors.js";
 import type { FastifyInstance } from "fastify";
 import {
   ConversationBusyError,
@@ -59,9 +60,9 @@ export function registerRunRoutes(
     async (request, reply) => {
       try {
         const title = await runtime.generateTitle(
-        request.params.runId,
-        request.antlerUser?.id,
-      );
+          request.params.runId,
+          request.antlerUser?.id,
+        );
         if (title === undefined)
           return reply.code(404).send({ error: "run 不存在或上下文已过期。" });
         return { title };
@@ -79,39 +80,39 @@ export function registerRunRoutes(
   app.post("/api/runs", async (request, reply) => {
     const {
       message,
-      projectId,
       conversationId,
       provider,
       workingDirectory,
       skillPolicy,
+      agentId,
     } = (request.body ?? {}) as {
       message?: unknown;
-      projectId?: unknown;
       conversationId?: unknown;
       provider?: unknown;
       workingDirectory?: unknown;
       skillPolicy?: unknown;
+      agentId?: unknown;
     };
     if (
       typeof message !== "string" ||
       !message.trim() ||
-      typeof projectId !== "string" ||
-      !projectId.trim() ||
       typeof conversationId !== "string" ||
       !conversationId
     )
       return reply
         .code(400)
-        .send({ error: "message、projectId 和 conversationId 均不能为空。" });
+        .send({ error: "message 和 conversationId 均不能为空。" });
     try {
+      if (agentId !== undefined && (typeof agentId !== "string" || !agentId))
+        return reply.code(400).send({ error: "agentId 无效" });
       const parsedPolicy = parseSkillPolicy(skillPolicy);
       const outcome = await runtime.createRunWithSkills(message.trim(), {
         userId: request.antlerUser?.id,
-        projectId: projectId.trim(),
         conversationId,
         provider: parseProvider(provider),
         workingDirectory: parseWorkingDirectory(workingDirectory),
         skillPolicy: parsedPolicy,
+        agentId,
       });
       const run = outcome.run;
       return reply.code(202).send({
@@ -120,6 +121,8 @@ export function registerRunRoutes(
         skillDiagnostics: outcome.skillDiagnostics,
       });
     } catch (error) {
+      if (error instanceof PlatformError)
+        return reply.code(error.statusCode).send({ error: error.code });
       if (error instanceof ConversationBusyError)
         return reply.code(409).send({ error: "conversation_busy" });
       if (

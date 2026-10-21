@@ -22,9 +22,9 @@ async function generateTitle(
   server: ServerInfo,
   runId: string,
   conversationId: string,
-  projectId: string,
   messages: ThreadMessageLike[],
   onConversationSaved: () => void,
+  agentId?: string,
 ) {
   if (pendingTitles.has(conversationId)) return;
   pendingTitles.add(conversationId);
@@ -32,11 +32,12 @@ async function generateTitle(
     const conversation = await saveConversationMessages(
       conversationId,
       messages,
-      projectId,
+      agentId,
     );
     if (!conversation) return;
     onConversationSaved();
-    if (conversation.isTitleManuallySet || conversation.isTitleGenerated) return;
+    if (conversation.isTitleManuallySet || conversation.isTitleGenerated)
+      return;
     const response = await fetch(`${server.baseUrl}/api/runs/${runId}/title`, {
       method: "POST",
       headers: authHeaders(server),
@@ -78,19 +79,19 @@ function getText(
 export function useAntlerRuntime(
   getServerInfo: () => Promise<ServerInfo>,
   conversationId: string,
-  projectId: string,
   workingDirectory: string,
   getProviderConfig: () => ProviderConfig,
   initialMessages: ThreadMessageLike[],
   onConversationSaved: () => void,
+  agentId?: string,
 ) {
   const adapter = useMemo<ChatModelAdapter>(
     () => ({
       async *run({ messages, abortSignal }) {
         const message = getText(messages.at(-1)!);
         if (!message.trim()) return;
-      let cancel: (() => void) | undefined;
-      const content: ThreadAssistantMessagePart[] = [];
+        let cancel: (() => void) | undefined;
+        const content: ThreadAssistantMessagePart[] = [];
         try {
           const server = await getServerInfo();
           const headers = {
@@ -109,7 +110,7 @@ export function useAntlerRuntime(
             body: JSON.stringify({
               message,
               conversationId,
-              projectId,
+              ...(agentId ? { agentId } : {}),
               ...(workingDirectory.trim() ? { workingDirectory } : {}),
               // Keep the existing environment-variable setup usable until the
               // user has saved a local provider key.
@@ -118,7 +119,13 @@ export function useAntlerRuntime(
             signal: abortSignal,
           });
           if (!created.ok) {
-            throw new Error(await responseError(created, "任务创建失败"));
+            const detail = await responseError(created, "任务创建失败");
+            throw new Error(
+              detail.includes("agent_context_changed") ||
+                detail.includes("agent_changed")
+                ? `${detail}：Agent 已变更，请新建会话。`
+                : detail,
+            );
           }
           const { eventsUrl, runId } = (await created.json()) as {
             eventsUrl: string;
@@ -200,7 +207,7 @@ export function useAntlerRuntime(
                 result?: unknown;
                 summary?: string;
                 isError?: boolean;
-              error?: { message?: string };
+                error?: { message?: string };
               };
               if (event === "run.failed") {
                 throw new Error(payload.error?.message ?? "任务执行失败");
@@ -211,12 +218,12 @@ export function useAntlerRuntime(
                   server,
                   runId,
                   conversationId,
-                  projectId,
                   [...messages, { role: "assistant", content: [...content] }],
                   onConversationSaved,
+                  agentId,
                 );
               }
-            if (event === "run.cancelled") return;
+              if (event === "run.cancelled") return;
               if (event === "assistant.delta" && payload.delta) {
                 appendText(payload.delta);
                 reasoningPartIndex = undefined;
@@ -282,9 +289,9 @@ export function useAntlerRuntime(
     }),
     [
       conversationId,
+      agentId,
       getProviderConfig,
       getServerInfo,
-      projectId,
       workingDirectory,
       onConversationSaved,
     ],
@@ -296,11 +303,13 @@ export function useAntlerRuntime(
     const persist = () => {
       const messages = runtime.thread.getState()
         .messages as ThreadMessageLike[];
-      void saveConversationMessages(conversationId, messages, projectId).then(
-        (conversation) => {
-          if (conversation) onConversationSaved();
-        },
-      );
+      void saveConversationMessages(
+        conversationId,
+        messages,
+        agentId,
+      ).then((conversation) => {
+        if (conversation) onConversationSaved();
+      });
     };
     const schedulePersist = () => {
       window.clearTimeout(timeout);
@@ -312,7 +321,7 @@ export function useAntlerRuntime(
       unsubscribe();
       persist();
     };
-  }, [conversationId, onConversationSaved, projectId, runtime]);
+  }, [conversationId, agentId, onConversationSaved, runtime]);
 
   return runtime;
 }

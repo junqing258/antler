@@ -10,6 +10,10 @@ export interface RunStore {
   transition(run: StoredRun, event: RunEvent): Promise<void>;
   appendEvent(event: RunEvent): Promise<void>;
   get(runId: string): Promise<StoredRun | undefined>;
+  getLatestByConversation?(
+    conversationId: string,
+  ): Promise<StoredRun | undefined>;
+  getConversationOwners?(conversationId: string): Promise<string[]>;
   getEvents(runId: string, afterSeq: number): Promise<RunEvent[]>;
   recoverInterrupted(): Promise<void>;
 }
@@ -32,6 +36,10 @@ export class PrismaRunStore implements RunStore {
         userId: run.userId,
         projectId: run.projectId,
         conversationId: run.conversationId,
+        agentId: run.agentId,
+        agentFingerprint: run.agentFingerprint,
+        skillPolicy: run.skillPolicy as Prisma.InputJsonValue | undefined,
+        catalogFingerprint: run.catalogFingerprint,
         input: run.input,
         status: run.status,
         createdAt: new Date(run.createdAt),
@@ -94,6 +102,10 @@ export class PrismaRunStore implements RunStore {
       userId: run.userId,
       projectId: run.projectId,
       conversationId: run.conversationId,
+      agentId: run.agentId,
+      agentFingerprint: run.agentFingerprint,
+      skillPolicy: run.skillPolicy,
+      catalogFingerprint: run.catalogFingerprint,
       input: run.input,
       status: toRunStatus(run.status),
       ...(run.errorCode ? { errorCode: run.errorCode } : {}),
@@ -103,6 +115,21 @@ export class PrismaRunStore implements RunStore {
     };
   }
 
+  async getLatestByConversation(conversationId: string) {
+    const row = await this.prisma.run.findFirst({
+      where: { conversationId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    return row ? this.get(row.id) : undefined;
+  }
+  async getConversationOwners(conversationId: string) {
+    const rows = await this.prisma.run.findMany({
+      where: { conversationId },
+      select: { userId: true },
+      distinct: ["userId"],
+    });
+    return rows.map((row) => row.userId);
+  }
   async getEvents(runId: string, afterSeq: number) {
     const events = await this.prisma.runEvent.findMany({
       where: { runId, seq: { gt: afterSeq } },

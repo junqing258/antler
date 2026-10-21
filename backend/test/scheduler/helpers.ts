@@ -28,7 +28,7 @@ export async function migratedWorkspace() {
   const root = await mkdtemp(join(tmpdir(), "antler-scheduler-"));
   const file = join(root, "antler.db");
   try {
-    (await schedulerDatabase(`file:${file}`)).$disconnect();
+    await (await schedulerDatabase(`file:${file}`)).$disconnect();
   } catch (error) {
     await rm(root, { recursive: true, force: true });
     throw error;
