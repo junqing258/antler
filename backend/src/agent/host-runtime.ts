@@ -16,6 +16,7 @@ import { DISABLED_SKILL_SNAPSHOT } from "../skills/types.js";
 import { SkillRegistry } from "../skills/skill-registry.js";
 import { createSkillSnapshot } from "../skills/skill-policy.js";
 import type { RunStore } from "../runs/run-store.js";
+import { RunEventBuffer } from "../runs/event-buffer.js";
 import { SecretGuard } from "./secret-guard.js";
 import { RunTracing } from "../telemetry/tracing.js";
 import { withRunContext } from "../run-context.js";
@@ -55,6 +56,7 @@ type ActiveRun = {
   controller: AbortController;
   events: RunEvent[];
   eventTail: Promise<void>;
+  eventBuffer: RunEventBuffer;
   listeners: Set<(event: RunEvent) => void>;
   timeout?: NodeJS.Timeout;
   adapter: PiAgentAdapter;
@@ -420,6 +422,10 @@ export class AntlerHostRuntime {
         controller: new AbortController(),
         events: [],
         eventTail: Promise.resolve(),
+        eventBuffer: new RunEventBuffer(async (events) => {
+          if (this.runStore?.appendEvents) await this.runStore.appendEvents(events);
+          else for (const event of events) await this.runStore?.appendEvent(event);
+        }),
         listeners: new Set(),
         adapter,
         secretGuard:
@@ -474,9 +480,15 @@ export class AntlerHostRuntime {
       throw error;
     }
   }
-  /** 优先读取已提交状态，避免 SSE 在终态事件落库之前提前关闭。 */
+  /** Live state remains readable even when database persistence fails. */
   async getRun(runId: string, userId?: string) {
-    const run = (await this.runStore?.get(runId)) ?? this.runs.get(runId)?.run;
+    const active = this.runs.get(runId);
+    const run = active ? { ...active.run } : await this.runStore?.get(runId);
+    // Do not close a reconnecting SSE stream before its terminal event exists.
+    if (run && active && isTerminalRunStatus(run.status) &&
+        !active.events.some((event) => ["run.completed", "run.failed", "run.cancelled"].includes(event.type))) {
+      run.status = "running";
+    }
     if (!run || (userId !== undefined && run.userId !== userId))
       return undefined;
     return run;
@@ -718,6 +730,7 @@ export class AntlerHostRuntime {
   ) {
     // 已进入终态的运行不重复收尾；尾部文本应先于终态事件发布。
     if (isTerminalRunStatus(active.run.status)) return;
+    if (active.timeout) clearTimeout(active.timeout);
     await this.flushStreams(active);
     const messages = active.adapter.exportContext?.(active.run.conversationId);
     if (messages) {
@@ -725,7 +738,9 @@ export class AntlerHostRuntime {
       this.modelContexts.set(active.run.conversationId, structuredClone(checkpoint));
       const safe = active.secretGuard.sanitize(checkpoint);
       const restorable = isDeepStrictEqual(safe, checkpoint);
-      await this.runStore?.saveCheckpoint?.(active.run.userId, active.run.conversationId, restorable ? checkpoint : { schemaVersion: 1, unavailable: true }, restorable ? "available" : "unavailable");
+      await this.runStore?.saveCheckpoint?.(active.run.userId, active.run.conversationId, restorable ? checkpoint : { schemaVersion: 1, unavailable: true }, restorable ? "available" : "unavailable").catch(() => {
+        console.warn(`[Runs] Checkpoint persistence failed for ${active.run.id}`);
+      });
     }
     if (active.timeout) clearTimeout(active.timeout);
     active.run.status = status;
@@ -762,10 +777,10 @@ export class AntlerHostRuntime {
       void titleJob.finally(() => this.executions.delete(titleJob));
     }
   }
-  /** 统一分配事件 ID、脱敏和持久化，保存完成后再通知实时订阅者。 */
+  /** Publish sanitized live events immediately; persistence is best effort. */
   private emit(active: ActiveRun, type: RunEventType, payload: Record<string, unknown>, isStateTransition = false) {
     const next = active.eventTail.then(() => this.emitInternal(active, type, payload, isStateTransition));
-    active.eventTail = next;
+    active.eventTail = next.catch(() => {});
     return next;
   }
   private async emitInternal(
@@ -798,9 +813,18 @@ export class AntlerHostRuntime {
       payload: safePayload,
       createdAt: new Date().toISOString(),
     };
-    // 状态迁移交由存储层同时保存运行记录与事件，普通事件只追加日志。
-    if (isStateTransition) await this.runStore?.transition(active.run, event);
-    else await this.runStore?.appendEvent(event);
+    if (isStateTransition) {
+      await active.eventBuffer.flush();
+      try {
+        await this.runStore?.transition(active.run, event);
+      } catch {
+        console.warn(`[Runs] State persistence failed for ${active.run.id} (${active.run.status})`);
+      }
+    } else {
+      active.eventBuffer.append(event);
+    }
+    // At boundaries, let successful writes become visible to history readers
+    // before publishing completion. A failed write still publishes the event.
     active.events.push(event);
     for (const listener of active.listeners) {
       try { listener(event); } catch { /* A disconnected consumer cannot break persistence. */ }

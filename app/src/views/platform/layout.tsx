@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { SettingsIcon } from "lucide-react";
 import { currentUserProfile } from "@/lib/auth";
 import { SettingsDialog, type SettingsTab } from "@/components/settings-dialog";
-import { loadProviderConfig, saveProviderConfig } from "@/lib/provider-config";
+import { loadProviderConfig, saveProviderConfig, subscribeProviderConfig } from "@/lib/provider-config";
 import { KnowledgeNavLink } from "@/components/knowledge-nav-link";
 export const control =
   "rounded-lg border border-[#ddd] bg-white px-3 py-2 text-sm focus:outline-primary disabled:opacity-40";
@@ -19,6 +19,7 @@ export function PlatformLayout({
 }) {
   const [settingsTab, setSettingsTab] = useState<SettingsTab>();
   const [providerConfig, setProviderConfig] = useState(loadProviderConfig);
+  useEffect(() => subscribeProviderConfig(() => setProviderConfig(loadProviderConfig())), []);
   const [profile, setProfile] = useState<Awaited<ReturnType<typeof currentUserProfile>>>();
   useEffect(() => {
     let cancelled = false;

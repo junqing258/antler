@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { schedulerDatabase } from "../scheduler/helpers.js";
@@ -10,6 +13,7 @@ import type { PiAgentAdapter } from "../../src/agent/pi-agent-adapter.js";
 import { SecretGuard } from "../../src/agent/secret-guard.js";
 let db: Awaited<ReturnType<typeof schedulerDatabase>>;
 let store: ConversationStore;
+let storageRoot: string;
 const runtimes: AntlerHostRuntime[] = [];
 const provider: ProviderRunConfig = {
   protocol: "openai-responses",
@@ -68,12 +72,14 @@ async function finish() {
 }
 beforeEach(async () => {
   db = await schedulerDatabase();
-  store = new ConversationStore(db);
+  storageRoot = await mkdtemp(join(tmpdir(), "antler-history-"));
+  store = new ConversationStore(db, storageRoot);
   adapters.length = 0;
 });
 afterEach(async () => {
   await Promise.all(runtimes.splice(0).map((r) => r.stop()));
   await db.$disconnect();
+  await rm(storageRoot, { recursive: true, force: true });
 });
 it("restores actual model checkpoints across runtime restart and valid credential rotation", async () => {
   const first = runtime();
@@ -86,6 +92,7 @@ it("restores actual model checkpoints across runtime restart and valid credentia
   });
   await finish();
   await first.stop();
+  store = new ConversationStore(db, storageRoot);
   const second = runtime();
   const revision = (await store.detail("alice", "thread"))!.revision;
   await second.createRunWithSkills("what color", {
@@ -154,7 +161,10 @@ it("keeps earlier credentials protected after rotating keys and degrades unsafe 
   await finish();
   const row = await db.conversation.findUnique({ where: { id: "thread" } });
   expect(row?.contextState).toBe("unavailable");
-  expect(JSON.stringify(row?.checkpoint)).not.toContain(provider.apiKey);
+  expect(row?.checkpoint).toBeNull();
+  expect(
+    JSON.stringify(await store.storage.checkpoint("alice", "thread")),
+  ).not.toContain(provider.apiKey);
   const restarted = runtime();
   await expect(
     restarted.createRunWithSkills("continue", {

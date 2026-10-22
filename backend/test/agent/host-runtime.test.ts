@@ -301,3 +301,49 @@ describe("AntlerHostRuntime secret protection", () => {
     ).toBe(`value: ${REDACTED}`);
   });
 });
+
+describe("best-effort message persistence", () => {
+  it("keeps streaming and publishes completion when batches, checkpoints and state writes fail", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const store: RunStore = {
+      create: vi.fn(async () => {}),
+      update: vi.fn(async () => {}),
+      transition: vi.fn(async () => { throw new Error("database unavailable"); }),
+      appendEvent: vi.fn(async () => {}),
+      appendEvents: vi.fn(async () => { throw new Error("database unavailable"); }),
+      saveCheckpoint: vi.fn(async () => { throw new Error("database unavailable"); }),
+      get: vi.fn(async () => { throw new Error("database unavailable"); }),
+      getEvents: vi.fn(async () => []),
+      recoverInterrupted: vi.fn(async () => {}),
+    };
+    const adapter = {
+      exportContext: () => [],
+      run: async (_input: string, _id: string, _snapshot: unknown, _signal: AbortSignal, emit: (event: AgentEvent) => Promise<void>) => {
+        for (let i = 0; i < 100; i++) {
+          await emit({
+            type: "message_update",
+            assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "hello " },
+          } as AgentEvent);
+        }
+      },
+    } as unknown as PiAgentAdapter;
+    const host = new AntlerHostRuntime(() => adapter, { maxRunDurationMs: 5_000, maxEvents: 1_000 }, undefined, store);
+    try {
+      const run = await host.createRun("hello", { conversationId: "thread" });
+      const live: RunEvent[] = [];
+      host.subscribe(run.id, (event) => live.push(event));
+      await vi.waitFor(async () => expect((await host.getEvents(run.id)).at(-1)?.type).toBe("run.completed"));
+      await host.stop();
+      expect((await host.getRun(run.id))?.status).toBe("succeeded");
+      expect(live.at(-1)?.type).toBe("run.completed");
+      expect((await host.getEvents(run.id)).filter((event) => event.type === "assistant.delta").map((event) => event.payload.delta).join("")).toBe("hello ".repeat(100));
+      expect(store.appendEvent).not.toHaveBeenCalled();
+      expect(store.appendEvents).toHaveBeenCalledTimes(1);
+      expect(store.transition).toHaveBeenCalledTimes(2);
+      expect(store.get).not.toHaveBeenCalled();
+    } finally {
+      await host.stop();
+      warning.mockRestore();
+    }
+  });
+});

@@ -84,6 +84,42 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("conversation Agent ownership", () => {
+  it("shows an accessible loading state until the conversation is ready", async () => {
+    const fetchFixture = globalThis.fetch;
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    vi.stubGlobal("fetch", vi.fn(async (...args: Parameters<typeof fetch>) => {
+      if (String(args[0]).includes("/api/conversations/A-thread")) await pending;
+      return fetchFixture(...args);
+    }));
+
+    mount("/agents/A?conversationId=A-thread");
+    expect(screen.getByText("正在加载会话…")).toHaveAttribute("role", "status");
+    expect(screen.queryByTestId("messages")).not.toBeInTheDocument();
+    await act(async () => { release(); });
+    await screen.findByRole("heading", { name: "A-thread" });
+    expect(screen.queryByText("正在加载会话…")).not.toBeInTheDocument();
+  });
+
+  it("allows retrying a failed conversation load", async () => {
+    const fetchFixture = globalThis.fetch;
+    let fail = true;
+    vi.stubGlobal("fetch", vi.fn(async (...args: Parameters<typeof fetch>) => {
+      if (fail && String(args[0]).includes("/api/conversations/A-thread")) {
+        throw new Error("offline");
+      }
+      return fetchFixture(...args);
+    }));
+
+    mount("/agents/A?conversationId=A-thread");
+    expect(await screen.findByRole("alert")).toHaveTextContent("历史加载失败");
+    expect(screen.queryByText("正在加载会话…")).not.toBeInTheDocument();
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    await screen.findByRole("heading", { name: "A-thread" });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("discards an unrelated conversation URL without rebinding or exposing its messages", async () => {
     mount("/agents/A?conversationId=B-thread");
     await waitFor(() =>

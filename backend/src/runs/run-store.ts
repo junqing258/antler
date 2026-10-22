@@ -13,6 +13,7 @@ export interface RunStore {
   update(run: StoredRun): Promise<void>;
   transition(run: StoredRun, event: RunEvent): Promise<void>;
   appendEvent(event: RunEvent): Promise<void>;
+  appendEvents?(events: RunEvent[]): Promise<void>;
   get(runId: string): Promise<StoredRun | undefined>;
   getLatestByConversation?(
     conversationId: string,
@@ -98,6 +99,19 @@ export class PrismaRunStore implements RunStore {
         payload: event.payload as Prisma.InputJsonValue,
         createdAt: new Date(event.createdAt),
       },
+    });
+  }
+
+  async appendEvents(events: RunEvent[]) {
+    if (!events.length) return;
+    await this.prisma.runEvent.createMany({
+      data: events.map((event) => ({
+        runId: event.runId,
+        seq: event.id,
+        type: event.type,
+        payload: event.payload as Prisma.InputJsonValue,
+        createdAt: new Date(event.createdAt),
+      })),
     });
   }
 

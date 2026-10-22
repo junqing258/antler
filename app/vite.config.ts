@@ -1,14 +1,29 @@
 import path from 'node:path';
 import { codeInspectorPlugin } from 'code-inspector-plugin';
 import tailwindcss from '@tailwindcss/vite';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+
+// 自定义 Hook 的 Hook 顺序变化无法被 Fast Refresh 识别：它会保留组件状态热替换，
+// 导致 useExternalStoreRuntime 内部的 useState 落到旧的非 state hook 槽位并崩溃。
+// 修改该文件时直接整页刷新。
+function fullReloadOnAntlerRuntimeChange(): Plugin {
+  return {
+    name: 'antler:full-reload-on-runtime-hook',
+    handleHotUpdate({ file, server }) {
+      if (file.endsWith(path.join('src', 'components', 'assistant-ui', 'use-antler-runtime.ts'))) {
+        server.ws.send({ type: 'full-reload' });
+        return [];
+      }
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
-    ...(mode === 'test' ? [] : [codeInspectorPlugin({ bundler: 'vite' })]),
+    ...(mode === 'test' ? [] : [codeInspectorPlugin({ bundler: 'vite' }), fullReloadOnAntlerRuntimeChange()]),
     tailwindcss(),
     VitePWA({
       registerType: 'prompt',

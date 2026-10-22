@@ -57,13 +57,15 @@ export function SettingsDialog({
     });
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    const models = [...new Set([...draft.models, newModel].map((model) => model.trim()).filter(Boolean))];
+    const selected = draft.model.trim();
     onSave({
       ...draft,
       name: draft.name.trim() || "自定义供应商",
       baseUrl: draft.baseUrl.trim(),
       apiKey: draft.apiKey.trim(),
-      models: draft.models.map((model) => model.trim()).filter(Boolean),
-      model: draft.model.trim(),
+      models,
+      model: models.includes(selected) ? selected : (models[0] ?? ""),
     });
   };
   const tabs: { id: SettingsTab; label: string; icon: typeof SettingsIcon }[] =
@@ -166,10 +168,12 @@ export function SettingsDialog({
               </label>
               <div className="grid gap-2 text-xs font-semibold text-[#4b4b4b]">
                 <span>模型</span>
-                {draft.models.length === 0 && (
+                {!draft.apiKey.trim() ? (
                   <p className="m-0 font-normal text-[#777]">
-                    默认使用服务端配置。使用本地 API Key 时，请添加模型。
+                    未填写 API Key 时使用服务端默认模型；填写后可在聊天中选择下方模型。
                   </p>
+                ) : draft.models.length === 0 && (
+                  <p className="m-0 font-normal text-[#777]">请添加供应商支持的模型 ID。</p>
                 )}
                 <div className="grid gap-1.5">
                   {draft.models.map((model) => (

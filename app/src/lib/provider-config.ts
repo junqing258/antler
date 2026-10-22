@@ -56,11 +56,35 @@ export function loadProviderConfig(): ProviderConfig {
 export function getModelPickerConfig(
   config: ProviderConfig,
   serverModel: string,
+  boundModel?: string,
 ): Pick<ProviderConfig, "model" | "models"> {
-  if (config.apiKey.trim()) return { model: config.model, models: config.models };
-  return { model: serverModel, models: [] };
+  if (config.apiKey.trim())
+    return {
+      model: boundModel ?? config.model,
+      models:
+        boundModel && config.models.length
+          ? [...new Set([boundModel, ...config.models])]
+          : config.models,
+    };
+  return { model: boundModel ?? serverModel, models: [] };
+}
+
+const PROVIDER_CONFIG_CHANGED = "antler:provider-config-changed";
+
+export function subscribeProviderConfig(onChange: () => void) {
+  const storageChanged = (event: StorageEvent) => {
+    if (event.key === PROVIDER_CONFIG_STORAGE_KEY || event.key === null)
+      onChange();
+  };
+  window.addEventListener("storage", storageChanged);
+  window.addEventListener(PROVIDER_CONFIG_CHANGED, onChange);
+  return () => {
+    window.removeEventListener("storage", storageChanged);
+    window.removeEventListener(PROVIDER_CONFIG_CHANGED, onChange);
+  };
 }
 
 export function saveProviderConfig(config: ProviderConfig) {
   localStorage.setItem(PROVIDER_CONFIG_STORAGE_KEY, JSON.stringify(config));
+  window.dispatchEvent(new Event(PROVIDER_CONFIG_CHANGED));
 }

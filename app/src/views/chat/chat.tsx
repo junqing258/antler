@@ -62,7 +62,6 @@ export function Chat({
   onOpenScheduler: () => void;
   onConversationSaved: () => void;
 }) {
-  const modelPickerConfig = getModelPickerConfig(providerConfig, serverModel);
   const { runtime, notice, hasMore, loadEarlier, boundModel } = useAntlerRuntime(
     serverInfo,
     conversationId,
@@ -72,6 +71,13 @@ export function Chat({
     onConversationSaved,
     agentId,
   );
+
+  const modelPickerConfig = getModelPickerConfig(providerConfig, serverModel, boundModel);
+  const selectModel = (model: string) => {
+    if (model === modelPickerConfig.model || !providerConfig.models.includes(model)) return;
+    onModelChange(model);
+    if (boundModel) onNewThread();
+  };
 
   const [isMobile, setIsMobile] = useState(
     () => window.matchMedia?.("(width < 620px)").matches ?? false,
@@ -237,8 +243,9 @@ export function Chat({
             {notice && <p role="status" className="px-4 py-2 text-sm text-amber-700">{notice}</p>}
             {hasMore && <button onClick={() => void loadEarlier()}>加载更早消息</button>}
             <AssistantThread
-              model={boundModel ?? modelPickerConfig.model}
-              models={boundModel ? [boundModel] : modelPickerConfig.models}
+              model={modelPickerConfig.model}
+              models={modelPickerConfig.models}
+              modelChangeStartsNewThread={Boolean(boundModel)}
               title={title}
               navigation={
                 isMobile ? (
@@ -250,7 +257,7 @@ export function Chat({
                   </DrawerTrigger>
                 ) : undefined
               }
-              onModelChange={onModelChange}
+              onModelChange={selectModel}
             />
           </section>
         </main>

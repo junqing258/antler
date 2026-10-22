@@ -188,6 +188,7 @@ model Conversation {
   title String
   titleSource String @default("fallback")
   checkpoint Json?
+  messageStorage String @default("database")
   contextState String @default("not_restored")
   revision Int @default(1)
   activeRunId String?

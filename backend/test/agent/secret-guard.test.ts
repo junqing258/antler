@@ -15,6 +15,17 @@ afterEach(async () => {
 });
 
 describe("SecretGuard", () => {
+  it("passes explicitly injected Tushare credentials to tools while redacting output", () => {
+    vi.stubEnv("TUSHARE_TOKEN", "test-tushare-private-token");
+    vi.stubEnv("OPENAI_API_KEY", "test-model-private-key");
+    const guard = new SecretGuard(undefined, () => ({
+      TUSHARE_TOKEN: process.env.TUSHARE_TOKEN,
+    }));
+    expect(guard.toolEnvironment().TUSHARE_TOKEN).toBe("test-tushare-private-token");
+    expect(guard.toolEnvironment().OPENAI_API_KEY).toBeUndefined();
+    expect(guard.redact("token=test-tushare-private-token")).toBe(`token=${REDACTED}`);
+  });
+
   it("preserves email addresses when public server settings contain digits or SMTP addresses", async () => {
     const root = await mkdtemp(join(tmpdir(), "antler-public-env-"));
     roots.push(root);

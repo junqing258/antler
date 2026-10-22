@@ -1,8 +1,33 @@
 import { describe, expect, it } from "vitest";
+import Fastify from "fastify";
+import { createServer, type Socket } from "node:net";
 import { schedulerDatabase } from "../scheduler/helpers.js";
-import { createDatabase } from "../../src/plugins/database.js";
+import { createDatabase, registerDatabase } from "../../src/plugins/database.js";
 
 describe("database", () => {
+  it("reports a stalled Postgres connection before the Fastify hook timeout", async () => {
+    const sockets = new Set<Socket>();
+    const server = createServer((socket) => {
+      sockets.add(socket);
+      socket.on("close", () => sockets.delete(socket));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address() as { port: number };
+    const app = Fastify();
+    registerDatabase(app, `postgresql://test:test@127.0.0.1:${address.port}/test`);
+    try {
+      await expect(app.ready()).rejects.toMatchObject({
+        message: "Connection terminated due to connection timeout",
+      });
+    } finally {
+      for (const socket of sockets) socket.destroy();
+      await app.close();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => error ? reject(error) : resolve());
+      });
+    }
+  }, 8_000);
+
   it("connects to PGlite through Prisma", async () => {
     const database = createDatabase();
 

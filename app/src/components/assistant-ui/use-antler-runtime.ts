@@ -13,6 +13,12 @@ import {
 } from "@/lib/conversation-store";
 import { authHeaders } from "@/lib/server-info";
 import { createUuid } from "@/lib/utils";
+import {
+  applyRunEvent,
+  isTerminalEvent,
+  mergeMessageSnapshots,
+  subscribeRunEvents,
+} from "@/lib/run-events";
 
 const convertMessage = (message: ThreadMessageLike) => message;
 
@@ -38,6 +44,12 @@ export function useAntlerRuntime(
   const config = useRef<Record<string, unknown>>();
   const mounted = useRef(true);
   const sending = useRef(false);
+  const [watchedRunId, setWatchedRunId] = useState<string | null>(null);
+  const completedRuns = useRef(new Set<string>());
+  const serverInfoRef = useRef(getServerInfo);
+  const savedRef = useRef(onConversationSaved);
+  serverInfoRef.current = getServerInfo;
+  savedRef.current = onConversationSaved;
   const refresh = useCallback(async () => {
     const conversation = await getConversation(conversationId);
     if (
@@ -47,7 +59,17 @@ export function useAntlerRuntime(
     )
       return;
     revision.current = conversation.revision ?? 0;
-    activeRun.current = conversation.activeRunId ?? null;
+    const last = conversation.messages.at(-1);
+    const replayRun =
+      last?.status?.type === "running"
+        ? last.metadata?.custom?.runId
+        : undefined;
+    const candidate =
+      conversation.activeRunId ??
+      (typeof replayRun === "string" ? replayRun : null);
+    activeRun.current =
+      candidate && !completedRuns.current.has(candidate) ? candidate : null;
+    if (activeRun.current) setWatchedRunId(activeRun.current);
     config.current = conversation.executionConfig;
     setContextReason(
       conversation.contextState && conversation.contextState !== "available"
@@ -56,18 +78,16 @@ export function useAntlerRuntime(
     );
     setHasMore(conversation.hasMoreMessages ?? false);
     setMessages((current) => {
-      const incoming = new Set(conversation.messages.map((message) => message.id));
-      const overlap = current.findIndex((item) => incoming.has(item.id));
-      if (overlap < 0) {
-        firstSeq.current = conversation.firstSeq;
-        return conversation.messages;
-      }
-      firstSeq.current = firstSeq.current === undefined
-        ? conversation.firstSeq
-        : Math.min(firstSeq.current, conversation.firstSeq ?? firstSeq.current);
-      return [...current.slice(0, overlap), ...conversation.messages];
+      firstSeq.current =
+        firstSeq.current === undefined
+          ? conversation.firstSeq
+          : Math.min(
+              firstSeq.current,
+              conversation.firstSeq ?? firstSeq.current,
+            );
+      return mergeMessageSnapshots(current, conversation.messages);
     });
-    setRunning(Boolean(conversation.activeRunId));
+    setRunning(Boolean(activeRun.current));
   }, [conversationId]);
   useEffect(() => {
     mounted.current = true;
@@ -108,6 +128,35 @@ export function useAntlerRuntime(
       document.removeEventListener("visibilitychange", foreground);
     };
   }, [conversationId, refresh]);
+  useEffect(() => {
+    if (!watchedRunId) return;
+    let disposed = false;
+    const stop = subscribeRunEvents(
+      () => serverInfoRef.current(),
+      watchedRunId,
+      (event) => {
+        if (disposed || !mounted.current) return;
+        setMessages((current) => applyRunEvent(current, watchedRunId, event));
+        if (isTerminalEvent(event)) {
+          completedRuns.current.add(watchedRunId);
+          if (activeRun.current === watchedRunId) activeRun.current = null;
+          setRunning(false);
+          setWatchedRunId(null);
+          setNotice("");
+          void refresh().catch(() => {});
+          savedRef.current();
+        }
+      },
+      (connected) => {
+        if (!disposed && mounted.current)
+          setNotice(connected ? "" : "连接中断，正在重连");
+      },
+    );
+    return () => {
+      disposed = true;
+      stop();
+    };
+  }, [watchedRunId, refresh]);
   const runtime = useExternalStoreRuntime<ThreadMessageLike>({
     messages,
     isRunning: running,
@@ -178,8 +227,31 @@ export function useAntlerRuntime(
               : (data?.error ?? "发送失败"),
           );
         }
+        const accepted = await response.json();
         if (mounted.current) {
           setNotice("");
+          if (typeof accepted.runId === "string") {
+            const runId = accepted.runId;
+            activeRun.current = runId;
+            setRunning(true);
+            setMessages((current) => {
+              const id = `${runId}:user`;
+              if (current.some((item) => item.id === id)) return current;
+              return [
+                ...current,
+                {
+                  id,
+                  role: "user",
+                  content: message.content,
+                  createdAt: new Date(),
+                  metadata: {
+                    custom: { runId, appliedEventId: 0, live: true },
+                  },
+                },
+              ];
+            });
+            setWatchedRunId(runId);
+          }
           await refresh();
           onConversationSaved();
         }

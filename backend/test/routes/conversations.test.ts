@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { schedulerDatabase } from "../scheduler/helpers.js";
@@ -8,9 +11,11 @@ import type { AntlerHostRuntime } from "../../src/agent/host-runtime.js";
 let db: Awaited<ReturnType<typeof schedulerDatabase>>;
 let app: FastifyInstance;
 let store: ConversationStore;
+let storageRoot: string;
 beforeEach(async () => {
   db = await schedulerDatabase();
-  store = new ConversationStore(db);
+  storageRoot = await mkdtemp(join(tmpdir(), "antler-history-"));
+  store = new ConversationStore(db, storageRoot);
   app = Fastify();
   app.addHook("onRequest", async (request) => {
     request.antlerUser = {
@@ -40,6 +45,7 @@ beforeEach(async () => {
 afterEach(async () => {
   await app.close();
   await db.$disconnect();
+  await rm(storageRoot, { recursive: true, force: true });
 });
 it("isolates list, detail, messages, rename and delete APIs", async () => {
   for (const [method, url] of [

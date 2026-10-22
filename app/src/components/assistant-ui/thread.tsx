@@ -2,6 +2,7 @@ import {
   ActionBarPrimitive,
   AuiIf,
   ComposerPrimitive,
+  ErrorPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
   type ReasoningMessagePartProps,
@@ -104,6 +105,14 @@ function AssistantMessage() {
           tools: { Fallback: ToolCall },
         }}
       />
+      <MessagePrimitive.Error>
+        <ErrorPrimitive.Root className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <ErrorPrimitive.Message />
+        </ErrorPrimitive.Root>
+      </MessagePrimitive.Error>
+      <AuiIf condition={(s) => s.message.status?.type === "running" && s.message.content.length === 0}>
+        <p role="status" className="text-sm text-muted-foreground">正在等待 Agent 回复…</p>
+      </AuiIf>
       <ActionBarPrimitive.Root
         hideWhenRunning
         autohide="not-last"
@@ -140,12 +149,14 @@ type ModelPickerProps = {
   model: string;
   models: string[];
   onModelChange: (model: string) => void;
+  modelChangeStartsNewThread?: boolean;
 };
 
 export function ModelPicker({
   model,
   models,
   onModelChange,
+  modelChangeStartsNewThread,
 }: ModelPickerProps) {
   const label = model || "服务端默认";
   return (
@@ -173,6 +184,9 @@ export function ModelPicker({
           <DropdownMenu.Label className="px-[9px] pb-[7px] pt-1.5 text-[11px] font-semibold text-[#8a8a8a]">
             选择模型
           </DropdownMenu.Label>
+          {modelChangeStartsNewThread && models.length > 1 && (
+            <p className="max-w-[240px] px-[9px] pb-2 text-xs text-muted-foreground">切换模型会新建会话，当前会话保留。</p>
+          )}
           <DropdownMenu.RadioGroup value={model} onValueChange={onModelChange}>
             {models.map((candidate) => (
               <DropdownMenu.RadioItem
@@ -270,6 +284,7 @@ function Suggestion({ icon, label }: { icon: ReactNode; label: string }) {
 export function AssistantThread({
   model,
   models,
+  modelChangeStartsNewThread,
   title,
   navigation,
   onModelChange,
@@ -289,6 +304,7 @@ export function AssistantThread({
           <Welcome
             model={model}
             models={models}
+            modelChangeStartsNewThread={modelChangeStartsNewThread}
             onModelChange={onModelChange}
           />
         </AuiIf>
@@ -303,6 +319,7 @@ export function AssistantThread({
             <Composer
               model={model}
               models={models}
+              modelChangeStartsNewThread={modelChangeStartsNewThread}
               onModelChange={onModelChange}
             />
             <p className="mt-2 text-center text-xs text-muted-foreground">

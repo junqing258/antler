@@ -61,7 +61,13 @@ export function createApp(config: AppConfig) {
   );
   const authMode = config.authMode ?? "local";
   const ragConfig = new RagConfigStore(config, config.workspaceRoot);
-  const app = Fastify({ logger: false, genReqId: createRequestId });
+  // Remote Postgres recovery and scheduler initialization can exceed Fastify's
+  // default 10-second plugin budget, especially on a cold database.
+  const app = Fastify({
+    logger: false,
+    genReqId: createRequestId,
+    pluginTimeout: 60_000,
+  });
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof PlatformError)
       return reply
@@ -138,7 +144,13 @@ export function createApp(config: AppConfig) {
         ...runtimeConfig,
         tavilyApiKey: config.tavilyApiKey,
         smtp: config.smtp,
-        getToolEnvironment: () => ragConfig.environment(),
+        getToolEnvironment: () => ({
+          ...ragConfig.environment(),
+          // Explicit skill credentials survive the server-secret filter.
+          ...(process.env.TUSHARE_TOKEN
+            ? { TUSHARE_TOKEN: process.env.TUSHARE_TOKEN }
+            : {}),
+        }),
         workspaceRoot,
         platformRoot,
         requestTimeoutMs: config.maxRunDurationMs,
@@ -151,7 +163,7 @@ export function createApp(config: AppConfig) {
   };
   const skillRegistry = new SkillRegistry(config.agentsDir);
   const platform = new PlatformService(app.prisma, platformRoot, skillRegistry);
-  const conversations = new ConversationStore(app.prisma);
+  const conversations = new ConversationStore(app.prisma, join(platformRoot, "storage", "conversations"));
   const runtime = new AntlerHostRuntime(
     createAdapter,
     { maxRunDurationMs: config.maxRunDurationMs, maxEvents: 10_000, authMode, resolveWorkingDirectory: (id) => resolve(id ? agentWorkspace(config.workspaceRoot, id) : config.workspaceRoot), defaultExecutionConfig: { protocol: config.provider === "anthropic" ? "anthropic-messages" : "openai-responses", model: config.model, baseUrl: config.provider === "anthropic" ? config.anthropicBaseUrl ?? "" : config.openAiBaseUrl ?? "", credentialSource: "server", workingDirectory: config.workspaceRoot } },
@@ -160,9 +172,9 @@ export function createApp(config: AppConfig) {
     platform,
   );
   // Test-only in-memory apps do not run migrations. Normal server startup has
-  // a configured SQLite file and marks any process-interrupted run terminal
+  // a configured database and marks any process-interrupted run terminal
   // before serving replay requests.
-  app.addHook("onReady", async () => {
+  app.addHook("onReady", async function initializePlatform() {
     await mkdir(platformRoot, { recursive: true, mode: 0o700 });
     const actualRoot = await realpath(platformRoot);
     const actualWorkspace = await realpath(config.workspaceRoot);
@@ -221,7 +233,11 @@ export function createApp(config: AppConfig) {
     app.prisma,
   );
   // Schema-free in-memory test apps omit databaseUrl, just like run recovery above.
-  if (config.databaseUrl) app.addHook("onReady", () => scheduler!.start());
+  if (config.databaseUrl) {
+    app.addHook("onReady", async function startScheduler() {
+      await scheduler!.start();
+    });
+  }
   const schedulerService = new SchedulerService(
     app.prisma,
     scheduler,

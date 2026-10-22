@@ -1,4 +1,5 @@
 import type { ThreadMessageLike } from "@assistant-ui/react";
+import { runErrorMessage } from "./run-events";
 import { authHeaders, serverInfo } from "./server-info";
 
 export type Conversation = {
@@ -30,6 +31,7 @@ type MessageDto = {
   seq: number;
   runId: string;
   appliedEventId: number;
+  error?: { code?: string; message: string };
   content: { schemaVersion: number; parts: unknown[] };
   status: string;
   createdAt: string;
@@ -101,6 +103,12 @@ export function displayMessages(page: MessagePage): ThreadMessageLike[] {
       role: message.role,
       content: message.content.parts,
       createdAt: new Date(message.createdAt),
+      metadata: {
+        custom: {
+          runId: message.runId,
+          appliedEventId: message.appliedEventId,
+        },
+      },
       ...(message.role === "assistant"
         ? {
             status:
@@ -110,7 +118,7 @@ export function displayMessages(page: MessagePage): ThreadMessageLike[] {
                   ? {
                       type: "incomplete",
                       reason: "error",
-                      error: "运行已中断或失败",
+                      error: runErrorMessage(message.error?.message),
                     }
                   : message.status === "cancelled"
                     ? { type: "incomplete", reason: "cancelled" }
@@ -150,8 +158,7 @@ export async function getConversation(
   id: string,
 ): Promise<Conversation | undefined> {
   const data = (await conversationRequest(`/${encodeURIComponent(id)}`)) as
-    | Summary
-    | undefined;
+    Summary | undefined;
   if (!data) return undefined;
   const page = await getMessagePage(id);
   return {

@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { SiteFiling } from "@/components/site-filing";
 import { signIn, signUp, resendSignupCode, verifySignupCode, createPasswordRecovery } from "@/lib/auth";
 
 function friendlyAuthError(cause: unknown): string {
@@ -174,120 +175,123 @@ export function LoginView() {
     : mode === "recovery" ? "发送重置验证码" : "注册并发送验证码";
 
   return (
-    <div className="grid min-h-[var(--app-viewport-height)] place-items-center bg-[#fafafa] p-4">
-      <form
-        onSubmit={submit}
-        className="grid w-full max-w-sm gap-4 rounded-2xl border border-[#eee] bg-white p-6 shadow-sm"
-      >
-        <h1 className="m-0 text-lg font-semibold text-[#222]">{heading}</h1>
-        <p className="m-0 text-xs text-[#777]">{description}</p>
-        <label className="grid gap-1.5 text-xs text-[#555]">
-          邮箱
-          <input
-            type="email"
-            required
-            autoComplete="email"
-            className={inputClass}
-            value={sentEmail || email}
-            disabled={busy || Boolean(sentEmail)}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-        </label>
-        {((!sentEmail && mode !== "recovery") || recoveryVerified) && (
+    <>
+      <div className={`grid min-h-[var(--app-viewport-height)] place-items-center bg-[#fafafa] p-4 ${mode !== "recovery" ? "auth-with-site-filing" : ""}`}>
+        <form
+          onSubmit={submit}
+          className="grid w-full max-w-sm gap-4 rounded-2xl border border-[#eee] bg-white p-6 shadow-sm"
+        >
+          <h1 className="m-0 text-lg font-semibold text-[#222]">{heading}</h1>
+          <p className="m-0 text-xs text-[#777]">{description}</p>
           <label className="grid gap-1.5 text-xs text-[#555]">
-            {mode === "recovery" ? "新密码" : "密码"}
+            邮箱
             <input
-              type="password"
+              type="email"
               required
-              minLength={mode !== "signin" ? 6 : undefined}
-              autoComplete={mode !== "signin" ? "new-password" : "current-password"}
+              autoComplete="email"
               className={inputClass}
-              value={password}
-              disabled={busy}
-              onChange={(event) => setPassword(event.target.value)}
+              value={sentEmail || email}
+              disabled={busy || Boolean(sentEmail)}
+              onChange={(event) => setEmail(event.target.value)}
             />
           </label>
-        )}
-        {recoveryVerified && (
-          <label className="grid gap-1.5 text-xs text-[#555]">
-            确认新密码
-            <input
-              type="password"
-              required
-              minLength={6}
-              autoComplete="new-password"
-              className={inputClass}
-              value={confirmPassword}
+          {((!sentEmail && mode !== "recovery") || recoveryVerified) && (
+            <label className="grid gap-1.5 text-xs text-[#555]">
+              {mode === "recovery" ? "新密码" : "密码"}
+              <input
+                type="password"
+                required
+                minLength={mode !== "signin" ? 6 : undefined}
+                autoComplete={mode !== "signin" ? "new-password" : "current-password"}
+                className={inputClass}
+                value={password}
+                disabled={busy}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </label>
+          )}
+          {recoveryVerified && (
+            <label className="grid gap-1.5 text-xs text-[#555]">
+              确认新密码
+              <input
+                type="password"
+                required
+                minLength={6}
+                autoComplete="new-password"
+                className={inputClass}
+                value={confirmPassword}
+                disabled={busy}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+              />
+            </label>
+          )}
+          {sentEmail && !recoveryVerified && (
+            <label className="grid gap-1.5 text-xs text-[#555]">
+              验证码
+              <input
+                type="text"
+                required
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                className={inputClass}
+                value={token}
+                disabled={busy}
+                onChange={(event) => setToken(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              />
+            </label>
+          )}
+          {error && (
+            <p className="m-0 rounded-lg border border-[#f4d5d1] bg-[#fff8f7] p-2.5 text-xs text-[#b42318]" role="alert">
+              {error}
+            </p>
+          )}
+          {notice && (
+            <p className="m-0 rounded-lg border border-[#d9ecdf] bg-[#f2faf5] p-2.5 text-xs text-[#087d61]" role="status">
+              {notice}
+            </p>
+          )}
+          <button type="submit" className={buttonClass} disabled={busy || (mode !== "signin" && !sentEmail && secondsLeft > 0)}>
+            {busy ? "请稍候…" : submitLabel}
+          </button>
+          {sentEmail && !recoveryVerified && (
+            <div className="flex justify-between gap-3 text-xs text-primary">
+              <button type="button" disabled={busy || secondsLeft > 0} className="disabled:opacity-50" onClick={() => void sendCode()}>
+                {secondsLeft > 0 ? `${secondsLeft} 秒后可重发` : "重新发送验证码"}
+              </button>
+              <button type="button" disabled={busy} onClick={() => {
+                setEmail(sentEmail);
+                setSentEmail("");
+                setToken("");
+                setError("");
+                setNotice("");
+              }}>
+                更换邮箱
+              </button>
+            </div>
+          )}
+          {mode === "signin" && (
+            <button
+              type="button"
+              className="border-0 bg-transparent p-0 text-xs text-primary hover:underline"
               disabled={busy}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-            />
-          </label>
-        )}
-        {sentEmail && !recoveryVerified && (
-          <label className="grid gap-1.5 text-xs text-[#555]">
-            验证码
-            <input
-              type="text"
-              required
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              pattern="[0-9]{6}"
-              maxLength={6}
-              className={inputClass}
-              value={token}
-              disabled={busy}
-              onChange={(event) => setToken(event.target.value.replace(/\D/g, "").slice(0, 6))}
-            />
-          </label>
-        )}
-        {error && (
-          <p className="m-0 rounded-lg border border-[#f4d5d1] bg-[#fff8f7] p-2.5 text-xs text-[#b42318]" role="alert">
-            {error}
-          </p>
-        )}
-        {notice && (
-          <p className="m-0 rounded-lg border border-[#d9ecdf] bg-[#f2faf5] p-2.5 text-xs text-[#087d61]" role="status">
-            {notice}
-          </p>
-        )}
-        <button type="submit" className={buttonClass} disabled={busy || (mode !== "signin" && !sentEmail && secondsLeft > 0)}>
-          {busy ? "请稍候…" : submitLabel}
-        </button>
-        {sentEmail && !recoveryVerified && (
-          <div className="flex justify-between gap-3 text-xs text-primary">
-            <button type="button" disabled={busy || secondsLeft > 0} className="disabled:opacity-50" onClick={() => void sendCode()}>
-              {secondsLeft > 0 ? `${secondsLeft} 秒后可重发` : "重新发送验证码"}
+              onClick={() => changeMode("recovery")}
+            >
+              忘记密码？
             </button>
-            <button type="button" disabled={busy} onClick={() => {
-              setEmail(sentEmail);
-              setSentEmail("");
-              setToken("");
-              setError("");
-              setNotice("");
-            }}>
-              更换邮箱
-            </button>
-          </div>
-        )}
-        {mode === "signin" && (
+          )}
           <button
             type="button"
             className="border-0 bg-transparent p-0 text-xs text-primary hover:underline"
             disabled={busy}
-            onClick={() => changeMode("recovery")}
+            onClick={() => changeMode(mode === "signin" ? "signup" : "signin")}
           >
-            忘记密码？
+            {mode === "signin" ? "没有账号？注册" : mode === "recovery" ? "返回登录" : "已有账号？登录"}
           </button>
-        )}
-        <button
-          type="button"
-          className="border-0 bg-transparent p-0 text-xs text-primary hover:underline"
-          disabled={busy}
-          onClick={() => changeMode(mode === "signin" ? "signup" : "signin")}
-        >
-          {mode === "signin" ? "没有账号？注册" : mode === "recovery" ? "返回登录" : "已有账号？登录"}
-        </button>
-      </form>
-    </div>
+        </form>
+      </div>
+      {mode !== "recovery" && <SiteFiling />}
+    </>
   );
 }

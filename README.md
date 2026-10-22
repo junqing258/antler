@@ -104,7 +104,7 @@ Docker 构建默认使用 npmmirror 下载 pnpm 和 npm 依赖，使用中科大
 
 镜像在 `/opt/antler-python` 中预装 pip、uv 和 Tushare SDK（版本见 `backend/requirements-runtime.txt`），`python`、`python3`、`pip`、`pip3` 和 `uv` 可直接在容器内使用。Python 包默认从腾讯云 PyPI 镜像下载，可在构建时通过 `--build-arg PYPI_INDEX_URL=https://其他镜像/simple` 更换；运行时可分别通过 `PIP_INDEX_URL` 和 `UV_DEFAULT_INDEX` 覆盖。部署脚本会在传输镜像前离线检查工具版本、依赖完整性及 Tushare 导入，避免把缺少依赖的镜像部署到远端。
 
-Tushare Pro 的 Token 可放在 `.env.deploy` 的 `TUSHARE_TOKEN` 中，随部署传入容器。直接执行 `python3` 脚本即可使用预装的 SDK。股票技能的 `uv run --project` 使用独立项目环境；使用 Tushare 时需加 `--extra enhanced`（例如 `uv run --project .agents/skills/stock-analysis --extra enhanced .agents/skills/stock-analysis/references/stock_data_fetcher.py --stocks 600519`），首次运行仍会安装该技能的项目依赖。
+Tushare Pro 的 Token 可放在 `.env.deploy` 的 `TUSHARE_TOKEN` 中，随部署传入容器，并显式注入 Agent 工具子进程；工具输出中的 Token 会脱敏。Python 调用需显式传入环境变量，例如 `ts.pro_api(os.environ["TUSHARE_TOKEN"])`（先导入 `os` 和 `tushare as ts`）；仅检查 `ts.get_token()` 不能判断环境变量是否配置。直接执行 `python3` 脚本即可使用预装的 SDK。股票技能的 `uv run --project` 使用独立项目环境；使用 Tushare 时需加 `--extra enhanced`（例如 `uv run --project .agents/skills/stock-analysis --extra enhanced .agents/skills/stock-analysis/references/stock_data_fetcher.py --stocks 600519`），首次运行仍会安装该技能的项目依赖。
 
 镜像构建时预下载与运行环境匹配的 Prisma 迁移引擎，启动时无需临时下载。健康检查提供 120 秒启动宽限期，部署脚本最多等待 300 秒；启动失败会输出容器状态、健康检查结果和最近日志。
 

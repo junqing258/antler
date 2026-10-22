@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 import { platformApi, type PlatformAgent } from "@/lib/platform-api";
 import { ChatView } from "@/views/chat";
-import { PlatformLayout, ErrorNotice } from "./layout";
+import { ErrorNotice } from "./layout";
 export function AgentChatPage() {
   const { id } = useParams();
   const [agent, setAgent] = useState<PlatformAgent>(),
@@ -24,11 +24,13 @@ export function AgentChatPage() {
   }, [id]);
   if (!agent)
     return (
-      <PlatformLayout title="Agent">
-        <ErrorNotice error={error} />
-        {!error && <p>正在加载…</p>}
-        <Link to="/">返回 Agent 列表</Link>
-      </PlatformLayout>
+      <main className="grid h-[var(--app-viewport-height)] place-items-center bg-[#fafaf9] text-[#222]">
+        <div className="px-6 text-center">
+          <ErrorNotice error={error} />
+          {!error && <p role="status">正在加载…</p>}
+          {error && <Link to="/">返回 Agent 列表</Link>}
+        </div>
+      </main>
     );
   return <ChatView key={agent.id} agentId={agent.id} agentName={agent.name} />;
 }

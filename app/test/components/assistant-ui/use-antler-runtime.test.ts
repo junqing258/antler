@@ -127,3 +127,75 @@ it("releases StrictMode's abandoned async effect before it can subscribe", async
     expect(subscribeConversationChanges).toHaveBeenCalledTimes(1),
   );
 });
+
+it("shows live replies before disk flush and does not replace them with stale snapshots", async () => {
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const stream = new ReadableStream<Uint8Array>({
+    start(value) {
+      controller = value;
+    },
+  });
+  const snapshot = {
+    id: "thread",
+    title: "t",
+    createdAt: 1,
+    updatedAt: 1,
+    revision: 1,
+    activeRunId: "run",
+    executionConfig: { credentialSource: "server" },
+    messages: [
+      {
+        id: "run:assistant",
+        role: "assistant" as const,
+        content: [],
+        status: { type: "running" as const },
+        metadata: { custom: { runId: "run", appliedEventId: 1 } },
+      },
+    ],
+  };
+  vi.mocked(getConversation).mockResolvedValue(snapshot);
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(stream)));
+  const { unmount } = mount();
+  await waitFor(() =>
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/runs/run/events"),
+      expect.anything(),
+    ),
+  );
+  const encoder = new TextEncoder();
+  await act(async () =>
+    controller.enqueue(
+      encoder.encode(
+        'id: 2\nevent: assistant.delta\ndata: {"delta":"实时回复"}\n\n',
+      ),
+    ),
+  );
+  await waitFor(() =>
+    expect(capture.adapter?.messages?.[0].content).toEqual([
+      { type: "text", text: "实时回复" },
+    ]),
+  );
+  await act(async () => capture.change!({ conversationId: "thread" }));
+  expect(capture.adapter?.messages?.[0].content).toEqual([
+    { type: "text", text: "实时回复" },
+  ]);
+  await act(async () =>
+    controller.enqueue(
+      encoder.encode(
+        'id: 3\nevent: run.failed\ndata: {"error":{"message":"403 Access to model denied"}}\n\n',
+      ),
+    ),
+  );
+  await waitFor(() => expect(capture.adapter?.isRunning).toBe(false));
+  expect(capture.adapter?.messages?.[0].status).toMatchObject({
+    type: "incomplete",
+    reason: "error",
+    error: expect.stringContaining("403"),
+  });
+  unmount();
+  expect(
+    vi
+      .mocked(fetch)
+      .mock.calls.some(([url]) => String(url).endsWith("/cancel")),
+  ).toBe(false);
+});
