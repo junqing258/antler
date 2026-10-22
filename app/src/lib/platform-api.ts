@@ -12,6 +12,7 @@ export type PlatformSkill = {
   createdAt: string;
 };
 export type PlatformAgent = {
+  icon?: string | null;
   builtin?: boolean;
   defaultWorkspace?: string;
   id: string;

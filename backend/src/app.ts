@@ -1,3 +1,4 @@
+import { generateAgentIcon } from "./platform/agent-icon.js";
 import { agentWorkspace } from "./platform/agent-workspace.js";
 import { createHash } from "node:crypto";
 import { PlatformService, type RunAgentContext } from "./platform/service.js";
@@ -252,7 +253,9 @@ export function createApp(config: AppConfig) {
   registerRunRoutes(app, runtime);
   registerConversationRoutes(app, conversations, runtime);
   registerSkillRoutes(app, platform, authMode);
-  registerAgentRoutes(app, platform, authMode, config.workspaceRoot);
+  registerAgentRoutes(app, platform, authMode, config.workspaceRoot,
+    (name, description, provider) => generateAgentIcon(config, name, description, provider),
+  );
   registerDirectoryRoutes(app, config.workspaceRoot);
   registerConfigRoutes(app, ragConfig, config);
   registerAuthConfigRoutes(app, config);

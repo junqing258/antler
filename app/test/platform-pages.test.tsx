@@ -64,6 +64,45 @@ function mount(page: React.ReactNode, path = "/") {
   );
 }
 describe("Agent platform pages", () => {
+  it("selects an icon with the configured model and saves it with the Agent", async () => {
+    localStorage.setItem("antler.provider-config.v1", JSON.stringify({
+      name: "Gateway", protocol: "anthropic-messages", baseUrl: "https://model.test",
+      apiKey: "test-key", model: "configured-model", models: ["configured-model"],
+    }));
+    api.mockImplementation(async (path) => {
+      if (path === "/skills") return { skills: [] };
+      if (path === "/agents/icon") return { icon: "Search" };
+      return agent;
+    });
+    mount(<AgentEditPage />, "/agents/agent-id/edit");
+    await waitFor(() => expect(screen.getByRole("button", { name: "保存" })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(api).toHaveBeenCalledWith("/agents/icon", "POST", {
+      name: agent.name, description: agent.description,
+      provider: { protocol: "anthropic-messages", baseUrl: "https://model.test", apiKey: "test-key", model: "configured-model" },
+    }));
+    await waitFor(() => expect(api).toHaveBeenCalledWith("/agents/agent-id", "PUT", expect.objectContaining({ icon: "Search" })));
+    expect(screen.getByLabelText("Agent 图标").querySelector(".lucide-search")).toBeTruthy();
+  });
+
+  it("keeps an existing icon without inference until the description changes, and still saves on inference failure", async () => {
+    api.mockImplementation(async (path) => {
+      if (path === "/skills") return { skills: [] };
+      if (path === "/agents/icon") throw new Error("offline");
+      return { ...agent, icon: "Brain" };
+    });
+    mount(<AgentEditPage />, "/agents/agent-id/edit");
+    await waitFor(() => expect(screen.getByRole("button", { name: "保存" })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(api).toHaveBeenCalledWith("/agents/agent-id", "PUT", expect.objectContaining({ icon: "Brain" })));
+    expect(api.mock.calls.some(([path]) => path === "/agents/icon")).toBe(false);
+    await waitFor(() => expect(screen.getByRole("button", { name: "保存" })).not.toBeDisabled());
+    fireEvent.change(screen.getByRole("textbox", { name: "描述" }), { target: { value: "New task" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存" }));
+    await screen.findByText(/图标生成失败/);
+    await waitFor(() => expect(api).toHaveBeenLastCalledWith("/agents/agent-id", "PUT", expect.objectContaining({ description: "New task", icon: "Brain" })));
+  });
+
   it("opens profile and settings from the home navigation and persists configuration", async () => {
     api.mockResolvedValue({ agents: [] });
     mount(<AgentListPage />);

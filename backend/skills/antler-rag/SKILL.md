@@ -9,11 +9,11 @@ description: 检索 Antler 内部知识库的原文片段、Agentic 问答或知
 
 ## 准备客户端
 
-1. 用 `read_skill_resource` 读取本技能的 `scripts/rag.py` 完整内容。
-2. 用 `bash` 在当前工作空间执行 `mktemp -d .antler-rag-XXXXXX`，创建仅当前用户可访问的临时目录。目录名只取自该命令的返回值，不可从用户问题或检索内容拼接。
-3. 用 `write` 将脚本原文保存为该目录下的 `rag.py`。同样用 `write` 将用户问题原文保存为该目录下的 `query.txt`，不得使用 shell 写入问题文本。
+1. 用 `bash` 在当前工作空间执行 `mktemp -d .antler-rag-XXXXXX`，创建仅当前用户可访问的临时输入目录。目录名只取自该命令的返回值，不可从用户问题或检索内容拼接。
+2. 用 `write` 将用户问题原文保存为该目录下的 `query.txt`，不得使用 shell 写入问题文本。
+3. 执行客户端统一使用 `run_skill`，传入 `skillId: "antler-rag"`。脚本已由工具准备在 `$ANTLER_SKILL_DIR/scripts/rag.py`，无需读取、复制脚本或寻找安装目录。
 
-以下命令中的 `SCRIPT_FILE`、`QUERY_FILE` 分别指上述文件的工作空间相对路径。每次 `bash` 调用都在该次 shell 中设置变量，不假设调用间共享环境。无需访问开发机器的路径或用户级 skill 安装目录。
+以下命令中的 `SCRIPT_FILE`、`QUERY_FILE` 分别指 `$ANTLER_SKILL_DIR/scripts/rag.py` 与上述输入文件的工作空间相对路径。每次 `run_skill` 调用都在该次 shell 中设置 `SCRIPT_FILE="$ANTLER_SKILL_DIR/scripts/rag.py"` 与 `QUERY_FILE`，不假设调用间共享变量；命令从工作空间启动。
 
 ## 工作流
 
@@ -24,9 +24,9 @@ description: 检索 Antler 内部知识库的原文片段、Agentic 问答或知
    python3 "$SCRIPT_FILE" retrieve --kb "$KB_ID" --top-k 5 < "$QUERY_FILE"
    ```
 
-3. 召回不足或需要多步综合时，复用同一输入文件尝试 `ask --kb "$KB_ID" < "$QUERY_FILE"`；执行 `ask` 时将 `bash` 的 `timeoutMs` 设为 60000。若返回 `[insufficient_scope]` 或 `[feature_disabled]`，不要重试；基于已有 retrieve 结果作答，证据不足则说明。
+3. 召回不足或需要多步综合时，复用同一输入文件尝试 `ask --kb "$KB_ID" < "$QUERY_FILE"`；执行 `ask` 时将 `run_skill` 的 `timeoutMs` 设为 60000。若返回 `[insufficient_scope]` 或 `[feature_disabled]`，不要重试；基于已有 retrieve 结果作答，证据不足则说明。
 4. 需要实体关系时可运行 `graph-search --kb "$KB_ID" < "$QUERY_FILE"`。若该能力未授权或未启用，同样不要反复重试。
-5. 用完删除上面创建的临时目录及其中的脚本、输入文件。绝不把问题文本嵌入 shell 命令、heredoc、命令行参数或 `echo`/`printf` 管道；问题文本可能含反引号、`$(...)`、引号或独立成行的 heredoc 结束符。
+5. 用完删除上面创建的临时目录及其中的输入文件。绝不把问题文本嵌入 shell 命令、heredoc、命令行参数或 `echo`/`printf` 管道；问题文本可能含反引号、`$(...)`、引号或独立成行的 heredoc 结束符。
 
 ## 引用与边界
 

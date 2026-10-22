@@ -12,6 +12,9 @@ const SKIP_DIRECTORIES = new Set([
   ".git",
   ".codegraph",
   "node_modules",
+  ".venv",
+  "venv",
+  "__pycache__",
   "dist",
   "target",
 ]);

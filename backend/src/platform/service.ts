@@ -21,6 +21,7 @@ import {
   requireOwner,
   type AuthContext,
 } from "./errors.js";
+import { isAgentIcon } from "./agent-icon.js";
 import { buildSystemPrompt } from "../agent/system-prompt.js";
 
 export type RunAgentContext = {
@@ -94,6 +95,7 @@ export class PlatformService {
       name?: string;
       description?: string;
       systemPrompt?: string;
+      icon?: string;
     } = {};
     for (const [key, max] of [
       ["name", 64],
@@ -109,6 +111,10 @@ export class PlatformService {
       )
         throw new PlatformError("agent_invalid", 422);
       fields[key] = text;
+    }
+    if (value.icon !== undefined) {
+      if (!isAgentIcon(value.icon)) throw new PlatformError("agent_invalid", 422);
+      fields.icon = value.icon;
     }
     const skillIds = value.skillIds;
     if (
@@ -134,6 +140,7 @@ export class PlatformService {
           name: fields.name!,
           description: fields.description!,
           systemPrompt: fields.systemPrompt!,
+          icon: fields.icon,
           skills: {
             create: skillIds.map((skillId, position) => ({
               skillId,

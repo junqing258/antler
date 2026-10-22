@@ -312,6 +312,7 @@ describe.each(["openai", "anthropic"] as const)(
       vi.stubGlobal("fetch", fetchMock);
       const tools: Array<{ name: string; arguments: JsonObject }> = [
         { name: "load_skill", arguments: { skillId: "example" } },
+        { name: "run_skill", arguments: { skillId: "example", command: 'test -f "$ANTLER_SKILL_DIR/SKILL.md" && echo skill-ran' } },
         { name: "read", arguments: { path: "note.txt" } },
         { name: "web_search", arguments: { query: "example" } },
       ];
@@ -361,7 +362,7 @@ describe.each(["openai", "anthropic"] as const)(
           events.push(event);
         },
       );
-      expect(streams[provider]).toHaveBeenCalledTimes(4);
+      expect(streams[provider]).toHaveBeenCalledTimes(5);
       expect(
         streams[provider === "openai" ? "anthropic" : "openai"],
       ).not.toHaveBeenCalled();
@@ -370,14 +371,15 @@ describe.each(["openai", "anthropic"] as const)(
         expect.any(Object),
       );
       const results = messages.filter((m) => m.role === "toolResult");
-      expect(results).toHaveLength(3);
+      expect(results).toHaveLength(4);
+      expect(JSON.stringify(results)).toContain("skill-ran");
       expect(JSON.stringify(results)).toContain("Skill instructions.");
       expect(JSON.stringify(results)).toContain(`Note ${REDACTED}`);
       expect(JSON.stringify(results)).toContain("Search content.");
       expect(JSON.stringify(results)).not.toContain(secret);
       expect(
         events.filter((event) => event.type === "tool_execution_end"),
-      ).toHaveLength(3);
+      ).toHaveLength(4);
       expect(
         events.some(
           (event) =>

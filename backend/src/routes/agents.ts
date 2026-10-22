@@ -1,3 +1,5 @@
+import { parseProvider } from "./runs.js";
+import type { ProviderRunConfig } from "../agent/host-runtime.js";
 import { agentWorkspace } from "../platform/agent-workspace.js";
 import { resolve } from "node:path";
 import { isBuiltinAgent } from "../platform/builtin-agents.js";
@@ -22,7 +24,28 @@ export function registerAgentRoutes(
   service: PlatformService,
   authMode: "local" | "supabase",
   workspaceRoot = resolve(service.root, "../workspace"),
+  generateIcon?: (name: string, description: string, provider?: ProviderRunConfig) => Promise<string>,
 ) {
+  app.post("/api/agents/icon", async (req, reply) => {
+    platformAuth(req, authMode);
+    const body = req.body as Record<string, unknown> | null;
+    if (!body || typeof body.name !== "string" || !body.name.trim() || body.name.length > 64 ||
+      typeof body.description !== "string" || body.description.length > 1024)
+      throw new PlatformError("agent_invalid", 422);
+    if (!generateIcon) throw new PlatformError("图标生成不可用。", 503);
+    let provider: ProviderRunConfig | undefined;
+    try {
+      provider = parseProvider(body.provider);
+    } catch {
+      throw new PlatformError("供应商配置无效。", 422);
+    }
+    try {
+      return { icon: await generateIcon(body.name, body.description, provider) };
+    } catch (error) {
+      if (error instanceof PlatformError) throw error;
+      return reply.code(502).send({ error: "图标生成失败，请重试。" });
+    }
+  });
   app.get("/api/agents", async (req) => {
     const auth = platformAuth(req, authMode);
     const agents = await service.listAgents(

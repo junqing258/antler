@@ -10,7 +10,7 @@ import { statSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { PiAdapterError } from "../agent/pi-agent-adapter.js";
 
-function parseProvider(value: unknown): ProviderRunConfig | undefined {
+export function parseProvider(value: unknown): ProviderRunConfig | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== "object") throw new Error("供应商配置无效。");
   const { protocol, baseUrl, apiKey, model } = value as Record<string, unknown>;

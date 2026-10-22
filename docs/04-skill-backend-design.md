@@ -1,5 +1,7 @@
 # Agent 后端 Skill 机制支持方案
 
+> 后续实现：统一脚本执行与运行副本约定见 [Skill 执行机制](./skill-execution.md)，本文中的只读 Skill 工具约定由该机制补充。
+>
 > 状态：**待评审**  
 > 日期：2026-08-31  
 > 依赖决策：[AI Agent 项目架构规划](./01-architecture-plan.md) 与 [Pi Agent 后端实现计划](./02-pi-agent-implementation-plan.md)。

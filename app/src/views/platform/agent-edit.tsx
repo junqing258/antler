@@ -1,3 +1,5 @@
+import { AgentIcon } from "@/components/agent-icon";
+import { loadProviderConfig } from "@/lib/provider-config";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { listConversations } from "@/lib/conversation-store";
@@ -23,6 +25,10 @@ export function AgentEditPage() {
     [loaded, setLoaded] = useState(false),
     [hasConversations, setHasConversations] = useState(false);
   const [error, setError] = useState("");
+  const [icon, setIcon] = useState("Bot");
+  const [iconSource, setIconSource] = useState("");
+  const [iconWarning, setIconWarning] = useState("");
+  const [generatingIcon, setGeneratingIcon] = useState(false);
   const [showMoreSkills, setShowMoreSkills] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -30,6 +36,9 @@ export function AgentEditPage() {
     setDirty(false);
     setError("");
     setAgent(undefined);
+    setIcon("Bot");
+    setIconSource("");
+    setIconWarning("");
     setName("");
     setDescription("");
     setPrompt("");
@@ -46,6 +55,8 @@ export function AgentEditPage() {
         setSkills(catalog.skills);
         if (value) {
           setAgent(value);
+          setIcon(value.icon ?? "Bot");
+          setIconSource(value.icon ? JSON.stringify([value.name, value.description]) : "");
           setName(value.name);
           setDescription(value.description);
           setPrompt(value.systemPrompt);
@@ -76,14 +87,42 @@ export function AgentEditPage() {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [dirty]);
+  const generateIcon = async () => {
+    setGeneratingIcon(true);
+    setIconWarning("");
+    try {
+      const config = loadProviderConfig();
+      const { icon: generated } = await platformApi<{ icon: string }>("/agents/icon", "POST", {
+        name,
+        description,
+        ...(config.apiKey.trim() ? { provider: {
+          protocol: config.protocol,
+          model: config.model,
+          baseUrl: config.baseUrl,
+          apiKey: config.apiKey,
+        } } : {}),
+      });
+      if (!generated) throw new Error("模型未返回图标。");
+      setIcon(generated);
+      setIconSource(JSON.stringify([name, description]));
+      setDirty(true);
+      return generated;
+    } catch {
+      setIconWarning("图标生成失败，已保留当前图标。可稍后重新生成。");
+      return icon;
+    } finally {
+      setGeneratingIcon(false);
+    }
+  };
   const save = async () => {
     setBusy(true);
     setError("");
     try {
+      const selectedIcon = iconSource === JSON.stringify([name, description]) ? icon : await generateIcon();
       const value = await platformApi<PlatformAgent>(
         id ? `/agents/${id}` : "/agents",
         id ? "PUT" : "POST",
-        { name, description, systemPrompt, skillIds },
+        { name, description, systemPrompt, skillIds, icon: selectedIcon },
       );
       localStorage.setItem(
         `antler.agent.workspace.${value.id}`,
@@ -129,7 +168,7 @@ export function AgentEditPage() {
       setBusy(false);
     }
   };
-  const disabled = busy || !loaded || (!!agent && !agent.editable);
+  const disabled = busy || generatingIcon || !loaded || (!!agent && !agent.editable);
   return (
     <PlatformLayout title={id ? "编辑 Agent" : "新建 Agent"}>
       <ErrorNotice error={error} />
@@ -151,6 +190,20 @@ export function AgentEditPage() {
         onChange={() => setDirty(true)}
       >
         <fieldset disabled={disabled} className="space-y-6">
+          <div className="flex items-center gap-4">
+            <div aria-label="Agent 图标" className="grid size-14 place-items-center rounded-xl bg-[#eef4ef] text-primary">
+              <AgentIcon name={icon} className="size-7" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Agent 图标</p>
+              <p className="text-xs text-[#777]">保存时使用已配置的模型，根据名称和描述自动选择图标。</p>
+              <button type="button" className="text-sm text-primary" disabled={!name.trim()}
+                onClick={() => { void generateIcon(); }}>
+                {generatingIcon ? "正在生成图标…" : "重新生成图标"}
+              </button>
+            </div>
+          </div>
+          {iconWarning && <p role="status" className="text-sm text-amber-800">{iconWarning}</p>}
           <label className="grid gap-2 text-sm font-medium">
             名称
             <input

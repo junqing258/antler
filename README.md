@@ -83,7 +83,7 @@ ANTLER_RAG_KEY=your-rag-api-key
 
 在配置界面点击“恢复环境默认值”可移除界面覆盖，重新使用 `ANTLER_RAG_URL`、`ANTLER_RAG_KEY`。环境变量修改仍需重启 backend。RAG 地址支持 HTTP 和 HTTPS，必须是服务 origin，不含路径或查询参数。配置界面提供“打开知识库管理页面”链接。Antler 不再提供本地知识库管理、索引和自动检索。
 
-本地可填写仓库根目录的 `.env`；Docker 部署可填写 `.env.deploy`，部署脚本会合并并传入容器。密钥不会写入技能或镜像。Docker 镜像包含技能文件和 Python 3；本地调用技能需安装 Python 3.9+。Agent 通过 `read_skill_resource` 获取随技能打包的客户端脚本，并在当前工作空间临时执行，无需知道服务器的安装路径。
+本地可填写仓库根目录的 `.env`；Docker 部署可填写 `.env.deploy`，部署脚本会合并并传入容器。密钥不会写入技能或镜像。Docker 镜像包含技能文件和 Python 3；本地调用技能需安装 Python 3.9+。Agent 通过 `load_skill` 加载说明、`read_skill_resource` 读取资源，并用 `run_skill` 直接运行打包的客户端脚本，无需复制脚本或知道服务器的安装路径。
 
 ## 部署 Web 版
 
@@ -134,6 +134,18 @@ pnpm test
 首页可新建 Agent，编辑名称、描述、系统提示词并绑定平台技能，发布后对登录用户可见；作者可反复调试草稿、编辑、下线和删除。local 模式等价于本机单用户。聊天统一从 Agent 进入，会话历史按 Agent 展示，不再提供项目管理或普通聊天入口。旧聊天链接若已绑定 Agent 则跳转到对应 Agent，否则返回列表；旧本地数据保留，不自动改绑。
 
 技能库接受含 `SKILL.md` 和资源文件的 ZIP（压缩包最多 5 MiB、200 条目、解压总量 20 MiB、单文件 1 MiB，指令文件最多 64 KiB）。名称来自 frontmatter 且全局唯一；覆盖内容用 `PUT /api/skills/:id`，不可改名，无版本回滚。`disable-model-invocation: true` 可上传展示，但不能绑定。技能被引用时不可删除；错误响应只展示调用者可见的 Agent 引用。
+
+已绑定的技能统一通过 `run_skill` 执行脚本和安装依赖。工具按技能内容版本在当前工作空间的 `.antler/skill-runtimes/` 准备运行副本，注入 `ANTLER_SKILL_DIR`（副本的绝对路径）和 `ANTLER_WORKSPACE_DIR`（工作目录）。例如调用 `run_skill`：
+
+```json
+{
+  "skillId": "stock-analysis",
+  "command": "uv run --project \"$ANTLER_SKILL_DIR\" --extra enhanced \"$ANTLER_SKILL_DIR/references/stock_data_fetcher.py\" --stocks 600519",
+  "timeoutMs": 60000
+}
+```
+
+命令每次从工作目录启动，报告可写到 `reports/`，依赖在同一工作空间、同一技能版本内复用。安装器可修改运行副本的锁文件，不改写平台源文件或数据库。原始资源发生变化后需新建会话；不同版本使用不同副本。上传技能无需依赖 `workspace/Stock-Analysis` 的文件；旧的种子项目仅用于尚未绑定技能的兼容运行。超时、取消、环境变量筛选和输出脱敏复用 `bash` 的实现；运行副本不是操作系统沙箱。完整约定见 [Skill 执行机制](docs/skill-execution.md)。
 
 Agent 的技能是封闭集，不叠加本地技能。已发布 Agent 仍可直接编辑；提示词或技能内容变更后，旧会话下一轮返回 `agent_context_changed`，需新建会话；切换 Agent 返回 `agent_changed`。下线不打断进行中的运行，作者仍可续聊草稿，其他用户得到 404。定时任务保存时固化 Agent ID 与内容指纹，执行只允许 published；内容变化后须重新保存任务，并使用新会话。相关校验失败不自动重试。
 

@@ -126,6 +126,7 @@ model Agent {
   name         String
   description  String
   systemPrompt String
+  icon         String?
   status       AgentStatus  @default(draft)
   publishedAt  DateTime?
   createdAt    DateTime     @default(now())

@@ -8,7 +8,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { mkdtemp, rm, writeFile, readFile, readdir } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import Fastify from "fastify";
@@ -74,6 +74,33 @@ describe("Agent platform", () => {
         expect(await service.getAgent(agent.id, auth)).toMatchObject({ name: "changed", systemPrompt: "Custom prompt", status: "draft" });
       }
     }
+  });
+  it("executes an uploaded and bound skill in an empty Agent workspace", async () => {
+    const row = await service.upload({
+      name: "sample-skill",
+      archive: archive({
+        "SKILL.md": instruction(),
+        "pyproject.toml": '[project]\nname = "sample-skill"\nversion = "0.1.0"\n',
+        "data.txt": "uploaded resource",
+        "scripts/report.cjs": `const fs = require('node:fs'); const path = require('node:path'); fs.mkdirSync('reports', { recursive: true }); fs.writeFileSync('reports/uploaded.txt', fs.readFileSync(path.join(__dirname, '../data.txt')));`,
+      }),
+    }, author);
+    const agent = await service.createAgent(draft([row.id]), author);
+    const resolved = await service.resolveAgent(agent.id, author);
+    const workspace = join(root, "agent-workspace");
+    await mkdir(workspace);
+    try {
+      const snapshot = createSkillSnapshot(workspace, { mode: "selected", skillIds: resolved.context.skillIds }, resolved);
+      const run = createSkillTools(snapshot).find((tool) => tool.name === "run_skill")!;
+      await run.execute("report", { skillId: "sample-skill", command: 'node "$ANTLER_SKILL_DIR/scripts/report.cjs"' });
+      await run.execute("dependencies", { skillId: "sample-skill", command: 'mkdir -p "$ANTLER_SKILL_DIR/.venv"' });
+      expect(await readFile(join(workspace, "reports/uploaded.txt"), "utf8")).toBe("uploaded resource");
+      expect(await readdir(service.directory(row))).not.toContain(".venv");
+    } finally {
+      resolved.release();
+    }
+    await service.checkSkill(row.id);
+    expect(await db.skill.findUnique({ where: { id: row.id } })).toMatchObject({ state: "ready" });
   });
   it("keeps database UUIDs separate from skill names and tools' file fingerprints", async () => {
     const row = await service.upload(uploadBody(), author);

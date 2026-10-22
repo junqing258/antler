@@ -1,3 +1,4 @@
+import { AgentIcon } from "@/components/agent-icon";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { getConversation } from "@/lib/conversation-store";
@@ -84,7 +85,12 @@ export function AgentListPage() {
                     className="flex flex-col rounded-xl border border-[#e6e6e2] bg-white p-6 shadow-sm"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <h3 className="text-lg font-semibold">{agent.name}</h3>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-[#eef4ef] text-primary">
+                          <AgentIcon name={agent.icon} />
+                        </span>
+                        <h3 className="break-words text-lg font-semibold">{agent.name}</h3>
+                      </div>
                       <span className="shrink-0 rounded-full bg-[#eef4ef] px-2 py-1 text-xs">
                         {agent.status === "published" ? "已发布" : "草稿"}
                       </span>

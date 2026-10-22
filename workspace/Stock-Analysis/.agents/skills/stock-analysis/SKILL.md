@@ -17,6 +17,7 @@ allowed-tools:
   - read_skill_resource
   - write
   - bash
+  - run_skill
   - web_search
 metadata:
   trigger: 当用户提供股票代码要求分析，或问某只股票走势/建议时触发
@@ -29,6 +30,7 @@ metadata:
 
 ## Antler 运行约定
 
+- 通过 Agent 绑定并用 `load_skill` 加载时，脚本执行和依赖安装统一使用 `run_skill`，传入 `skillId: "stock-analysis"`。工具已准备完整项目副本；下文命令中的 `.agents/skills/stock-analysis` 路径一律替换为 `"$ANTLER_SKILL_DIR"`。例如 `uv run --project "$ANTLER_SKILL_DIR" "$ANTLER_SKILL_DIR/references/stock_data_fetcher.py" --stocks 600519`。命令从 Agent 工作目录启动，报告写入当前目录的 `reports/`；依赖保存在运行副本中，无需查找 Stock-Analysis 项目。以下关于项目目录的约定仅适用于直接读取本文件的旧项目模式。
 - 每次 `bash` 都从项目配置的工作目录重新启动；选择现有 `Stock-Analysis` 项目时，这里已经是项目根目录，不要再 `cd Stock-Analysis` 或创建同名目录。先用 `pwd` 和 `read` 检查 `.agents/skills/stock-analysis/SKILL.md` 校验位置；探测目录与执行分析分开调用，避免用 `&&` 将可选的 `reports/` 目录检查与分析命令串联。项目文件缺失时说明需要配置 Stock-Analysis 工作目录，不扫描 `/` 或整个用户目录寻找项目。需要切换目录时，使用已确认的绝对路径，并与目标命令放在同一次调用中；上一次调用的 `cd` 不会延续。
 - Skill 目录为 `.agents/skills/stock-analysis`；无需 Claude 专用环境变量。
 - 使用现有目录中的 Skill 和文件，仅按需创建 `reports/` 等输出目录。找不到资源时先检查项目工作目录设置，不要通过移动项目文件修补路径。`.env` 和 `.env.example` 都受保护；保持现有配置文件原位，由业务脚本加载。遇到 `secret_access_denied` 后取消相关文件操作，继续可执行的任务，不用通配符、别名或其他脚本重试被拒绝的操作。
