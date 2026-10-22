@@ -55,7 +55,7 @@ afterEach(async () => {
 });
 
 describe("Agent platform", () => {
-  it("seeds published built-ins once and protects them in both auth modes", async () => {
+  it("seeds preset Agents once and preserves edits in both auth modes", async () => {
     await service.ensureBuiltinAgents();
     await service.ensureBuiltinAgents();
     const agents = await service.listAgents(other);
@@ -67,9 +67,11 @@ describe("Agent platform", () => {
       const resolved = await service.resolveAgent(agent.id, other, true);
       resolved.release();
       for (const auth of [local, other]) {
-        await expect(service.updateAgent(agent.id, { name: "changed" }, auth)).rejects.toMatchObject({ statusCode: 403 });
-        await expect(service.updateAgent(agent.id, {}, auth, "unpublish")).rejects.toMatchObject({ statusCode: 403 });
-        await expect(service.deleteAgent(agent.id, auth)).rejects.toMatchObject({ statusCode: 403 });
+        await service.updateAgent(agent.id, { name: "changed", systemPrompt: "Custom prompt" }, auth);
+        await service.updateAgent(agent.id, {}, auth, "unpublish");
+        expect(await service.getAgent(agent.id, auth)).toMatchObject({ name: "changed", status: "draft" });
+        await service.ensureBuiltinAgents();
+        expect(await service.getAgent(agent.id, auth)).toMatchObject({ name: "changed", systemPrompt: "Custom prompt", status: "draft" });
       }
     }
   });

@@ -11,10 +11,10 @@ export class PlatformError extends Error {
 }
 export type AuthContext = { userId: string; authMode: "local" | "supabase" };
 export const canEdit = (row: { ownerId: string; id?: string }, auth: AuthContext) =>
-  !(row.id && isBuiltinAgent(row.id)) &&
-  (auth.authMode === "local" || (!!auth.userId && row.ownerId === auth.userId));
+  auth.authMode === "local" ||
+  (!!auth.userId && (row.ownerId === auth.userId || !!(row.id && isBuiltinAgent(row.id))));
 export const canRead = (
-  row: { ownerId: string; status: string },
+  row: { ownerId: string; status: string; id?: string },
   auth: AuthContext,
 ) => canEdit(row, auth) || row.status === "published";
 export function requireOwner(

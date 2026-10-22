@@ -46,6 +46,7 @@ import { registerSchedulerRoutes } from "./routes/scheduler.js";
 import type { ServiceRegistry } from "./scheduler/types.js";
 import { registerRequestTracing } from "./plugins/request-tracing.js";
 import { currentRunUserId } from "./run-context.js";
+import { skillEnvironment } from "./config/tool-environment.js";
 
 export function createApp(config: AppConfig) {
   mkdirSync(config.workspaceRoot, { recursive: true });
@@ -145,10 +146,10 @@ export function createApp(config: AppConfig) {
         tavilyApiKey: config.tavilyApiKey,
         smtp: config.smtp,
         getToolEnvironment: () => ({
+          ...skillEnvironment(),
           ...ragConfig.environment(),
-          // Explicit skill credentials survive the server-secret filter.
-          ...(process.env.TUSHARE_TOKEN
-            ? { TUSHARE_TOKEN: process.env.TUSHARE_TOKEN }
+          ...(config.tavilyApiKey
+            ? { TAVILY_API_KEY: config.tavilyApiKey }
             : {}),
         }),
         workspaceRoot,

@@ -23,6 +23,7 @@ export function AgentEditPage() {
     [loaded, setLoaded] = useState(false),
     [hasConversations, setHasConversations] = useState(false);
   const [error, setError] = useState("");
+  const [showMoreSkills, setShowMoreSkills] = useState(false);
   useEffect(() => {
     let cancelled = false;
     setLoaded(false);
@@ -33,6 +34,7 @@ export function AgentEditPage() {
     setDescription("");
     setPrompt("");
     setSkillIds([]);
+    setShowMoreSkills(false);
     setWorkspace("");
     void Promise.all([
       platformApi<{ skills: PlatformSkill[] }>("/skills"),
@@ -183,45 +185,82 @@ export function AgentEditPage() {
             </span>
           </label>
           <div>
-            <p className="mb-3 text-sm font-medium">绑定技能</p>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-sm font-medium">绑定技能</p>
+              <button
+                type="button"
+                className="text-sm text-primary"
+                aria-expanded={showMoreSkills}
+                aria-controls="available-agent-skills"
+                onClick={() => setShowMoreSkills(!showMoreSkills)}
+              >
+                更多
+              </button>
+            </div>
             <div className="space-y-2">
-              {skills.map((skill) => (
-                <label
+              {skills.filter((skill) => skillIds.includes(skill.id)).map((skill) => (
+                <div
                   key={skill.id}
-                  className="flex gap-3 rounded-lg border border-[#e5e5e5] bg-white p-3 text-sm"
+                  className="flex items-center justify-between gap-3 rounded-lg border border-[#e5e5e5] bg-white p-3 text-sm"
                 >
-                  <input
-                    type="checkbox"
-                    disabled={!skill.bindable && !skillIds.includes(skill.id)}
-                    checked={skillIds.includes(skill.id)}
-                    onChange={(e) =>
-                      setSkillIds(
-                        e.target.checked
-                          ? [...skillIds, skill.id]
-                          : skillIds.filter((id) => id !== skill.id),
-                      )
-                    }
-                  />
                   <span>
                     {skill.name}
                     <small className="mt-1 block text-[#777]">
-                      {skill.bindable
-                        ? skill.description
-                        : `不可绑定：${skill.unbindableReason}`}
+                      {skill.bindable ? skill.description : `不可绑定：${skill.unbindableReason}`}
                     </small>
                   </span>
-                </label>
+                  <button
+                    type="button"
+                    className="shrink-0 text-red-700"
+                    aria-label={`移除 ${skill.name}`}
+                    onClick={() => {
+                      setSkillIds(skillIds.filter((id) => id !== skill.id));
+                      setDirty(true);
+                    }}
+                  >
+                    移除
+                  </button>
+                </div>
               ))}
-              {!skills.length && (
-                <p className="text-sm text-[#777]">
-                  尚无技能，先到
-                  <Link to="/skills" className="text-primary">
-                    技能库上传
-                  </Link>
-                  。
-                </p>
+              {!skillIds.length && (
+                <p className="text-sm text-[#777]">尚未绑定技能，点击“更多”选择添加。</p>
               )}
             </div>
+            {showMoreSkills && (
+              <div id="available-agent-skills" className="mt-3 space-y-2 rounded-lg border border-[#e5e5e5] p-3">
+                <p className="text-sm font-medium">选择添加技能</p>
+                {skills.filter((skill) => !skillIds.includes(skill.id)).map((skill) => (
+                  <div key={skill.id} className="flex items-center justify-between gap-3 rounded-lg bg-white p-3 text-sm">
+                    <span>
+                      {skill.name}
+                      <small className="mt-1 block text-[#777]">
+                        {skill.bindable ? skill.description : `不可绑定：${skill.unbindableReason}`}
+                      </small>
+                    </span>
+                    <button
+                      type="button"
+                      className="shrink-0 text-primary disabled:text-[#aaa]"
+                      disabled={!skill.bindable}
+                      aria-label={`添加 ${skill.name}`}
+                      onClick={() => {
+                        setSkillIds([...skillIds, skill.id]);
+                        setDirty(true);
+                      }}
+                    >
+                      添加
+                    </button>
+                  </div>
+                ))}
+                {skills.length > 0 && skills.every((skill) => skillIds.includes(skill.id)) && (
+                  <p className="text-sm text-[#777]">已添加全部技能。</p>
+                )}
+                {!skills.length && (
+                  <p className="text-sm text-[#777]">
+                    尚无技能，先到<Link to="/skills" className="text-primary">技能库上传</Link>。
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           <label className="grid gap-2 text-sm font-medium">
             默认工作目录

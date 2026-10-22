@@ -70,9 +70,8 @@ export function AgentListPage() {
         </p>
       )}
       {[
-        { name: "内置 Agent", items: agents.filter((a) => a.builtin) },
-        { name: "我的 Agent", items: agents.filter((a) => !a.builtin && a.editable) },
-        { name: "已发布 Agent", items: agents.filter((a) => !a.builtin && !a.editable) },
+        { name: "我的 Agent", items: agents.filter((a) => a.editable) },
+        { name: "已发布 Agent", items: agents.filter((a) => !a.editable) },
       ].map(
         (group) =>
           group.items.length > 0 && (
@@ -87,7 +86,7 @@ export function AgentListPage() {
                     <div className="flex items-start justify-between gap-3">
                       <h3 className="text-lg font-semibold">{agent.name}</h3>
                       <span className="shrink-0 rounded-full bg-[#eef4ef] px-2 py-1 text-xs">
-                        {agent.builtin ? "内置" : agent.status === "published" ? "已发布" : "草稿"}
+                        {agent.status === "published" ? "已发布" : "草稿"}
                       </span>
                     </div>
                     <p className="my-4 flex-1 whitespace-pre-wrap break-words text-sm leading-6 text-[#666]">

@@ -109,16 +109,18 @@ describe("Agent platform pages", () => {
     expect(await screen.findByText(/还没有 Agent/)).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "普通聊天 / 历史会话" })).not.toBeInTheDocument();
   });
-  it("shows built-in assistants in their own group without edit links", async () => {
+  it("shows preset assistants alongside editable Agents without builtin labels", async () => {
     api.mockResolvedValue({ agents: [
-      { ...agent, id: "default", name: "默认助手", builtin: true, editable: false, status: "published" },
-      { ...agent, id: "stocks", name: "股票分析师", builtin: true, editable: false, status: "published" },
+      { ...agent, id: "default", name: "默认助手", builtin: true, editable: true, status: "published" },
+      { ...agent, id: "stocks", name: "股票分析师", builtin: true, editable: true, status: "published" },
     ] });
     mount(<AgentListPage />);
     expect(await screen.findByText("默认助手")).toBeInTheDocument();
     expect(screen.getByText("股票分析师")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "内置 Agent" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "编辑" })).not.toBeInTheDocument();
+    expect(screen.queryByText("内置 Agent")).not.toBeInTheDocument();
+    expect(screen.queryByText("内置")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "我的 Agent" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "编辑" }).map((link) => link.getAttribute("href"))).toEqual(["/agents/default/edit", "/agents/stocks/edit"]);
     expect(screen.getAllByRole("link", { name: "开始对话 →" }).map((link) => link.getAttribute("href"))).toEqual(["/agents/default", "/agents/stocks"]);
   });
   it("shows Agent creation without an ordinary chat entrance", async () => {
@@ -169,11 +171,22 @@ describe("Agent platform pages", () => {
         : agent,
     );
     mount(<AgentEditPage />, "/agents/agent-id/edit");
-    const available = await screen.findByRole("checkbox", { name: /example/ });
+    const more = await screen.findByRole("button", { name: "更多" });
+    await waitFor(() => expect(more).not.toBeDisabled());
+    expect(screen.queryByText("example")).not.toBeInTheDocument();
+    fireEvent.click(more);
+    const available = screen.getByRole("button", { name: "添加 example" });
     expect(
-      screen.getByRole("checkbox", { name: /unavailable/ }),
+      screen.getByRole("button", { name: "添加 unavailable" }),
     ).toBeDisabled();
     fireEvent.click(available);
+    expect(screen.queryByRole("button", { name: "添加 example" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "移除 example" }));
+    expect(screen.queryByRole("button", { name: "移除 example" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "添加 example" }));
+    fireEvent.click(more);
+    expect(screen.queryByText("unavailable")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "移除 example" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() =>
       expect(api).toHaveBeenCalledWith(
