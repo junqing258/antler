@@ -1,122 +1,84 @@
-import type { ThreadMessageLike } from "@assistant-ui/react";
-import { IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getConversation,
-  deleteConversation,
+  listConversations,
   renameConversation,
-  saveGeneratedConversationTitle,
-  saveConversationMessages,
+  deleteConversation,
+  resetConversationSession,
+  conversationRequest,
 } from "../../src/lib/conversation-store";
-
-const agentId = "stock-analyst";
-const messages: ThreadMessageLike[] = [{ role: "user", content: "分析股票" }];
-
-describe("conversation Agent persistence", () => {
-  beforeEach(() => {
-    vi.stubGlobal("indexedDB", new IDBFactory());
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it("reads legacy project records without grouping or rebinding them", async () => {
-    const database = await new Promise<IDBDatabase>((resolve) => {
-      const request = indexedDB.open("antler", 3);
-      request.onupgradeneeded = () => request.result.createObjectStore("conversations", { keyPath: "id" });
-      request.onsuccess = () => resolve(request.result);
-    });
-    await new Promise<void>((resolve) => {
-      const transaction = database.transaction("conversations", "readwrite");
-      transaction.objectStore("conversations").put({
-        id: "legacy", projectId: "old-project", agentId,
-        title: "Old", messages, createdAt: 1, updatedAt: 1,
-      });
-      transaction.oncomplete = () => resolve();
-    });
-    database.close();
-    const conversation = await getConversation("legacy");
-    expect(conversation).toMatchObject({ agentId, messages });
-    expect(conversation).not.toHaveProperty("projectId");
-  });
-
-  it("saves a new thread under the selected Agent", async () => {
-    await saveConversationMessages("stock-thread", messages, agentId);
-
-    expect(await getConversation("stock-thread")).toMatchObject({
-      agentId,
-      messages,
-    });
-  });
-
-  it("preserves an existing thread's Agent on subsequent saves", async () => {
-    await saveConversationMessages("stock-thread", messages, agentId);
-    await saveConversationMessages("stock-thread", messages, "other-agent");
-
-    expect(await getConversation("stock-thread")).toMatchObject({ agentId });
-  });
-
-  it("preserves unbound legacy conversations", async () => {
-    expect(await saveConversationMessages("general-thread", messages))
-      .toMatchObject({ agentId: undefined });
-  });
-
-  it("keeps empty drafts out of history", async () => {
-    expect(await saveConversationMessages("empty-thread", [], agentId))
-      .toBeUndefined();
-    expect(await getConversation("empty-thread")).toBeUndefined();
-  });
-
-  it("preserves the generated title across concurrent streaming saves", async () => {
-    await saveConversationMessages("generated-thread", messages, agentId);
-    const updatedMessages: ThreadMessageLike[] = [
-      ...messages,
-      { role: "assistant", content: "分析结果" },
-    ];
-    await Promise.all([
-      saveConversationMessages("generated-thread", updatedMessages, agentId),
-      saveGeneratedConversationTitle("generated-thread", "股票投资分析"),
+import {
+  installConversationFixture,
+  saveConversationMessages,
+} from "../conversation-fixture";
+vi.mock("@/lib/server-info", () => ({
+  serverInfo: async () => ({ baseUrl: "", token: "test" }),
+  authHeaders: () => ({ "x-antler-token": "test" }),
+}));
+beforeEach(() => {
+  resetConversationSession();
+  installConversationFixture();
+});
+afterEach(() => vi.unstubAllGlobals());
+describe("server conversation storage", () => {
+  it("loads server summaries, adapts versioned messages and uses revision for renaming", async () => {
+    await saveConversationMessages(
+      "one",
+      [{ role: "user", content: "hello" }],
+      "agent",
+    );
+    expect((await listConversations())[0].messages).toEqual([]);
+    expect((await getConversation("one"))?.messages[0].content).toEqual([
+      { type: "text", text: "hello" },
     ]);
-    expect(await getConversation("generated-thread")).toMatchObject({
-      title: "股票投资分析",
-      isTitleGenerated: true,
-      messages: updatedMessages,
-    });
-    await saveConversationMessages("generated-thread", messages, agentId);
-    expect((await getConversation("generated-thread"))?.title).toBe("股票投资分析");
+    await renameConversation("one", "manual");
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/one"),
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ title: "manual", expectedRevision: 1 }),
+      }),
+    );
+    await deleteConversation("one");
+    expect(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.headers).not.toHaveProperty(
+      "content-type",
+    );
+    expect(await getConversation("one")).toBeUndefined();
   });
-
-  it.each(["before", "after"])("gives manual renames priority %s title generation", async (order) => {
-    await saveConversationMessages("manual-thread", messages, agentId);
-    const rename = () => renameConversation("manual-thread", "我的投资计划");
-    const generate = () => saveGeneratedConversationTitle("manual-thread", "股票分析");
-    await Promise.all(order === "before" ? [rename(), generate()] : [generate(), rename()]);
-    await saveConversationMessages("manual-thread", messages, agentId);
-    expect(await getConversation("manual-thread")).toMatchObject({
-      title: "我的投资计划",
-      isTitleManuallySet: true,
+  it("does not open legacy IndexedDB", async () => {
+    const open = vi.fn(() => {
+      throw new Error("must not read legacy data");
     });
+    vi.stubGlobal("indexedDB", { open });
+    expect(await listConversations()).toEqual([]);
+    expect(open).not.toHaveBeenCalled();
   });
-
-  it("ignores empty titles and repeated generation without reordering history", async () => {
-    const original = await saveConversationMessages("stable-thread", messages, agentId);
-    expect(await saveGeneratedConversationTitle("stable-thread", "  ")).toBeUndefined();
-    await saveGeneratedConversationTitle("stable-thread", "股票分析");
-    expect(await saveGeneratedConversationTitle("stable-thread", "替换标题")).toBeUndefined();
-    expect(await getConversation("stable-thread")).toMatchObject({
-      title: "股票分析",
-      updatedAt: original!.updatedAt,
-    });
+  it("rejects late responses after an account switch", async () => {
+    let resolve!: (value: Response) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>((r) => {
+            resolve = r;
+          }),
+      ),
+    );
+    const pending = conversationRequest("");
+    await Promise.resolve();
+    resetConversationSession();
+    resolve(new Response("{}"));
+    await expect(pending).rejects.toThrow("账号已切换");
   });
-
-  it("does not recreate a deleted conversation when a title arrives", async () => {
-    await saveConversationMessages("deleted-thread", messages, agentId);
-    await Promise.all([
-      saveGeneratedConversationTitle("deleted-thread", "股票分析"),
-      deleteConversation("deleted-thread"),
-    ]);
-    expect(await saveGeneratedConversationTitle("deleted-thread", "迟到的标题")).toBeUndefined();
-    expect(await getConversation("deleted-thread")).toBeUndefined();
+  it("does not turn service failure into an empty history", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response('{"error":"unavailable"}', { status: 503 }),
+        ),
+    );
+    await expect(listConversations()).rejects.toThrow("unavailable");
   });
 });

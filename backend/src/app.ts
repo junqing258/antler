@@ -34,7 +34,8 @@ import { chmod, mkdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { registerDatabase } from "./plugins/database.js";
-import { PrismaRunStore } from "./runs/run-store.js";
+import { ConversationStore } from "./conversations/store.js";
+import { registerConversationRoutes } from "./routes/conversations.js";
 import { registerConfigRoutes } from "./routes/config.js";
 import { registerAuthConfigRoutes } from "./routes/auth-config.js";
 import { RagConfigStore } from "./config/rag-config.js";
@@ -150,11 +151,12 @@ export function createApp(config: AppConfig) {
   };
   const skillRegistry = new SkillRegistry(config.agentsDir);
   const platform = new PlatformService(app.prisma, platformRoot, skillRegistry);
+  const conversations = new ConversationStore(app.prisma);
   const runtime = new AntlerHostRuntime(
     createAdapter,
-    { maxRunDurationMs: config.maxRunDurationMs, maxEvents: 10_000, authMode },
+    { maxRunDurationMs: config.maxRunDurationMs, maxEvents: 10_000, authMode, resolveWorkingDirectory: (id) => resolve(id ? agentWorkspace(config.workspaceRoot, id) : config.workspaceRoot), defaultExecutionConfig: { protocol: config.provider === "anthropic" ? "anthropic-messages" : "openai-responses", model: config.model, baseUrl: config.provider === "anthropic" ? config.anthropicBaseUrl ?? "" : config.openAiBaseUrl ?? "", credentialSource: "server", workingDirectory: config.workspaceRoot } },
     skillRegistry,
-    new PrismaRunStore(app.prisma),
+    conversations,
     platform,
   );
   // Test-only in-memory apps do not run migrations. Normal server startup has
@@ -231,6 +233,7 @@ export function createApp(config: AppConfig) {
   registerHealthRoutes(app);
   registerTaskRoutes(app, taskService);
   registerRunRoutes(app, runtime);
+  registerConversationRoutes(app, conversations, runtime);
   registerSkillRoutes(app, platform, authMode);
   registerAgentRoutes(app, platform, authMode, config.workspaceRoot);
   registerDirectoryRoutes(app, config.workspaceRoot);

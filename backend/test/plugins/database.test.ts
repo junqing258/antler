@@ -25,6 +25,10 @@ describe("database", () => {
       expect(tables.map((table) => table.tablename).sort()).toEqual([
         "agent_skills",
         "agents",
+        "conversation_changes",
+        "conversation_messages",
+        "conversation_sync_states",
+        "conversations",
         "run_events",
         "runs",
         "scheduled_tasks",

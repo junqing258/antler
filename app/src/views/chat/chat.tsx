@@ -33,6 +33,7 @@ export function Chat({
   conversations,
   workingDirectory,
   onNewThread,
+  onLoadMore,
   onSelectThread,
   onRenameThread,
   onDeleteThread,
@@ -49,6 +50,7 @@ export function Chat({
   title: string;
   conversations: Conversation[];
   workingDirectory: string;
+  onLoadMore?: () => void;
   onNewThread: () => void;
   onSelectThread: (id: string) => void;
   onRenameThread: (conversation: Conversation) => void;
@@ -61,7 +63,7 @@ export function Chat({
   onConversationSaved: () => void;
 }) {
   const modelPickerConfig = getModelPickerConfig(providerConfig, serverModel);
-  const runtime = useAntlerRuntime(
+  const { runtime, notice, hasMore, loadEarlier, boundModel } = useAntlerRuntime(
     serverInfo,
     conversationId,
     workingDirectory,
@@ -143,6 +145,7 @@ export function Chat({
         {conversations.length === 0 && (
           <p className="px-3 py-1.5 text-xs text-[#999]">暂无会话</p>
         )}
+        {onLoadMore && <button onClick={onLoadMore}>加载更多会话</button>}
         <div className="grid min-w-0 grid-cols-1 gap-0.5">
           {conversations.map((conversation) => (
             <div
@@ -231,9 +234,11 @@ export function Chat({
             </aside>
           )}
           <section className="min-w-0 flex-1">
+            {notice && <p role="status" className="px-4 py-2 text-sm text-amber-700">{notice}</p>}
+            {hasMore && <button onClick={() => void loadEarlier()}>加载更早消息</button>}
             <AssistantThread
-              model={modelPickerConfig.model}
-              models={modelPickerConfig.models}
+              model={boundModel ?? modelPickerConfig.model}
+              models={boundModel ? [boundModel] : modelPickerConfig.models}
               title={title}
               navigation={
                 isMobile ? (

@@ -81,11 +81,15 @@ export function registerRunRoutes(
     const {
       message,
       conversationId,
+      clientRequestId,
+      expectedRevision,
       provider,
       workingDirectory,
       skillPolicy,
       agentId,
     } = (request.body ?? {}) as {
+      clientRequestId?: unknown;
+      expectedRevision?: unknown;
       message?: unknown;
       conversationId?: unknown;
       provider?: unknown;
@@ -105,8 +109,12 @@ export function registerRunRoutes(
     try {
       if (agentId !== undefined && (typeof agentId !== "string" || !agentId))
         return reply.code(400).send({ error: "agentId 无效" });
+      if (clientRequestId !== undefined && (typeof clientRequestId !== "string" || !clientRequestId || clientRequestId.length > 200)) return reply.code(400).send({ error: "invalid_client_request_id" });
+      if (expectedRevision !== undefined && (!Number.isSafeInteger(expectedRevision) || Number(expectedRevision) < 0)) return reply.code(400).send({ error: "invalid_revision" });
       const parsedPolicy = parseSkillPolicy(skillPolicy);
       const outcome = await runtime.createRunWithSkills(message.trim(), {
+        clientRequestId: clientRequestId as string | undefined,
+        expectedRevision: expectedRevision as number | undefined,
         userId: request.antlerUser?.id,
         conversationId,
         provider: parseProvider(provider),
@@ -117,6 +125,9 @@ export function registerRunRoutes(
       const run = outcome.run;
       return reply.code(202).send({
         runId: run.id,
+        userMessageId: `${run.id}:user`,
+        assistantMessageId: `${run.id}:assistant`,
+        revision: await runtime.getConversationRevision?.(run.conversationId, request.antlerUser?.id),
         eventsUrl: `/api/runs/${run.id}/events`,
         skillDiagnostics: outcome.skillDiagnostics,
       });

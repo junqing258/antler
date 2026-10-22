@@ -50,6 +50,15 @@ export class PiAdapterError extends Error {
 /** 将宿主的一次运行接入 Pi Agent，负责模型配置、工具装配和取消信号桥接。 */
 export class PiAgentAdapter {
   readonly secretGuard: SecretGuard;
+  private readonly restoredMessages = new Map<string, AgentMessage[]>();
+  exportContext(id: string): AgentMessage[] | undefined {
+    return this.agents.get(id)?.agent.state.messages as AgentMessage[] | undefined;
+  }
+  importContext(id: string, messages: AgentMessage[]) {
+    const cached = this.agents.get(id);
+    if (cached) cached.agent.state.messages = structuredClone(messages);
+    else this.restoredMessages.set(id, structuredClone(messages));
+  }
   // 同一适配器内按会话复用 Agent 的消息历史，并记录其初始化时的技能目录指纹。
   private readonly agents = new Map<
     string,
@@ -314,6 +323,7 @@ export class PiAgentAdapter {
     skillSnapshot: SkillSnapshot,
     signal: AbortSignal,
     onEvent: (event: AgentEvent) => void | Promise<void>,
+    initializeOnly = false,
   ) {
     // 每轮重新加载秘密，避免工作区或工具环境更新后仍使用旧的脱敏规则。
     await this.secretGuard.refresh();
@@ -324,6 +334,7 @@ export class PiAgentAdapter {
         skillSnapshot,
         signal,
         onEvent,
+        initializeOnly,
       );
     }
     if (!this.config.openAiApiKey)
@@ -366,7 +377,7 @@ export class PiAgentAdapter {
             composeSkillPrompt(this.config.systemPrompt, skillSnapshot),
           ),
           thinkingLevel: "low",
-          messages: [],
+          messages: this.restoredMessages.get(conversationId) ?? [],
           tools: this.tools(skillSnapshot),
         },
         // 显式注入凭据和单次请求超时；Pi 提供的 signal 用于中止当前模型请求。
@@ -390,6 +401,7 @@ export class PiAgentAdapter {
       this.agents.set(conversationId, cached);
     }
     const agent = cached.agent;
+    if (initializeOnly) return agent.state.messages as AgentMessage[];
     // 订阅和取消监听只服务于本轮调用，避免缓存 Agent 累积旧运行的回调。
     const unsubscribe = agent.subscribe(onEvent);
     const abort = () => agent.abort();
@@ -412,6 +424,7 @@ export class PiAgentAdapter {
     skillSnapshot: SkillSnapshot,
     signal: AbortSignal,
     onEvent: (event: AgentEvent) => void | Promise<void>,
+    initializeOnly = false,
   ) {
     if (!this.config.anthropicAuthToken)
       throw new PiAdapterError(
@@ -462,7 +475,7 @@ export class PiAgentAdapter {
             composeSkillPrompt(this.config.systemPrompt, skillSnapshot),
           ),
           thinkingLevel: "low",
-          messages: [],
+          messages: this.restoredMessages.get(conversationId) ?? [],
           tools: this.tools(skillSnapshot),
         },
         streamFn: (activeModel, context, options) =>
@@ -489,6 +502,7 @@ export class PiAgentAdapter {
       this.agents.set(conversationId, cached);
     }
     const agent = cached.agent;
+    if (initializeOnly) return agent.state.messages as AgentMessage[];
     // 缓存只保留 Agent 状态，事件订阅和取消监听在本轮结束后释放。
     const unsubscribe = agent.subscribe(onEvent);
     const abort = () => agent.abort();

@@ -1,7 +1,8 @@
 import { PlatformError, type AuthContext } from "../platform/errors.js";
 import type { PlatformService, RunAgentContext } from "../platform/service.js";
 import { normalizeSkillPolicy } from "../skills/skill-policy.js";
-import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
+import { createHash, randomUUID } from "node:crypto";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import {
   isTerminalRunStatus,
@@ -37,6 +38,10 @@ export type Run = {
   agentFingerprint?: string | null;
   skillPolicy?: unknown;
   catalogFingerprint?: string | null;
+  clientRequestId?: string;
+  requestHash?: string;
+  expectedRevision?: number;
+  executionConfig?: Record<string, unknown>;
   input: string;
   status: RunStatus;
   errorCode?: string;
@@ -49,6 +54,7 @@ type ActiveRun = {
   run: Run;
   controller: AbortController;
   events: RunEvent[];
+  eventTail: Promise<void>;
   listeners: Set<(event: RunEvent) => void>;
   timeout?: NodeJS.Timeout;
   adapter: PiAgentAdapter;
@@ -85,6 +91,8 @@ export class ConversationSkillContextMismatchError extends PlatformError {
 }
 /** 调用方可传入已发现的技能快照，或通过 createRunWithSkills 异步发现技能。 */
 export type CreateRunOptions = {
+  clientRequestId?: string;
+  expectedRevision?: number;
   agentId?: string;
   agentConstraints?: RunAgentConstraints;
   /** Legacy persistence field; new callers use Agent ownership instead. */
@@ -100,12 +108,17 @@ export type HostRuntimeConfig = {
   maxRunDurationMs: number;
   maxEvents: number;
   authMode?: "local" | "supabase";
+  defaultExecutionConfig?: Record<string, unknown>;
+  resolveWorkingDirectory?: (agentId?: string) => string;
 };
 /** 管理运行状态和事件发布，将 Pi 事件转换为客户端使用的运行事件。 */
 export class AntlerHostRuntime {
   private readonly runs = new Map<string, ActiveRun>();
   private readonly executions = new Set<Promise<void>>();
   private stopping = false;
+  private readonly requests = new Map<string, { hash: string; promise: Promise<{ run: Run; skillDiagnostics: SkillSnapshot["diagnostics"] }> }>();
+  private readonly conversationSecretGuards = new Map<string, SecretGuard>();
+  private readonly modelContexts = new Map<string, unknown>();
   // 会话到当前运行的映射，用于拒绝同一会话的并发运行。
   private readonly activeConversations = new Map<string, string>();
   // 运行结束后仍保留技能约束，保证后续轮次使用相同的策略和目录指纹。
@@ -275,13 +288,33 @@ export class AntlerHostRuntime {
   ): Promise<{ run: Run; skillDiagnostics: SkillSnapshot["diagnostics"] }> {
     return this.createInternal(input, options, "auto");
   }
-  private async createInternal(
+  private createInternal(input: string, options: CreateRunOptions, defaultMode: "auto" | "disabled") {
+    if (!options.clientRequestId) return this.createInternalUnlocked(input, options, defaultMode);
+    const { apiKey: _key, ...provider } = options.provider ?? {};
+    const hash = createHash("sha256").update(JSON.stringify({ input, ...options, provider })).digest("hex");
+    const key = JSON.stringify([this.auth(options.userId).userId, options.clientRequestId]);
+    const existing = this.requests.get(key);
+    if (existing) {
+      if (existing.hash !== hash) return Promise.reject(new PlatformError("client_request_conflict"));
+      return existing.promise;
+    }
+    const promise = this.createInternalUnlocked(input, options, defaultMode).finally(() => this.requests.delete(key));
+    this.requests.set(key, { hash, promise });
+    return promise;
+  }
+  private async createInternalUnlocked(
     input: string,
     options: CreateRunOptions,
     defaultMode: "auto" | "disabled",
   ) {
     if (this.stopping) throw new PlatformError("service_unavailable", 503);
     const conversationId = options.conversationId ?? randomUUID();
+    const { apiKey: _credential, ...providerConfig } = options.provider ?? {};
+    const requestHash = createHash("sha256").update(JSON.stringify({ input, conversationId, providerConfig, workingDirectory: options.workingDirectory, agentId: options.agentId, skillPolicy: options.skillPolicy, expectedRevision: options.expectedRevision })).digest("hex");
+    if (options.clientRequestId) {
+      const prior = await this.runStore?.findRequest?.(this.auth(options.userId).userId, options.clientRequestId, requestHash);
+      if (prior) return { run: prior, skillDiagnostics: [] };
+    }
     if (this.activeConversations.has(conversationId))
       throw new ConversationBusyError("conversation_busy");
     this.activeConversations.set(conversationId, "creating");
@@ -289,6 +322,16 @@ export class AntlerHostRuntime {
     let persisted: Run | undefined;
     try {
       const auth = this.auth(options.userId);
+      const bound = await this.runStore?.getExecution?.(auth.userId, conversationId);
+      if (bound) {
+        const config = bound.config;
+        if (options.provider) {
+          const endpoint = (value: unknown) => typeof value === "string" ? value.replace(/\/+$/, "") : "";
+          if (options.provider.protocol !== config.protocol || options.provider.model !== config.model || endpoint(options.provider.baseUrl) !== endpoint(config.baseUrl)) throw new PlatformError("conversation_execution_config_mismatch");
+        } else if (config.credentialSource === "client") throw new PlatformError("credential_required");
+        if (options.workingDirectory && options.workingDirectory !== config.workingDirectory) throw new PlatformError("conversation_execution_config_mismatch");
+        options = { ...options, workingDirectory: String(config.workingDirectory || "") || undefined };
+      }
       const preflight = await this.preflight(
         conversationId,
         options.agentId,
@@ -296,11 +339,17 @@ export class AntlerHostRuntime {
         options.agentConstraints,
       );
       release = preflight.resolved?.release;
+      if (bound && !this.modelContexts.has(conversationId)) {
+        const checkpoint = bound.checkpoint as { schemaVersion?: unknown; messages?: unknown } | null;
+        if (bound.contextState !== "available" || checkpoint?.schemaVersion !== 1 || !Array.isArray(checkpoint.messages)) throw new PlatformError("conversation_context_not_restored");
+      }
+      if (bound?.checkpoint && !this.modelContexts.has(conversationId)) this.modelContexts.set(conversationId, bound.checkpoint);
       const policy = normalizeSkillPolicy(
         preflight.resolved
           ? { mode: "selected", skillIds: preflight.resolved.context.skillIds }
           : (options.skillPolicy ?? { mode: defaultMode }),
       );
+      options = { ...options, workingDirectory: options.workingDirectory ?? this.config.resolveWorkingDirectory?.(preflight.agentId ?? undefined) };
       const workspaceRoot = options.workingDirectory ?? "";
       const catalog =
         preflight.resolved ??
@@ -327,8 +376,14 @@ export class AntlerHostRuntime {
           previous.catalogFingerprint !== snapshot.catalogFingerprint)
       )
         throw new ConversationSkillContextMismatchError();
+      const executionConfig = { schemaVersion: 1, ...(options.provider ? { ...providerConfig, baseUrl: (options.provider.baseUrl ?? "").replace(/\/+$/, ""), credentialSource: "client" } : this.config.defaultExecutionConfig), workingDirectory: options.workingDirectory ?? this.config.defaultExecutionConfig?.workingDirectory ?? "", agentFingerprint: preflight.agentFingerprint, catalogFingerprint: snapshot.catalogFingerprint };
+      if (bound && !isDeepStrictEqual(bound.config, executionConfig)) throw new PlatformError("conversation_execution_config_mismatch");
       const run: Run = {
         id: randomUUID(),
+        clientRequestId: options.clientRequestId,
+        requestHash,
+        expectedRevision: options.expectedRevision,
+        executionConfig,
         userId: previous?.userId ?? auth.userId,
         projectId: options.projectId ?? "default",
         conversationId,
@@ -355,10 +410,16 @@ export class AntlerHostRuntime {
         options.workingDirectory,
         preflight.resolved?.context,
       );
+      const checkpoint = this.modelContexts.get(conversationId) as { schemaVersion?: number; messages?: import("@earendil-works/pi-agent-core").AgentMessage[] } | undefined;
+      if (checkpoint?.schemaVersion === 1 && checkpoint.messages) {
+        adapter.importContext?.(conversationId, checkpoint.messages);
+        if (input.trim() === "/compact") await adapter.run("", conversationId, snapshot, new AbortController().signal, () => {}, true);
+      }
       const active: ActiveRun = {
         run,
         controller: new AbortController(),
         events: [],
+        eventTail: Promise.resolve(),
         listeners: new Set(),
         adapter,
         secretGuard:
@@ -370,6 +431,9 @@ export class AntlerHostRuntime {
         skillSnapshot: snapshot,
         releaseSkills: release,
       };
+      const previousGuard = this.conversationSecretGuards.get(conversationId);
+      if (previousGuard) active.secretGuard.inheritSecrets?.(previousGuard);
+      this.conversationSecretGuards.set(conversationId, active.secretGuard);
       this.runs.set(run.id, active);
       this.activeConversations.set(conversationId, run.id);
       const tracing = new RunTracing(run, (value) =>
@@ -410,9 +474,9 @@ export class AntlerHostRuntime {
       throw error;
     }
   }
-  /** 优先读取内存中的最新状态；重启前的运行则从持久化存储读取。 */
+  /** 优先读取已提交状态，避免 SSE 在终态事件落库之前提前关闭。 */
   async getRun(runId: string, userId?: string) {
-    const run = this.runs.get(runId)?.run ?? (await this.runStore?.get(runId));
+    const run = (await this.runStore?.get(runId)) ?? this.runs.get(runId)?.run;
     if (!run || (userId !== undefined && run.userId !== userId))
       return undefined;
     return run;
@@ -475,6 +539,10 @@ export class AntlerHostRuntime {
     if (!isTerminalRunStatus(active.run.status)) active.controller.abort();
     return active.run;
   }
+  async getConversationRevision(id: string, userId?: string) {
+    return (await this.runStore?.getExecution?.(this.auth(userId).userId, id))?.revision;
+  }
+  hasConversationContext(id: string) { return this.modelContexts.has(id) || this.activeConversations.has(id); }
   async stop() {
     this.stopping = true;
     for (const active of this.runs.values())
@@ -493,6 +561,11 @@ export class AntlerHostRuntime {
     run.status = "running";
     run.startedAt = new Date().toISOString();
     try {
+      try { await this.runStore?.getExecution?.(run.userId, run.conversationId); }
+      catch (error) {
+        if (error instanceof PlatformError && error.statusCode === 404) return await this.finish(active, "cancelled");
+        throw error;
+      }
       await active.secretGuard.refresh();
       if (run.input.trim() === "/compact") {
         await this.emit(
@@ -646,6 +719,14 @@ export class AntlerHostRuntime {
     // 已进入终态的运行不重复收尾；尾部文本应先于终态事件发布。
     if (isTerminalRunStatus(active.run.status)) return;
     await this.flushStreams(active);
+    const messages = active.adapter.exportContext?.(active.run.conversationId);
+    if (messages) {
+      const checkpoint = { schemaVersion: 1, messages };
+      this.modelContexts.set(active.run.conversationId, structuredClone(checkpoint));
+      const safe = active.secretGuard.sanitize(checkpoint);
+      const restorable = isDeepStrictEqual(safe, checkpoint);
+      await this.runStore?.saveCheckpoint?.(active.run.userId, active.run.conversationId, restorable ? checkpoint : { schemaVersion: 1, unavailable: true }, restorable ? "available" : "unavailable");
+    }
     if (active.timeout) clearTimeout(active.timeout);
     active.run.status = status;
     active.run.errorCode = errorCode;
@@ -667,9 +748,27 @@ export class AntlerHostRuntime {
       },
       true,
     );
+    if (status === "succeeded" && active.run.input.trim() !== "/compact" && this.runStore?.generatedTitle) {
+      // Title work is independent of the conversation run lock and browser lifetime.
+      const titleJob = Promise.resolve().then(async () => {
+        try {
+          const conversation = await this.runStore?.getExecution?.(active.run.userId, active.run.conversationId);
+          if (conversation?.titleSource && conversation.titleSource !== "fallback") return;
+          const title = await this.generateTitle(active.run.id, active.run.userId);
+          if (title) await this.runStore!.generatedTitle!(active.run.userId, active.run.conversationId, title);
+        } catch { /* Keep the first-message fallback. */ }
+      });
+      this.executions.add(titleJob);
+      void titleJob.finally(() => this.executions.delete(titleJob));
+    }
   }
   /** 统一分配事件 ID、脱敏和持久化，保存完成后再通知实时订阅者。 */
-  private async emit(
+  private emit(active: ActiveRun, type: RunEventType, payload: Record<string, unknown>, isStateTransition = false) {
+    const next = active.eventTail.then(() => this.emitInternal(active, type, payload, isStateTransition));
+    active.eventTail = next;
+    return next;
+  }
+  private async emitInternal(
     active: ActiveRun,
     type: RunEventType,
     payload: Record<string, unknown>,
@@ -699,10 +798,12 @@ export class AntlerHostRuntime {
       payload: safePayload,
       createdAt: new Date().toISOString(),
     };
-    active.events.push(event);
     // 状态迁移交由存储层同时保存运行记录与事件，普通事件只追加日志。
     if (isStateTransition) await this.runStore?.transition(active.run, event);
     else await this.runStore?.appendEvent(event);
-    for (const listener of active.listeners) listener(event);
+    active.events.push(event);
+    for (const listener of active.listeners) {
+      try { listener(event); } catch { /* A disconnected consumer cannot break persistence. */ }
+    }
   }
 }

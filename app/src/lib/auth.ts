@@ -12,12 +12,12 @@ export async function currentSession(): Promise<AuthSession | undefined> {
 }
 
 export function onSessionChange(
-  callback: (authenticated: boolean) => void,
+  callback: (authenticated: boolean, userId?: string) => void,
 ): () => void {
   const client = supabaseClient();
   if (!client) return () => {};
   const { data } = client.auth.onAuthStateChange((_event, session) => {
-    callback(Boolean(session));
+    callback(Boolean(session), session?.user.id);
   });
   return () => data.subscription.unsubscribe();
 }

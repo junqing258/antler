@@ -17,9 +17,9 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
 import {
-  saveConversationMessages,
   getConversation,
 } from "@/lib/conversation-store";
+import { installConversationFixture, saveConversationMessages } from "./conversation-fixture";
 import { ChatView } from "@/views/chat";
 import type { ComponentProps } from "react";
 import type { Chat } from "@/views/chat/chat";
@@ -67,12 +67,7 @@ function mount(path: string) {
 beforeEach(async () => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   localStorage.clear();
-  vi.stubGlobal(
-    "fetch",
-    vi
-      .fn()
-      .mockResolvedValue({ ok: true, json: async () => ({ model: "test" }) }),
-  );
+  installConversationFixture();
   for (const [id, agent] of [
     ["ordinary-thread", undefined],
     ["A-thread", "A"],

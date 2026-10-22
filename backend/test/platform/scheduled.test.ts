@@ -127,6 +127,7 @@ beforeEach(async () => {
   await app.prisma.agent.deleteMany();
   conversation = randomUUID();
   model = vi.spyOn(PiAgentAdapter.prototype, "run").mockResolvedValue([]);
+  vi.spyOn(PiAgentAdapter.prototype, "exportContext").mockReturnValue([]);
 });
 afterEach(() => {
   vi.restoreAllMocks();

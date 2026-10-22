@@ -5,6 +5,10 @@ import type { Run } from "../agent/host-runtime.js";
 export type StoredRun = Run;
 
 export interface RunStore {
+  getExecution?(userId: string, id: string): Promise<{ config: Record<string, unknown>; checkpoint: unknown; contextState: string; revision: number; titleSource?: string } | undefined>;
+  saveCheckpoint?(userId: string, id: string, checkpoint: unknown, contextState: string): Promise<void>;
+  generatedTitle?(userId: string, id: string, title: string): Promise<void>;
+  findRequest?(userId: string, clientRequestId: string, requestHash: string): Promise<StoredRun | undefined>;
   create(run: StoredRun): Promise<void>;
   update(run: StoredRun): Promise<void>;
   transition(run: StoredRun, event: RunEvent): Promise<void>;
@@ -33,6 +37,9 @@ export class PrismaRunStore implements RunStore {
     await this.prisma.run.create({
       data: {
         id: run.id,
+        clientRequestId: run.clientRequestId,
+        requestHash: run.requestHash,
+        executionConfig: run.executionConfig as Prisma.InputJsonValue | undefined,
         userId: run.userId,
         projectId: run.projectId,
         conversationId: run.conversationId,
@@ -99,6 +106,9 @@ export class PrismaRunStore implements RunStore {
     if (!run) return undefined;
     return {
       id: run.id,
+      clientRequestId: run.clientRequestId ?? undefined,
+      requestHash: run.requestHash ?? undefined,
+      executionConfig: run.executionConfig as Record<string, unknown> | undefined,
       userId: run.userId,
       projectId: run.projectId,
       conversationId: run.conversationId,

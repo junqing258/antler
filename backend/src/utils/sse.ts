@@ -46,22 +46,42 @@ export async function streamRun(
               : undefined;
     if (type) write(reply, type, { taskId: runId, ...event.payload }, event.id);
   };
-  for (const event of await runtime.getEvents(runId, afterEventId)) send(event);
-  if (isTerminalRunStatus(run.status)) {
+  let cursor = afterEventId;
+  let replaying = true;
+  let closed = false;
+  const pending = new Map<number, RunEvent>();
+  let unsubscribe: (() => unknown) | undefined;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    unsubscribe?.();
     reply.raw.end();
-    return true;
-  }
-  const unsubscribe = runtime.subscribe(runId, (event) => {
-    send(event);
-    if (
-      event.type === "run.completed" ||
-      event.type === "run.failed" ||
-      event.type === "run.cancelled"
-    ) {
-      unsubscribe?.();
-      reply.raw.end();
+  };
+  const drain = () => {
+    for (const event of [...pending.values()].sort((a, b) => a.id - b.id)) {
+      pending.delete(event.id);
+      if (event.id <= cursor || closed) continue;
+      send(event);
+      cursor = event.id;
+      if (["run.completed", "run.failed", "run.cancelled"].includes(event.type)) close();
     }
+  };
+  reply.raw.on("close", () => { closed = true; unsubscribe?.(); });
+  // Subscribe before awaiting history. Every event passes through one ordered queue.
+  unsubscribe = runtime.subscribe(runId, (event) => {
+    pending.set(event.id, event);
+    if (!replaying) drain();
   });
-  reply.raw.on("close", () => unsubscribe?.());
-  return true;
+  if (closed) unsubscribe?.();
+  try {
+    for (const event of await runtime.getEvents(runId, cursor)) pending.set(event.id, event);
+    const current = await runtime.getRun(runId, userId);
+    replaying = false;
+    drain();
+    if (!current || isTerminalRunStatus(current.status)) close();
+    return true;
+  } catch (error) {
+    close();
+    throw error;
+  }
 }

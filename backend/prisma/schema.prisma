@@ -25,6 +25,9 @@ model Run {
   agentFingerprint   String?
   skillPolicy        Json?
   catalogFingerprint String?
+  clientRequestId    String?
+  requestHash        String?
+  executionConfig    Json?
   input              String
   status             RunStatus  @default(queued)
   errorCode          String?
@@ -33,6 +36,7 @@ model Run {
   finishedAt         DateTime?
   events             RunEvent[]
 
+  @@unique([userId, clientRequestId])
   @@index([projectId, createdAt])
   @@index([conversationId, createdAt])
   @@index([userId, createdAt])
@@ -174,4 +178,64 @@ model SkillFile {
 
   @@id([skillId, path])
   @@map("skill_files")
+}
+
+model Conversation {
+  id String @id
+  userId String
+  agentId String?
+  executionConfig Json
+  title String
+  titleSource String @default("fallback")
+  checkpoint Json?
+  contextState String @default("not_restored")
+  revision Int @default(1)
+  activeRunId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastMessageAt DateTime @default(now())
+  deletedAt DateTime?
+  messages ConversationMessage[]
+
+  @@index([userId, lastMessageAt, id])
+  @@index([userId, agentId, lastMessageAt, id])
+  @@map("conversations")
+}
+
+model ConversationMessage {
+  id String @id
+  conversationId String
+  userId String
+  seq Int
+  runId String
+  role String
+  content Json
+  status String
+  appliedEventId Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@unique([conversationId, seq])
+  @@unique([runId, role])
+  @@index([userId, conversationId, seq])
+  @@map("conversation_messages")
+}
+
+model ConversationSyncState {
+  userId String @id
+  lastChangeId Int @default(0)
+  @@map("conversation_sync_states")
+}
+
+model ConversationChange {
+  userId String
+  changeId Int
+  conversationId String
+  revision Int
+  type String
+  createdAt DateTime @default(now())
+  @@id([userId, changeId])
+  @@index([createdAt])
+  @@map("conversation_changes")
 }

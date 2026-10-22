@@ -77,6 +77,11 @@ export class SecretGuard {
     this.captureEnvironment();
   }
 
+  inheritSecrets(previous: SecretGuard) {
+    for (const value of previous.secrets) this.secrets.add(value);
+    this.values = [];
+  }
+
   private add(value: string | undefined) {
     if (!value) return;
     const base64 = Buffer.from(value).toString("base64");

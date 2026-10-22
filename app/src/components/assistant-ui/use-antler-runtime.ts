@@ -1,81 +1,22 @@
 import {
-  type ChatModelAdapter,
-  type ThreadAssistantMessagePart,
   type ThreadMessageLike,
-  useLocalRuntime,
+  useExternalStoreRuntime,
 } from "@assistant-ui/react";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProviderConfig } from "@/lib/provider-config";
 import {
-  saveConversationMessages,
-  saveGeneratedConversationTitle,
+  displayMessages,
+  getMessagePage,
+  getConversation,
+  listConversationPage,
+  subscribeConversationChanges,
 } from "@/lib/conversation-store";
 import { authHeaders } from "@/lib/server-info";
+import { createUuid } from "@/lib/utils";
+
+const convertMessage = (message: ThreadMessageLike) => message;
 
 type ServerInfo = { baseUrl: string; token: string };
-type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];
-type JsonObject = { [key: string]: JsonValue };
-
-const pendingTitles = new Set<string>();
-
-async function generateTitle(
-  server: ServerInfo,
-  runId: string,
-  conversationId: string,
-  messages: ThreadMessageLike[],
-  onConversationSaved: () => void,
-  agentId?: string,
-) {
-  if (pendingTitles.has(conversationId)) return;
-  pendingTitles.add(conversationId);
-  try {
-    const conversation = await saveConversationMessages(
-      conversationId,
-      messages,
-      agentId,
-    );
-    if (!conversation) return;
-    onConversationSaved();
-    if (conversation.isTitleManuallySet || conversation.isTitleGenerated)
-      return;
-    const response = await fetch(`${server.baseUrl}/api/runs/${runId}/title`, {
-      method: "POST",
-      headers: authHeaders(server),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (!response.ok) return;
-    const { title } = (await response.json()) as { title?: unknown };
-    if (typeof title !== "string" || !title.trim()) return;
-    if (await saveGeneratedConversationTitle(conversationId, title))
-      onConversationSaved();
-  } catch {
-    // Keep the first-message fallback; a later successful reply can retry.
-  } finally {
-    pendingTitles.delete(conversationId);
-  }
-}
-
-async function responseError(response: Response, fallback: string) {
-  try {
-    const body = (await response.json()) as { error?: string };
-    return body.error ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function getText(
-  message: Parameters<ChatModelAdapter["run"]>[0]["messages"][number],
-) {
-  return message.content
-    .filter(
-      (part): part is Extract<typeof part, { type: "text" }> =>
-        part.type === "text",
-    )
-    .map((part) => part.text)
-    .join("\n");
-}
-
 export function useAntlerRuntime(
   getServerInfo: () => Promise<ServerInfo>,
   conversationId: string,
@@ -85,243 +26,200 @@ export function useAntlerRuntime(
   onConversationSaved: () => void,
   agentId?: string,
 ) {
-  const adapter = useMemo<ChatModelAdapter>(
-    () => ({
-      async *run({ messages, abortSignal }) {
-        const message = getText(messages.at(-1)!);
-        if (!message.trim()) return;
-        let cancel: (() => void) | undefined;
-        const content: ThreadAssistantMessagePart[] = [];
-        try {
-          const server = await getServerInfo();
-          const headers = {
-            "content-type": "application/json",
-            ...authHeaders(server),
-          };
-          const provider = getProviderConfig();
-          if (provider.apiKey.trim() && !provider.model.trim()) {
-            throw new Error("请在供应商配置中添加并选择模型。");
-          }
-          const created = await fetch(`${server.baseUrl}/api/runs`, {
-            method: "POST",
-            headers,
-            // The key is read from browser localStorage and used only for this
-            // local request. The server never persists provider configuration.
-            body: JSON.stringify({
-              message,
-              conversationId,
-              ...(agentId ? { agentId } : {}),
-              ...(workingDirectory.trim() ? { workingDirectory } : {}),
-              // Keep the existing environment-variable setup usable until the
-              // user has saved a local provider key.
-              ...(provider.apiKey.trim() ? { provider } : {}),
-            }),
-            signal: abortSignal,
-          });
-          if (!created.ok) {
-            const detail = await responseError(created, "任务创建失败");
-            throw new Error(
-              detail.includes("agent_context_changed") ||
-                detail.includes("agent_changed")
-                ? `${detail}：Agent 已变更，请新建会话。`
-                : detail,
+  const [messages, setMessages] = useState(initialMessages);
+  const [hasMore, setHasMore] = useState(false);
+  const firstSeq = useRef<number>();
+  const [running, setRunning] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [contextReason, setContextReason] = useState("");
+  const [notice, setNotice] = useState("");
+  const revision = useRef(0);
+  const activeRun = useRef<string | null>(null);
+  const config = useRef<Record<string, unknown>>();
+  const mounted = useRef(true);
+  const sending = useRef(false);
+  const refresh = useCallback(async () => {
+    const conversation = await getConversation(conversationId);
+    if (
+      !mounted.current ||
+      !conversation ||
+      (conversation.revision ?? 0) < revision.current
+    )
+      return;
+    revision.current = conversation.revision ?? 0;
+    activeRun.current = conversation.activeRunId ?? null;
+    config.current = conversation.executionConfig;
+    setContextReason(
+      conversation.contextState && conversation.contextState !== "available"
+        ? (conversation.contextReason ?? "模型上下文未恢复，请新建会话。")
+        : "",
+    );
+    setHasMore(conversation.hasMoreMessages ?? false);
+    setMessages((current) => {
+      const incoming = new Set(conversation.messages.map((message) => message.id));
+      const overlap = current.findIndex((item) => incoming.has(item.id));
+      if (overlap < 0) {
+        firstSeq.current = conversation.firstSeq;
+        return conversation.messages;
+      }
+      firstSeq.current = firstSeq.current === undefined
+        ? conversation.firstSeq
+        : Math.min(firstSeq.current, conversation.firstSeq ?? firstSeq.current);
+      return [...current.slice(0, overlap), ...conversation.messages];
+    });
+    setRunning(Boolean(conversation.activeRunId));
+  }, [conversationId]);
+  useEffect(() => {
+    mounted.current = true;
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+    void listConversationPage()
+      .then(async (page) => {
+        await refresh();
+        if (disposed) return;
+        unsubscribe = subscribeConversationChanges(
+          page.lastChangeId,
+          (change) => {
+            if (
+              change.conversationId === conversationId ||
+              change.type === "reset_required"
+            )
+              void refresh().catch(() => {});
+          },
+          (connected) => {
+            if (mounted.current)
+              setNotice(connected ? "" : "连接中断，正在重连");
+            if (connected) void refresh().catch(() => {});
+          },
+        );
+      })
+      .catch(() => {
+        if (mounted.current) setNotice("无法加载会话，请重试。");
+      });
+    const foreground = () => {
+      if (document.visibilityState === "visible")
+        void refresh().catch(() => {});
+    };
+    document.addEventListener("visibilitychange", foreground);
+    return () => {
+      disposed = true;
+      mounted.current = false;
+      unsubscribe?.();
+      document.removeEventListener("visibilitychange", foreground);
+    };
+  }, [conversationId, refresh]);
+  const runtime = useExternalStoreRuntime<ThreadMessageLike>({
+    messages,
+    isRunning: running,
+    isSendDisabled: isSending || running || Boolean(contextReason),
+    convertMessage,
+    onNew: async (message) => {
+      if (sending.current || activeRun.current) {
+        setNotice("该会话正在回复中");
+        return;
+      }
+      sending.current = true;
+      setIsSending(true);
+      setNotice("发送中…");
+      try {
+        const server = await getServerInfo();
+        const provider = getProviderConfig();
+        const bound = config.current;
+        const body = JSON.stringify({
+          message: message.content
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join("\n"),
+          conversationId,
+          clientRequestId: createUuid(),
+          expectedRevision: revision.current,
+          ...(agentId ? { agentId } : {}),
+          ...(bound ? {} : workingDirectory.trim() ? { workingDirectory } : {}),
+          ...(bound?.credentialSource === "server"
+            ? {}
+            : provider.apiKey.trim()
+              ? {
+                  provider: bound
+                    ? {
+                        ...provider,
+                        protocol: bound.protocol,
+                        baseUrl: bound.baseUrl,
+                        model: bound.model,
+                      }
+                    : provider,
+                }
+              : {}),
+        });
+        let response: Response | undefined;
+        // A lost acknowledgement is retried with precisely the same request ID and body.
+        for (let attempt = 0; mounted.current; attempt++) {
+          try {
+            response = await fetch(`${server.baseUrl}/api/runs`, {
+              method: "POST",
+              headers: {
+                ...authHeaders(server),
+                "content-type": "application/json",
+              },
+              body,
+            });
+            break;
+          } catch (error) {
+            if (mounted.current) setNotice("发送待确认，正在重试…");
+            await new Promise((resolve) =>
+              setTimeout(resolve, Math.min(500 * 2 ** attempt, 15000)),
             );
           }
-          const { eventsUrl, runId } = (await created.json()) as {
-            eventsUrl: string;
-            runId: string;
-          };
-          cancel = () => {
-            void fetch(`${server.baseUrl}/api/runs/${runId}/cancel`, {
-              method: "POST",
-              headers,
-            });
-          };
-          abortSignal.addEventListener("abort", cancel, { once: true });
-          const events = await fetch(
-            `${server.baseUrl}${eventsUrl}?token=${encodeURIComponent(server.token)}`,
-            {
-              headers: authHeaders(server),
-              signal: abortSignal,
-            },
-          );
-          if (!events.ok || !events.body) {
-            throw new Error(await responseError(events, "无法连接任务输出流"));
-          }
-
-          const reader = events.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = "";
-          let textPartIndex: number | undefined;
-          let reasoningPartIndex: number | undefined;
-
-          const snapshot = () => ({ content: [...content] });
-          const appendText = (delta: string) => {
-            const current =
-              textPartIndex === undefined ? undefined : content[textPartIndex];
-            if (textPartIndex !== undefined && current?.type === "text") {
-              content[textPartIndex] = {
-                ...current,
-                text: current.text + delta,
-              };
-            } else {
-              textPartIndex = content.push({ type: "text", text: delta }) - 1;
-            }
-          };
-          const appendReasoning = (delta: string) => {
-            const current =
-              reasoningPartIndex === undefined
-                ? undefined
-                : content[reasoningPartIndex];
-            if (
-              reasoningPartIndex !== undefined &&
-              current?.type === "reasoning"
-            ) {
-              content[reasoningPartIndex] = {
-                ...current,
-                text: current.text + delta,
-              };
-            } else {
-              reasoningPartIndex =
-                content.push({ type: "reasoning", text: delta }) - 1;
-            }
-          };
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            let boundary = buffer.indexOf("\n\n");
-            while (boundary >= 0) {
-              const block = buffer.slice(0, boundary);
-              buffer = buffer.slice(boundary + 2);
-              boundary = buffer.indexOf("\n\n");
-              const event = block.match(/^event: (.+)$/m)?.[1];
-              const data = block.match(/^data: (.+)$/m)?.[1];
-              if (!data) continue;
-              const payload = JSON.parse(data) as {
-                delta?: string;
-                stepId?: string;
-                kind?: string;
-                tool?: string;
-                args?: JsonObject;
-                result?: unknown;
-                summary?: string;
-                isError?: boolean;
-                error?: { message?: string };
-              };
-              if (event === "run.failed") {
-                throw new Error(payload.error?.message ?? "任务执行失败");
-              }
-              if (event === "run.completed" && message.trim() !== "/compact") {
-                // Title generation runs independently so it cannot delay the reply.
-                void generateTitle(
-                  server,
-                  runId,
-                  conversationId,
-                  [...messages, { role: "assistant", content: [...content] }],
-                  onConversationSaved,
-                  agentId,
-                );
-              }
-              if (event === "run.cancelled") return;
-              if (event === "assistant.delta" && payload.delta) {
-                appendText(payload.delta);
-                reasoningPartIndex = undefined;
-                yield snapshot();
-                continue;
-              }
-              if (event === "assistant.thinking.delta" && payload.delta) {
-                appendReasoning(payload.delta);
-                textPartIndex = undefined;
-                yield snapshot();
-                continue;
-              }
-              if (
-                event === "step.started" &&
-                payload.kind === "tool" &&
-                payload.stepId &&
-                payload.tool
-              ) {
-                content.push({
-                  type: "tool-call",
-                  toolCallId: payload.stepId,
-                  toolName: payload.tool,
-                  args: payload.args ?? {},
-                  argsText: JSON.stringify(payload.args ?? {}),
-                });
-                textPartIndex = undefined;
-                reasoningPartIndex = undefined;
-                yield snapshot();
-                continue;
-              }
-              if (event === "tool.completed" && payload.stepId) {
-                const index = content.findIndex(
-                  (part) =>
-                    part.type === "tool-call" &&
-                    part.toolCallId === payload.stepId,
-                );
-                const current = index === -1 ? undefined : content[index];
-                if (current?.type === "tool-call") {
-                  content[index] = {
-                    ...current,
-                    result: payload.result ?? { summary: payload.summary },
-                    isError: payload.isError,
-                  };
-                  yield snapshot();
-                }
-              }
-            }
-          }
-        } catch (error) {
-          if (!abortSignal.aborted) {
-            const detail = error instanceof Error ? error.message : "未知错误";
-            yield {
-              content: [
-                ...content,
-                { type: "text" as const, text: `请求失败：${detail}` },
-              ],
-            };
-          }
-        } finally {
-          if (cancel) abortSignal.removeEventListener("abort", cancel);
         }
-      },
-    }),
-    [
-      conversationId,
-      agentId,
-      getProviderConfig,
-      getServerInfo,
-      workingDirectory,
-      onConversationSaved,
-    ],
-  );
-  const runtime = useLocalRuntime(adapter, { initialMessages });
-
-  useEffect(() => {
-    let timeout: number | undefined;
-    const persist = () => {
-      const messages = runtime.thread.getState()
-        .messages as ThreadMessageLike[];
-      void saveConversationMessages(
-        conversationId,
-        messages,
-        agentId,
-      ).then((conversation) => {
-        if (conversation) onConversationSaved();
+        if (!response?.ok) {
+          const data = await response?.json();
+          throw new Error(
+            data?.error === "conversation_busy"
+              ? "该会话正在回复中"
+              : (data?.error ?? "发送失败"),
+          );
+        }
+        if (mounted.current) {
+          setNotice("");
+          await refresh();
+          onConversationSaved();
+        }
+      } catch (error) {
+        if (mounted.current)
+          setNotice(
+            error instanceof Error
+              ? error.message
+              : "发送待确认，请重新连接服务端。",
+          );
+      } finally {
+        sending.current = false;
+        if (mounted.current) setIsSending(false);
+      }
+    },
+    onCancel: async () => {
+      if (!activeRun.current) return;
+      const server = await getServerInfo();
+      await fetch(`${server.baseUrl}/api/runs/${activeRun.current}/cancel`, {
+        method: "POST",
+        headers: authHeaders(server),
       });
-    };
-    const schedulePersist = () => {
-      window.clearTimeout(timeout);
-      timeout = window.setTimeout(persist, 250);
-    };
-    const unsubscribe = runtime.thread.subscribe(schedulePersist);
-    return () => {
-      window.clearTimeout(timeout);
-      unsubscribe();
-      persist();
-    };
-  }, [conversationId, agentId, onConversationSaved, runtime]);
-
-  return runtime;
+    },
+  });
+  const loadEarlier = async () => {
+    const page = await getMessagePage(conversationId, firstSeq.current);
+    if (!mounted.current) return;
+    const earlier = displayMessages(page);
+    setMessages((current) => [
+      ...earlier.filter((item) => !current.some((row) => row.id === item.id)),
+      ...current,
+    ]);
+    firstSeq.current = page.messages[0]?.seq;
+    setHasMore(page.hasMore);
+  };
+  return {
+    runtime,
+    notice: contextReason || notice,
+    hasMore,
+    loadEarlier,
+    boundModel: config.current?.model as string | undefined,
+  };
 }

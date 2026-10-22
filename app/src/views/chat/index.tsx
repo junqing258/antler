@@ -1,5 +1,5 @@
 import { agentWorkspace } from "@/lib/platform-api";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ThreadMessageLike } from "@assistant-ui/react";
 import { useSearchParams } from "react-router";
 import { SchedulerDialog } from "@/components/scheduler-dialog";
@@ -7,7 +7,8 @@ import { SettingsDialog, type SettingsTab } from "@/components/settings-dialog";
 import {
   deleteConversation,
   getConversation,
-  listConversations,
+  listConversationPage,
+  subscribeConversationChanges,
   renameConversation,
   type Conversation,
 } from "@/lib/conversation-store";
@@ -43,6 +44,9 @@ export function ChatView({
   } | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [providerConfig, setProviderConfig] = useState(loadProviderConfig);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [loadError, setLoadError] = useState("");
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [serverModel, setServerModel] = useState("");
   useEffect(() => {
     const controller = new AbortController();
@@ -64,24 +68,36 @@ export function ChatView({
       });
     return () => controller.abort();
   }, []);
+  const tombstones = useRef(new Set<string>());
+  const acceptLibrary = useCallback((items: Conversation[]) => {
+    setConversations((current) => {
+      const merged = new Map(current.map((row) => [row.id, row]));
+      for (const row of items) {
+        if ((merged.get(row.id)?.revision ?? -1) <= (row.revision ?? 0)) merged.set(row.id, row);
+      }
+      return filterConversations([...merged.values()]).filter((row) => !tombstones.current.has(row.id)).sort((a, b) => b.updatedAt - a.updatedAt || b.id.localeCompare(a.id));
+    });
+  }, [filterConversations]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [schedulerOpen, setSchedulerOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("provider");
   const refreshLibrary = useCallback(() => {
-    void listConversations()
-      .then((nextConversations) => {
-        setConversations(filterConversations(nextConversations));
+    void listConversationPage(undefined, agentId)
+      .then((page) => {
+        acceptLibrary(page.conversations);
+        setNextCursor(page.nextCursor);
+        setLoadError("");
       })
-      .catch(() => {
-        setConversations([]);
-      });
-  }, [filterConversations]);
+      .catch(() => { setLoadError("历史加载失败，请重试。"); });
+  }, [filterConversations, agentId, acceptLibrary]);
   useEffect(() => {
     let cancelled = false;
     setLoadedConversation(null);
+    setLoadError("");
     void getConversation(conversationId)
       .then(async (conversation) => {
-        const nextConversations = await listConversations();
+        const page = await listConversationPage(undefined, agentId);
+        const nextConversations = page.conversations;
         if (cancelled) return;
         if (conversation && (conversation.agentId ?? undefined) !== agentId) {
           const id = newConversationId();
@@ -89,22 +105,18 @@ export function ChatView({
           setConversationId(id);
           return;
         }
-        setConversations(filterConversations(nextConversations));
+        acceptLibrary(nextConversations);
+        setNextCursor(page.nextCursor);
         setLoadedConversation({
           id: conversationId,
           messages: conversation?.messages ?? [],
         });
       })
-      // IndexedDB can be disabled by a browser policy. Keep chat usable even
-      // though persistence is unavailable in that environment.
-      .catch(() => {
-        if (!cancelled)
-          setLoadedConversation({ id: conversationId, messages: [] });
-      });
+      .catch(() => { if (!cancelled) setLoadError("历史加载失败，请重试。"); });
     return () => {
       cancelled = true;
     };
-  }, [conversationId, agentId, filterConversations, setSearchParams]);
+  }, [conversationId, agentId, filterConversations, setSearchParams, loadAttempt, acceptLibrary]);
   useEffect(() => {
     const urlConversationId = searchParams.get("conversationId");
     if (urlConversationId) {
@@ -115,6 +127,36 @@ export function ChatView({
       setSearchParams({ conversationId }, { replace: true });
     }
   }, [searchParams, conversationId, setSearchParams]);
+  useEffect(() => {
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+    void listConversationPage(undefined, agentId).then((page) => {
+      if (disposed) return;
+      acceptLibrary(page.conversations);
+      setNextCursor(page.nextCursor);
+      unsubscribe = subscribeConversationChanges(page.lastChangeId, (change) => {
+        if (change.type === "reset_required") { setConversations([]); tombstones.current.clear(); }
+        if (change.type === "deleted") {
+          tombstones.current.add(change.conversationId);
+          setConversations((rows) => rows.filter((row) => row.id !== change.conversationId));
+          if (change.conversationId === conversationId) {
+            const id = newConversationId(); setConversationId(id); setSearchParams({ conversationId: id });
+          }
+        }
+        refreshLibrary();
+      });
+    }).catch(() => { if (!disposed) setLoadError("历史加载失败，请重试。"); });
+    const foreground = () => { if (document.visibilityState === "visible") refreshLibrary(); };
+    document.addEventListener("visibilitychange", foreground);
+    return () => { disposed = true; unsubscribe?.(); document.removeEventListener("visibilitychange", foreground); };
+  }, [agentId, conversationId, refreshLibrary, setSearchParams, acceptLibrary]);
+  const loadMore = () => {
+    if (!nextCursor) return;
+    void listConversationPage(nextCursor, agentId).then((page) => {
+      acceptLibrary(page.conversations);
+      setNextCursor(page.nextCursor);
+    }).catch(() => setLoadError("历史加载失败，请重试。"));
+  };
   const startNewThread = () => {
     const id = newConversationId();
     setSearchParams({ conversationId: id });
@@ -128,16 +170,18 @@ export function ChatView({
   const renameThread = (conversation: Conversation) => {
     const title = window.prompt("会话名称", conversation.title)?.trim();
     if (!title || title === conversation.title) return;
-    void renameConversation(conversation.id, title).then(refreshLibrary);
+    void renameConversation(conversation.id, title).then(refreshLibrary).catch((error) => setLoadError(error.message));
   };
   const removeThread = (conversation: Conversation) => {
     if (!window.confirm(`删除会话“${conversation.title}”？此操作无法撤销。`))
       return;
     void deleteConversation(conversation.id).then(() => {
+      tombstones.current.add(conversation.id);
+      setConversations((rows) => rows.filter((row) => row.id !== conversation.id));
       refreshLibrary();
       if (conversation.id === conversationId)
         startNewThread();
-    });
+    }).catch((error) => setLoadError(error.message));
   };
   const saveSettings = (next: ProviderConfig) => {
     saveProviderConfig(next);
@@ -164,6 +208,8 @@ export function ChatView({
   );
   return (
     <>
+      {loadError && <p role="alert">{loadError} <button onClick={() => { setLoadError(""); setLoadAttempt((value) => value + 1); }}>重试</button></p>}
+      {!loadedConversation && !loadError && <p role="status">正在加载会话…</p>}
       {/* Never seed a new runtime with messages loaded for another thread. */}
       {loadedConversation?.id === conversationId && (
         <Chat
@@ -174,6 +220,7 @@ export function ChatView({
           title={activeConversation?.title ?? agentName ?? "新会话"}
           conversations={conversations}
           workingDirectory={agentWorkspace(agentId)}
+          onLoadMore={nextCursor ? loadMore : undefined}
           onNewThread={startNewThread}
           onSelectThread={selectThread}
           onRenameThread={renameThread}

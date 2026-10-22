@@ -14,8 +14,9 @@ import {
   getConversation,
   listConversations,
   renameConversation,
-  saveConversationMessages,
 } from "@/lib/conversation-store";
+
+import { installConversationFixture, saveConversationMessages } from "./conversation-fixture";
 
 const captured = vi.hoisted(() => ({
   root: undefined as Root | undefined,
@@ -38,15 +39,14 @@ vi.mock("@assistant-ui/react", async () => {
   return {
     AssistantRuntimeProvider: ({ children }: { children: ReactNode }) =>
       children,
-    useLocalRuntime: (
-      _adapter: unknown,
-      options: { initialMessages: ThreadMessageLike[] },
+    useExternalStoreRuntime: (
+      options: { messages: ThreadMessageLike[] },
     ) => {
-      captured.initialMessages.push(options.initialMessages);
+      captured.initialMessages.push(options.messages);
       return useMemo(
         () => ({
           thread: {
-            getState: () => ({ messages: options.initialMessages }),
+            getState: () => ({ messages: options.messages }),
             subscribe: () => () => {},
           },
         }),
@@ -91,13 +91,7 @@ afterEach(async () => {
 describe("New Thread", () => {
   it("starts empty without copying the previous messages or creating a duplicate title", async () => {
     localStorage.clear();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ model: "configured-server-model" }),
-      }),
-    );
+    installConversationFixture("configured-server-model");
     vi.stubGlobal("indexedDB", new IDBFactory());
     const messages: ThreadMessageLike[] = [
       { role: "user", content: "上一条会话内容" },
@@ -173,13 +167,7 @@ describe("Mobile navigation", () => {
     vi.resetModules();
     localStorage.clear();
     vi.stubGlobal("indexedDB", new IDBFactory());
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ model: "test-model" }),
-      }),
-    );
+    installConversationFixture();
     const listeners = new Set<() => void>();
     const media = {
       matches: true,
@@ -190,18 +178,10 @@ describe("Mobile navigation", () => {
     };
     vi.stubGlobal("matchMedia", () => media);
     const store = await import("@/lib/conversation-store");
-    await store.saveConversationMessages("mobile-history", [
+    await saveConversationMessages("mobile-history", [
       { role: "user", content: "历史消息" },
     ], "test-agent");
     await store.renameConversation("mobile-history", "历史会话");
-    const saveMessages = store.saveConversationMessages;
-    vi.spyOn(store, "saveConversationMessages").mockImplementation(
-      (...args) => {
-        const pending = saveMessages(...args);
-        captured.pendingSaves.push(pending);
-        return pending;
-      },
-    );
     window.history.replaceState(null, "", "/agents/test-agent");
     const root = document.createElement("div");
     root.id = "root";
