@@ -108,6 +108,8 @@ Tushare Pro 的 Token 可放在 `.env.deploy` 的 `TUSHARE_TOKEN` 中，随部�
 
 镜像构建时预下载与运行环境匹配的 Prisma 迁移引擎，启动时无需临时下载。健康检查提供 120 秒启动宽限期，部署脚本最多等待 300 秒；启动失败会输出容器状态、健康检查结果和最近日志。
 
+内置“股票分析师”在种子项目包含 `SKILL.md` 和 `pyproject.toml` 时，默认使用 `workspace/Stock-Analysis` 作为工作目录；缺少种子项目时回退到独立 Agent 目录。显式选择的工作目录优先。已有会话保留原工作目录，应用此默认值需新建会话。
+
 脚本还会把仓库中 git 跟踪的 `workspace/` 内容上传到远端 `workspace/`，补齐远端缺失的种子项目（例如 `workspace/Stock-Analysis`）。解包使用 `--skip-old-files`，远端已存在的文件不会被覆盖，因此远端生成的报告和运行数据会保留；种子目录中后续的技能改动需先删除远端同名文件再重新部署。
 
 部署其他环境时，可使用 `.env.<环境>` 覆盖 `.env`，例如 `scripts/deploy-apps-ssh.sh test`；此时 `.env.test` 必须存在。

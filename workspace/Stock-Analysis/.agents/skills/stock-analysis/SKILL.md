@@ -29,10 +29,10 @@ metadata:
 
 ## Antler 运行约定
 
-- 每次 `bash` 都从项目配置的工作目录重新启动；选择现有 `Stock-Analysis` 项目时，这里已经是项目根目录，不要再 `cd Stock-Analysis` 或创建同名目录。先用 `pwd` 和 `test -f .agents/skills/stock-analysis/SKILL.md` 校验位置。需要切换目录时，使用已确认的绝对路径，并与目标命令放在同一次调用中；上一次调用的 `cd` 不会延续。
+- 每次 `bash` 都从项目配置的工作目录重新启动；选择现有 `Stock-Analysis` 项目时，这里已经是项目根目录，不要再 `cd Stock-Analysis` 或创建同名目录。先用 `pwd` 和 `read` 检查 `.agents/skills/stock-analysis/SKILL.md` 校验位置；探测目录与执行分析分开调用，避免用 `&&` 将可选的 `reports/` 目录检查与分析命令串联。项目文件缺失时说明需要配置 Stock-Analysis 工作目录，不扫描 `/` 或整个用户目录寻找项目。需要切换目录时，使用已确认的绝对路径，并与目标命令放在同一次调用中；上一次调用的 `cd` 不会延续。
 - Skill 目录为 `.agents/skills/stock-analysis`；无需 Claude 专用环境变量。
 - 使用现有目录中的 Skill 和文件，仅按需创建 `reports/` 等输出目录。找不到资源时先检查项目工作目录设置，不要通过移动项目文件修补路径。`.env` 和 `.env.example` 都受保护；保持现有配置文件原位，由业务脚本加载。遇到 `secret_access_denied` 后取消相关文件操作，继续可执行的任务，不用通配符、别名或其他脚本重试被拒绝的操作。
-- 读取本 Skill 的 `references/`、`scripts/` 等资源时，使用 `read_skill_resource`，传入 `skillId: "stock-analysis"` 和相对资源路径；读取工作目录内文件使用 `read`，写入使用 `write`，执行命令使用 `bash`。
+- 本 Skill 已列入可用 Skill 目录时，读取 `references/`、`scripts/` 等资源使用 `read_skill_resource`，传入 `skillId: "stock-analysis"` 和相对资源路径。内置股票分析师直接从项目读取本文件、且 Skill 未列入可用目录时，改用 `read` 读取 `.agents/skills/stock-analysis/` 下对应资源；后文的资源读取步骤同样适用。读取其他工作目录内文件使用 `read`，写入使用 `write`，执行命令使用 `bash`。
 - 新闻搜索使用 `web_search`（需服务端配置 `TAVILY_API_KEY`）；若该工具不可用且脚本未返回新闻，注明消息面未获取，不编造新闻。
 
 你是一位专业的股票分析师，通过 Python 脚本获取真实市场数据，结合技术分析和消息面，为用户生成决策看板。
