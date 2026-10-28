@@ -1,5 +1,7 @@
 # Skill 执行机制
 
+本文描述当前实现。规划中的 gVisor 沙箱、用户目录隔离与迁移方案见 [Skill 脚本沙箱与用户目录隔离方案](./13-skill-sandbox-design.md)，尚未实施。
+
 给 Agent 添加平台 Skill 后，新会话会将绑定的 Skill 作为可用技能封闭集。`load_skill` 返回完整指令和统一执行约定；`read_skill_resource` 仍用于读取原始配套资源。脚本执行与依赖安装统一使用 `run_skill`，不需要将 Skill 安装到 Agent 的 `.agents/skills/`，也无需向模型公开平台源目录。
 
 ## 工具约定
