@@ -4,10 +4,8 @@ import {
   useRef,
   useState,
   type FormEvent,
-  type MouseEvent,
 } from "react";
 import { BookOpenIcon, ExternalLinkIcon } from "lucide-react";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Dialog,
   DialogContent,
@@ -119,13 +117,6 @@ function KnowledgeConfigurationForm({
     event.preventDefault();
     void save();
   };
-  const openManagement = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (!("__TAURI_INTERNALS__" in window) || !config?.ragUrl) return;
-    event.preventDefault();
-    void openUrl(config.ragUrl).catch(() =>
-      setError("无法打开知识库管理页，请检查系统默认浏览器。"),
-    );
-  };
 
   return (
     <form className="grid gap-5" onSubmit={submit}>
@@ -232,7 +223,6 @@ function KnowledgeConfigurationForm({
           href={config.ragUrl}
           target="_blank"
           rel="noopener noreferrer"
-          onClick={openManagement}
         >
           打开知识库管理页面
           <ExternalLinkIcon className="size-3.5" aria-hidden="true" />
@@ -285,13 +275,6 @@ export function KnowledgeConfigurationLink({
     return () => controller.abort();
   }, [getServerInfo]);
 
-  const openService = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (!("__TAURI_INTERNALS__" in window) || !ragUrl) return;
-    event.preventDefault();
-    void openUrl(ragUrl).catch(() =>
-      setError("无法打开服务地址，请检查系统默认浏览器。"),
-    );
-  };
   const serviceClassName =
     "flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-[#777] no-underline hover:bg-[#f0f0f0] hover:text-[#222]";
   const serviceLabel = (
@@ -316,7 +299,6 @@ export function KnowledgeConfigurationLink({
             rel="noopener noreferrer"
             aria-label="打开知识库服务地址"
             title={ragUrl}
-            onClick={openService}
           >
             {serviceLabel}
           </a>

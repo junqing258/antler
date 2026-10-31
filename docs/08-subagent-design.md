@@ -35,7 +35,7 @@ Antler 首版 subagent 应实现为 **Host Runtime 管理的受控委派工具**
 
 ```mermaid
 flowchart LR
-  UI["React / Tauri"] <--> API["Fastify REST + SSE"]
+  UI["React Web"] <--> API["Fastify REST + SSE"]
   API --> Parent["Parent AgentRun"]
   Parent --> Tool["delegate_task tool"] --> Coordinator["SubagentCoordinator"]
   Coordinator --> ChildA["Child AgentRun A"]

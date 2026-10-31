@@ -28,7 +28,7 @@ OPENAI_API_KEY=your-api-key
 
 ## Supabase 登录认证（Web 多用户）
 
-自托管 Web 部署可启用 Supabase Auth（邮箱密码注册/登录）：浏览器持有 Supabase 会话并随请求发送 `Authorization: Bearer <access_token>`，backend 校验签名后按用户 ID 隔离运行记录与定时任务。Tauri 桌面模式与本地开发不受影响，仍使用共享访问令牌。
+自托管 Web 部署可启用 Supabase Auth（邮箱密码注册/登录）：浏览器持有 Supabase 会话并随请求发送 `Authorization: Bearer <access_token>`，backend 校验签名后按用户 ID 隔离运行记录与定时任务。`local` 模式不展示登录页，仍使用共享访问令牌。
 
 Supabase 控制台准备：开启 Email provider；项目使用非对称 JWT 签名密钥（新项目默认即是，`GET <项目URL>/auth/v1/.well-known/jwks.json` 能返回密钥）。若项目仍是 HS256 共享密钥，需配置 `ANTLER_SUPABASE_PUBLISHABLE_KEY`，backend 会改走 `/auth/v1/user` 在线校验。
 
@@ -53,14 +53,14 @@ pnpm --filter @antler/server db:generate
 
 ## PWA
 
-Web 生产构建支持安装到桌面或手机主屏幕。使用 HTTPS 部署后，可通过浏览器的“安装应用”入口安装；iPhone/iPad 在 Safari 分享菜单中选择“添加到主屏幕”。Service Worker 仅在生产环境的安全浏览器上下文中注册，开发模式和 Tauri 桌面端不启用。
+Web 生产构建支持安装到桌面或手机主屏幕。使用 HTTPS 部署后，可通过浏览器的“安装应用”入口安装；iPhone/iPad 在 Safari 分享菜单中选择“添加到主屏幕”。Service Worker 仅在生产环境的安全浏览器上下文中注册，开发模式不启用。
 
 首次在线访问并完成缓存后，页面和本地保存的会话可离线打开；发送消息、执行任务和读取服务端配置仍需要网络。缓存只包含前端静态资源，不缓存 API、SSE 或模型响应。发现新版本时会显示提示，点击“刷新更新”后应用更新，请先等待当前任务完成。
 
 本地验证生产版本：
 
 ```bash
-pnpm --filter @antler/app build
+pnpm build:web
 pnpm --filter @antler/app exec vite preview --host 127.0.0.1
 ```
 
@@ -85,7 +85,17 @@ ANTLER_RAG_KEY=your-rag-api-key
 
 本地可填写仓库根目录的 `.env`；Docker 部署可填写 `.env.deploy`，部署脚本会合并并传入容器。密钥不会写入技能或镜像。Docker 镜像包含技能文件和 Python 3；本地调用技能需安装 Python 3.9+。Agent 通过 `load_skill` 加载说明、`read_skill_resource` 读取资源，并用 `run_skill` 直接运行打包的客户端脚本，无需复制脚本或知道服务器的安装路径。
 
-## 部署 Web 版
+## 构建与部署 Web 版
+
+项目通过浏览器或安装 PWA 使用，前端和后端可独立构建：
+
+```bash
+pnpm build        # 构建前端与后端
+pnpm build:web    # 仅构建前端，输出 app/dist
+pnpm build:server # 仅构建后端，输出 backend/dist
+```
+
+构建后可设置 `ANTLER_STATIC_DIR` 为 `app/dist` 的绝对路径，再运行 `pnpm --filter @antler/server start`，由后端同源提供前端页面、API 和 SSE。后端启动前仍需配置 `DATABASE_URL` 并应用数据库迁移。
 
 Docker 镜像会编译前端，并由 Fastify 在同一个端口提供网页、API 和 SSE；远端数据保存在部署目录的 `workspace/`。本地需要 Docker（含 buildx）、SSH 和 SCP，远端需要 Docker Compose。
 

@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 export type ServerInfo = { baseUrl: string; token: string };
@@ -40,7 +39,7 @@ export function createPasswordRecoveryClient(): SupabaseClient | undefined {
 
 /**
  * 从后端拉取认证配置并按需创建 Supabase 客户端。
- * 后端未就绪或 local 模式时保持无登录行为（桌面伴生服务场景）。
+ * 后端未就绪或 local 模式时保持无登录行为（本地开发场景）。
  */
 export async function loadAuthConfig(): Promise<AuthMode> {
   if (!loaded) {
@@ -80,7 +79,6 @@ export async function loadAuthConfig(): Promise<AuthMode> {
 }
 
 export async function serverInfo(): Promise<ServerInfo> {
-  if ("__TAURI_INTERNALS__" in window) return invoke<ServerInfo>("server_info");
   if (client) {
     const session = (await client.auth.getSession()).data.session;
     return { baseUrl: localBaseUrl(), token: session?.access_token ?? "" };
@@ -91,7 +89,7 @@ export async function serverInfo(): Promise<ServerInfo> {
   };
 }
 
-/** 按认证模式返回 API 鉴权头：Supabase 用 Bearer，本地伴生服务用共享令牌。 */
+/** 按认证模式返回 API 鉴权头：Supabase 用 Bearer，local 模式用共享令牌。 */
 export function authHeaders(server: ServerInfo): Record<string, string> {
   return authModeValue === "supabase"
     ? { authorization: `Bearer ${server.token}` }

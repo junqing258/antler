@@ -63,7 +63,6 @@ function UpdatePrompt() {
 export function PwaUpdatePrompt() {
   if (
     !import.meta.env.PROD ||
-    "__TAURI_INTERNALS__" in window ||
     !window.isSecureContext ||
     !("serviceWorker" in navigator)
   ) {

@@ -74,11 +74,10 @@ describe("PWA updates", () => {
     expect(sw.update).toHaveBeenCalledTimes(2);
   });
 
-  it.each(["development", "tauri", "insecure", "unsupported"])(
+  it.each(["development", "insecure", "unsupported"])(
     "does not register a worker in %s environments",
     (environment) => {
       if (environment === "development") vi.stubEnv("PROD", false);
-      if (environment === "tauri") vi.stubGlobal("__TAURI_INTERNALS__", {});
       if (environment === "insecure") vi.stubGlobal("isSecureContext", false);
       if (environment === "unsupported") vi.stubGlobal("navigator", {});
       render(<PwaUpdatePrompt />);

@@ -15,7 +15,7 @@
 
 ```mermaid
 flowchart LR
-  UI["React / Tauri"] --> API["Fastify API + SSE"]
+  UI["React Web"] --> API["Fastify API + SSE"]
   API --> Host["AntlerHostRuntime"]
   Host --> Adapter["PiAgentAdapter"]
   Adapter --> Pi["Pi Agent Core + pi-ai"]

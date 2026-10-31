@@ -131,7 +131,7 @@ Skill 文件内容的**唯一事实源是 Postgres 的 `skill_files` 表**（`sk
 
 - 列表 / 详情页对下线 Agent 只对作者可见，徽标显示「草稿」。
 
-`authMode=local`（Tauri / 本地开发）时无需登录校验，等价于「本机单用户」：所有 Agent 可见可编辑，行为与当前一致。判定依据是服务端 `authMode`，不是 `ownerId` 是否为空串，见 §5.7。
+`authMode=local`（本地开发）时无需登录校验，等价于「本机单用户」：所有 Agent 可见可编辑，行为与当前一致。判定依据是服务端 `authMode`，不是 `ownerId` 是否为空串，见 §5.7。
 
 Skill 被多个 Agent 引用时，删除 Skill 需先解绑；v1 选择**拒绝删除并仅返回调用者可见的 Agent 引用详情**，避免静默破坏他人 Agent。 引用检查必须覆盖全部 Agent，但响应详情按 §5.7 的 `canRead` 过滤：返回可见 Agent 的 ID / 名称，其他引用只返回 `hasHiddenReferences: true` 与「另有不可见 Agent 引用」提示，不返回其 ID、名称、作者或精确数量。即使全部引用都不可见也仍返回 409；local 模式下按单用户规则可见全部引用。
 

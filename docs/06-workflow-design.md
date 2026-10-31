@@ -60,7 +60,7 @@ Workflow MVP 沿用项目现有的 TypeScript 全栈与本地优先架构，不�
 
 | 层次 | 技术 | Workflow 中的用途 |
 |---|---|---|
-| 桌面容器 | Tauri 2、Rust | 打包桌面应用，复用本地后端与目录访问能力 |
+| 客户端宿主 | 浏览器、PWA | 通过 HTTP/SSE 访问独立后端，支持安装到桌面或主屏幕 |
 | UI 框架 | React 18、TypeScript、Vite 8 | 实现 Workflow 列表、表单式编辑器和运行详情页 |
 | 路由 | React Router 7 | 增加项目级 Workflow、编辑和运行详情路由 |
 | 状态管理 | Zustand 5 | 保存编辑中的草稿、校验结果和未提交状态；服务端数据仍以 API 为准 |

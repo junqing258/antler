@@ -7,11 +7,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { KnowledgeConfigurationLink } from "../../src/components/knowledge-configuration-link";
-import { openUrl } from "@tauri-apps/plugin-opener";
 
-vi.mock("@tauri-apps/plugin-opener", () => ({
-  openUrl: vi.fn().mockResolvedValue(undefined),
-}));
 const getServerInfo = async () => ({
   baseUrl: "http://127.0.0.1:3210",
   token: "test-token",
@@ -42,7 +38,6 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
-  Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
 });
 
 describe("knowledge configuration", () => {
@@ -55,6 +50,7 @@ describe("knowledge configuration", () => {
     expect(link).toHaveAttribute("href", defaults.ragUrl);
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(fireEvent.click(link)).toBe(true);
     expect(link.parentElement).toContainElement(
       screen.getByRole("button", { name: "知识库配置" }),
     );
@@ -100,6 +96,7 @@ describe("knowledge configuration", () => {
     expect(link).toHaveAttribute("href", defaults.ragUrl);
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(fireEvent.click(link)).toBe(true);
     expect(fetchMock).toHaveBeenCalledWith(
       "http://127.0.0.1:3210/api/config",
       expect.objectContaining({ headers: { "x-antler-token": "test-token" } }),
@@ -262,30 +259,5 @@ describe("knowledge configuration", () => {
       expect(screen.getByRole("button", { name: "保存配置" })).toBeEnabled(),
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  });
-
-  it("opens the management page in the system browser on desktop", async () => {
-    Object.defineProperty(window, "__TAURI_INTERNALS__", {
-      configurable: true,
-      value: {},
-    });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response()));
-    await openConfiguration();
-    fireEvent.click(screen.getByRole("link", { name: "打开知识库管理页面" }));
-    expect(openUrl).toHaveBeenCalledWith(defaults.ragUrl);
-  });
-
-  it("opens the sidebar service entry in the system browser on desktop", async () => {
-    Object.defineProperty(window, "__TAURI_INTERNALS__", {
-      configurable: true,
-      value: {},
-    });
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response()));
-    render(<KnowledgeConfigurationLink getServerInfo={getServerInfo} />);
-    fireEvent.click(
-      await screen.findByRole("link", { name: "打开知识库服务地址" }),
-    );
-    expect(openUrl).toHaveBeenCalledWith(defaults.ragUrl);
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

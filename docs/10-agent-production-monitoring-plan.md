@@ -2,7 +2,7 @@
 
 > 状态：待评审，待实施  
 > 日期：2026-10-10  
-> 适用范围：Tauri 本机模式与自托管 Web 模式中的生成、知识问答和工具执行任务  
+> 适用范围：本机浏览器模式与自托管 Web 模式中的生成、知识问答和工具执行任务
 > 相关文档：[架构规划](./01-architecture-plan.md)、[登录认证规划](./05-login-auth-design.md)、[Subagent 设计](./08-subagent-design.md)、[环境变量防护](./09-agent-secret-protection.md)
 
 ## 1. 目标与总体方案

@@ -160,9 +160,9 @@
     <header class="hero">
       <p class="eyebrow">ANTLER · AS-IS ARCHITECTURE</p>
       <h1>项目框架原理图</h1>
-      <p>以当前代码为准，说明 Antler 如何由 Tauri / React 客户端、Fastify 本地服务、AntlerHostRuntime、Pi Agent Core、模型供应商和受工作目录约束的工具组成一条完整 Agent 执行链路。</p>
+      <p>以当前代码为准，说明 Antler 如何由 React Web/PWA 客户端、Fastify 本地服务、AntlerHostRuntime、Pi Agent Core、模型供应商和受工作目录约束的工具组成一条完整 Agent 执行链路。</p>
       <div class="chips">
-        <span class="chip">Tauri 2 + React</span>
+        <span class="chip">React + Vite + PWA</span>
         <span class="chip">Fastify REST + SSE</span>
         <span class="chip">Pi Agent Core</span>
         <span class="chip">OpenAI / Anthropic</span>
@@ -189,7 +189,7 @@
         <p>稳定产品边界，复用成熟 Agent loop。</p>
       </div>
       <div class="grid">
-        <article class="panel card"><span class="number">1</span><h3>薄桌面壳</h3><p>Rust 只负责启动、发现和回收 Node 伴生服务；业务编排仍留在 TypeScript 后端。</p></article>
+        <article class="panel card"><span class="number">1</span><h3>独立 Web 客户端</h3><p>浏览器或 PWA 提供交互界面，独立运行的 TypeScript 后端负责业务编排和工具执行。</p></article>
         <article class="panel card"><span class="number">2</span><h3>协议解耦</h3><p>前后端只通过 REST 创建/取消 run，通过 SSE 接收稳定领域事件，避免 UI 绑定供应商事件。</p></article>
         <article class="panel card"><span class="number">3</span><h3>双层运行时</h3><p><code>AntlerHostRuntime</code> 管产品状态与限制；Pi Agent Core 管消息上下文、模型流和工具循环。</p></article>
         <article class="panel card"><span class="number">4</span><h3>按项目隔离上下文</h3><p>Project 绑定工作目录；文件工具校验相对路径和真实路径，Skill 在会话开始时固化快照与指纹。</p></article>
@@ -216,11 +216,11 @@
       </div>
       <div class="grid">
         <article class="panel mode card wide">
-          <h3>桌面模式 · Tauri + Node 伴生服务</h3>
+          <h3>本地开发 · Vite + Fastify</h3>
           <ul>
-            <li>Tauri 启动打包资源中的 <code>backend/index.js</code>，固定监听 <code>127.0.0.1:3210</code>。</li>
-            <li>启动时生成随机访问令牌，经 <code>server_info</code> 交给 React；请求使用 Header 或 SSE 查询参数传递。</li>
-            <li>应用退出时由 Rust 壳终止 Node 子进程。</li>
+            <li><code>pnpm dev</code> 启动前后端，浏览器访问 <code>127.0.0.1:1420</code>，API 默认监听 <code>127.0.0.1:3210</code>。</li>
+            <li>前端开发默认连接本地 API；可通过 <code>VITE_ANTLER_SERVER_BASE_URL</code> 与 <code>VITE_ANTLER_ACCESS_TOKEN</code> 配置后端地址及本地共享令牌。</li>
+            <li>前后端也可通过 <code>pnpm dev:web</code> 与 <code>pnpm dev:server</code> 独立启动。</li>
           </ul>
         </article>
         <article class="panel mode web card wide">
@@ -319,7 +319,7 @@
         <table>
           <thead><tr><th>能力</th><th>状态</th><th>当前事实</th></tr></thead>
           <tbody>
-            <tr><td>桌面伴生服务 + REST/SSE</td><td><span class="status done">已实现</span></td><td>Tauri 管理 Node 生命周期，本地令牌保护请求。</td></tr>
+            <tr><td>Web/PWA + REST/SSE</td><td><span class="status done">已实现</span></td><td>前后端独立运行，浏览器通过 HTTP/SSE 访问 API。</td></tr>
             <tr><td>多 Provider Agent loop</td><td><span class="status done">已实现</span></td><td>OpenAI / Anthropic，Pi Agent 按会话保留消息上下文。</td></tr>
             <tr><td>会话与项目持久化</td><td><span class="status partial">部分</span></td><td>仅浏览器 IndexedDB；后端暂无 SQLite 会话/消息表。</td></tr>
             <tr><td>Run 事件恢复</td><td><span class="status partial">部分</span></td><td>支持按事件 ID 补放，但事件只在当前 Node 进程内存中。</td></tr>
@@ -341,7 +341,7 @@
         <p>点击可从本 HTML 相对位置打开源码。</p>
       </div>
       <div class="source-list">
-        <a href="../app/src-tauri/src/main.rs">Tauri 进程壳<span>伴生服务启动、令牌注入与退出回收</span></a>
+        <a href="../scripts/dev.mjs">本地开发入口<span>同时启动 Vite 与 Fastify</span></a>
         <a href="../app/src/components/assistant-ui/use-antler-runtime.ts">前端 Agent 适配<span>REST、SSE、取消与消息持久化</span></a>
         <a href="../backend/src/app.ts">Fastify 组合根<span>Adapter 缓存、Runtime、路由和静态资源</span></a>
         <a href="../backend/src/routes/runs.ts">Run API<span>创建、事件订阅、取消与输入校验</span></a>

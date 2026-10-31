@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { KnowledgeNavLink } from "@/components/knowledge-nav-link";
 
@@ -20,6 +20,8 @@ describe("Knowledge navigation", () => {
     const link = await screen.findByRole("link", { name: "知识库" });
     expect(link).toHaveAttribute("href", "https://knowledge.example.com/");
     expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(fireEvent.click(link)).toBe(true);
   });
   it("keeps navigation disabled when no service is configured", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({

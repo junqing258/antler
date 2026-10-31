@@ -1,5 +1,7 @@
 # AI Agent 项目架构规划
 
+> 历史规划：文中的 Tauri 桌面壳与伴生服务方案已退役。当前项目使用独立的 React Web/PWA 与 Fastify 后端，开发、构建和认证配置以 [README](../README.md) 为准。
+
 > 状态：**已收敛（第一版）**
 > 已确认：Node.js 以本地伴生服务运行；前端与服务端采用 HTTP（REST）+ SSE 通信。
 

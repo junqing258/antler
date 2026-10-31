@@ -137,7 +137,7 @@ Pi 的高层 `AgentHarness` 虽然声明了 `resources.skills` 和 `skill()`，�
 
 ```mermaid
 flowchart LR
-  Client["React / Tauri client"] -->|"POST /api/runs + skillPolicy"| Routes["Fastify run routes"]
+  Client["React Web client"] -->|"POST /api/runs + skillPolicy"| Routes["Fastify run routes"]
   Client -->|"GET /api/skills"| SkillRoutes["Skill catalog API"]
 
   Routes --> Runtime["AntlerHostRuntime"]

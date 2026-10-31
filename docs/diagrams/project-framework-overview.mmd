@@ -3,7 +3,7 @@ flowchart TB
 
   subgraph Client["客户端与本地状态"]
     direction LR
-    Shell["Tauri 2 / 浏览器"]
+    Shell["浏览器 / PWA"]
     UI["React + assistant-ui"]
     RuntimeHook["useAntlerRuntime"]
     IDB[("IndexedDB\nprojects / conversations")]
@@ -13,7 +13,7 @@ flowchart TB
     UI <--> ProviderCfg
   end
 
-  subgraph Service["Fastify 本地伴生服务 / Web 服务"]
+  subgraph Service["Fastify 本地服务 / Web 服务"]
     direction LR
     Guard["HTTP Hooks\nToken / CORS / 静态资源"]
     Routes["REST Routes\n/runs /tasks /skills /health"]
