@@ -78,7 +78,20 @@ export default defineConfig(({ mode }) => ({
       },
     }),
   ],
-  resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
+  resolve: {
+    alias: [
+      { find: /^react-native$/, replacement: path.resolve(import.meta.dirname, "node_modules/react-native-web/dist/index.js") },
+      { find: "@", replacement: path.resolve(import.meta.dirname, "./src") },
+    ],
+    dedupe: ["react", "react-dom"],
+    extensions: [".web.tsx", ".web.ts", ".web.jsx", ".web.js", ".mjs", ".js", ".ts", ".jsx", ".tsx", ".json"],
+  },
+  ...(mode === "p0" ? {
+    build: {
+      outDir: "dist-p0",
+      rollupOptions: { input: path.resolve(import.meta.dirname, "rnw-probe.html") },
+    },
+  } : {}),
   server: { host: "127.0.0.1", port: 1420, strictPort: true },
   test: {
     include: ["test/**/*.test.{ts,tsx}"],

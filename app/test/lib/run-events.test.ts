@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import type { ThreadMessageLike } from "@assistant-ui/react";
+import type { ChatMessage } from "@antler/chat-core";
 import {
   applyRunEvent,
   mergeMessageSnapshots,
@@ -14,12 +14,13 @@ afterEach(() => {
 });
 const frame = (id: number, type: string, payload: unknown) =>
   `id: ${id}\nevent: ${type}\ndata: ${JSON.stringify(payload)}\n\n`;
-const snapshot: ThreadMessageLike = {
+const snapshot: ChatMessage = {
   id: "run:assistant",
   role: "assistant",
   content: [],
   status: { type: "running" },
-  metadata: { custom: { runId: "run", appliedEventId: 1 } },
+  runId: "run",
+  appliedEventId: 1,
 };
 
 it("projects live text, reasoning, tools and failures and ignores replay duplicates", () => {
@@ -64,10 +65,10 @@ it("projects live text, reasoning, tools and failures and ignores replay duplica
 });
 
 it("does not let delayed disk snapshots erase live output or earlier pages", () => {
-  const earlier: ThreadMessageLike = {
+  const earlier: ChatMessage = {
     id: "earlier",
     role: "user",
-    content: "old",
+    content: [{ type: "text", text: "old" }],
   };
   const live = applyRunEvent([snapshot], "run", {
     id: 2,
@@ -81,7 +82,8 @@ it("does not let delayed disk snapshots erase live output or earlier pages", () 
   expect(mergeMessageSnapshots([live], [])).toEqual([live]);
   const saved = {
     ...live,
-    metadata: { custom: { runId: "run", appliedEventId: 2 } },
+    runId: "run",
+    appliedEventId: 2,
   };
   expect(mergeMessageSnapshots([live], [saved])).toEqual([saved]);
 });

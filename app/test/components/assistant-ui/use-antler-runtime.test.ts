@@ -1,20 +1,17 @@
 import { createElement, StrictMode } from "react";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type {
-  ExternalStoreAdapter,
-  ThreadMessageLike,
-} from "@assistant-ui/react";
+import type { ExternalStoreAdapter } from "@assistant-ui/react";
+import type { ChatMessage } from "@antler/chat-core";
 import { useAntlerRuntime } from "../../../src/components/assistant-ui/use-antler-runtime";
 import { loadProviderConfig } from "@/lib/provider-config";
 const capture = vi.hoisted(() => ({
-  adapter: undefined as ExternalStoreAdapter<ThreadMessageLike> | undefined,
+  adapter: undefined as ExternalStoreAdapter<ChatMessage> | undefined,
   change: undefined as ((value: any) => void) | undefined,
+  reset: undefined as (() => void) | undefined,
 }));
 vi.mock("@assistant-ui/react", () => ({
-  useExternalStoreRuntime: (
-    adapter: ExternalStoreAdapter<ThreadMessageLike>,
-  ) => {
+  useExternalStoreRuntime: (adapter: ExternalStoreAdapter<ChatMessage>) => {
     capture.adapter = adapter;
     return {};
   },
@@ -28,6 +25,10 @@ vi.mock("@/lib/conversation-store", () => ({
       return vi.fn();
     },
   ),
+  subscribeConversationSessionReset: vi.fn((callback: () => void) => {
+    capture.reset = callback;
+    return vi.fn();
+  }),
 }));
 import {
   getConversation,
@@ -64,9 +65,116 @@ it("does not upload messages or cancel runs on unmount", async () => {
   unmount();
   expect(fetch).not.toHaveBeenCalled();
 });
+it("stops a run subscription immediately when the account session resets", async () => {
+  vi.mocked(getConversation).mockResolvedValue({
+    id: "thread",
+    title: "t",
+    createdAt: 1,
+    updatedAt: 1,
+    messages: [],
+    revision: 1,
+    activeRunId: "run",
+  });
+  const stream = new ReadableStream<Uint8Array>({ start() {} });
+  vi.mocked(fetch).mockResolvedValue(new Response(stream));
+  mount();
+  await waitFor(() =>
+    expect(fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/events"),
+      expect.anything(),
+    ),
+  );
+  const signal = vi.mocked(fetch).mock.calls[0][1]?.signal as AbortSignal;
+  act(() => capture.reset!());
+  expect(signal.aborted).toBe(true);
+  expect(
+    vi
+      .mocked(fetch)
+      .mock.calls.some(([url]) => String(url).endsWith("/cancel")),
+  ).toBe(false);
+});
+it("disables the composer when a client-bound conversation lacks credentials", async () => {
+  vi.mocked(getConversation).mockResolvedValue({
+    id: "thread",
+    title: "t",
+    createdAt: 1,
+    updatedAt: 1,
+    messages: [],
+    revision: 1,
+    executionConfig: {
+      credentialSource: "client",
+      protocol: "anthropic-messages",
+      baseUrl: "https://bound.example",
+      model: "bound-model",
+    },
+  });
+  const { result } = mount();
+  await waitFor(() =>
+    expect(result.current.credentialNotice).toContain("API Key"),
+  );
+  expect(capture.adapter?.isSendDisabled).toBe(true);
+  expect(result.current.boundCredential).toEqual({
+    protocol: "anthropic-messages",
+    baseUrl: "https://bound.example",
+    model: "bound-model",
+  });
+});
+it("continues the bound conversation after matching credentials are configured", async () => {
+  vi.mocked(getConversation).mockResolvedValue({
+    id: "thread",
+    title: "t",
+    createdAt: 1,
+    updatedAt: 1,
+    messages: [],
+    revision: 1,
+    executionConfig: {
+      credentialSource: "client",
+      protocol: "anthropic-messages",
+      baseUrl: "https://bound.example",
+      model: "bound-model",
+    },
+  });
+  let provider = { ...loadProviderConfig(), apiKey: "" };
+  const { result, rerender } = renderHook(() =>
+    useAntlerRuntime(server, "thread", "/workspace", () => provider, [], saved),
+  );
+  await waitFor(() =>
+    expect(result.current.credentialNotice).toContain("API Key"),
+  );
+  provider = {
+    ...provider,
+    apiKey: "matching-key",
+    protocol: "anthropic-messages",
+    baseUrl: "https://bound.example/",
+    model: "local-default",
+  };
+  rerender();
+  await waitFor(() => expect(capture.adapter?.isSendDisabled).toBe(false));
+  expect(result.current.credentialNotice).toBe("");
+  await act(async () =>
+    capture.adapter!.onNew({
+      role: "user",
+      content: [{ type: "text", text: "continue" }],
+      parentId: null,
+      sourceId: null,
+      attachments: [],
+    } as any),
+  );
+  const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+  expect(body).toMatchObject({
+    conversationId: "thread",
+    provider: {
+      apiKey: "matching-key",
+      protocol: "anthropic-messages",
+      baseUrl: "https://bound.example",
+      model: "bound-model",
+    },
+  });
+});
 it("retries a lost acknowledgement with an identical idempotency key", async () => {
   vi.mocked(fetch).mockRejectedValueOnce(new TypeError("network"));
   mount();
+  await waitFor(() => expect(capture.adapter?.isSendDisabled).toBe(false));
   await act(async () => {
     await capture.adapter!.onNew({
       role: "user",
@@ -149,7 +257,8 @@ it("shows live replies before disk flush and does not replace them with stale sn
         role: "assistant" as const,
         content: [],
         status: { type: "running" as const },
-        metadata: { custom: { runId: "run", appliedEventId: 1 } },
+        runId: "run",
+        appliedEventId: 1,
       },
     ],
   };
@@ -198,4 +307,39 @@ it("shows live replies before disk flush and does not replace them with stale sn
       .mocked(fetch)
       .mock.calls.some(([url]) => String(url).endsWith("/cancel")),
   ).toBe(false);
+});
+
+it("adapts domain messages for the old interface without dropping tool data", async () => {
+  mount();
+  await waitFor(() => expect(capture.adapter).toBeDefined());
+  const message: ChatMessage = {
+    id: "run:assistant",
+    role: "assistant",
+    content: [
+      {
+        type: "tool-call",
+        toolCallId: "step",
+        toolName: "read",
+        args: { path: "a", options: { recursive: true } },
+        argsText: "{}",
+        result: { output: "done" },
+        isError: true,
+      },
+      { type: "unknown", value: { type: "future" } },
+    ],
+    runId: "run",
+    appliedEventId: 5,
+  };
+  expect(capture.adapter!.convertMessage(message, 0)).toMatchObject({
+    metadata: { custom: { runId: "run", appliedEventId: 5 } },
+    content: [
+      {
+        type: "tool-call",
+        args: { path: "a", options: { recursive: true } },
+        result: { output: "done" },
+        isError: true,
+      },
+      { type: "text", text: "[不支持的消息内容]" },
+    ],
+  });
 });

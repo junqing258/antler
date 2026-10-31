@@ -9,9 +9,12 @@
     "check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "build:probe": "vite build --mode p0"
   },
   "dependencies": {
+    "@antler/chat-core": "workspace:*",
+    "@antler/client-runtime": "workspace:*",
     "@assistant-ui/react": "^0.15.16",
     "@assistant-ui/react-markdown": "^0.14.12",
     "@base-ui/react": "^1.7.0",
@@ -22,8 +25,9 @@
     "clsx": "^2.1.1",
     "lucide-react": "^1.33.0",
     "radix-ui": "^1.6.7",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-native-web": "0.21.4",
     "react-router": "^7.18.2",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.6.0",
@@ -31,14 +35,14 @@
     "tw-shimmer": "^0.4.12",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
-    "zustand": "^5.0.15"
+    "@antler/platform": "workspace:*"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@types/node": "^26.2.0",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@vitest/coverage-v8": "^5.0.3",
     "code-inspector-plugin": "^2.0.8",
     "fake-indexeddb": "^6.2.5",

@@ -1,5 +1,9 @@
 node_modules/
 dist/
+dist-p0/
+.expo/
+mobile/ios/
+mobile/android/
 *.log
 .DS_Store
 .pnpm-store

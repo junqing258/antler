@@ -4,7 +4,10 @@ ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 # Corepack downloads pnpm before pnpm can read the registry in .npmrc.
 ENV COREPACK_NPM_REGISTRY=https://registry.npmmirror.com
-RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
+ARG DEBIAN_MIRROR=http://mirrors.ustc.edu.cn
+RUN sed -i "s|http://deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/debian.sources \
+  && apt-get update --error-on=any \
+  && apt-get install -y --no-install-recommends -o Acquire::Retries=3 python3 make g++ \
   && rm -rf /var/lib/apt/lists/* \
   && corepack enable
 
@@ -12,11 +15,22 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/package.json
 COPY app/package.json app/package.json
-RUN pnpm install --frozen-lockfile --filter @antler/server... --filter @antler/app...
+COPY mobile/package.json mobile/package.json
+COPY packages/platform/package.json packages/platform/package.json
+COPY packages/chat-core/package.json packages/chat-core/package.json
+COPY packages/client-runtime/package.json packages/client-runtime/package.json
+RUN pnpm install --frozen-lockfile --filter @antler/server... --filter @antler/app... --filter @antler/mobile...
 
 COPY backend backend
 COPY app app
-RUN pnpm --filter @antler/app build \
+COPY mobile mobile
+COPY packages/platform packages/platform
+COPY packages/chat-core packages/chat-core
+COPY packages/client-runtime packages/client-runtime
+RUN pnpm --filter @antler/platform build \
+  && pnpm --filter @antler/chat-core build \
+  && pnpm --filter @antler/client-runtime build \
+  && pnpm --filter @antler/app build \
   && pnpm --filter @antler/server build
 
 FROM node:22-bookworm-slim AS runtime

@@ -42,7 +42,7 @@ ANTLER_SUPABASE_URL=https://<project-ref>.supabase.co
 ```
 
 前端无需单独配置：启动时从 `GET /api/auth-config` 获取认证配置（含 Supabase URL 与 publishable key），随后在浏览器直连 Supabase 完成邮箱密码登录。`ANTLER_AUTH_MODE=supabase` 时本地开发与 Web 部署行为一致。
-数据隔离：`runs`、`scheduled_tasks`、`task_executions` 均记录归属用户；local 模式写入空字符串，查询不过滤。会话仍保存在浏览器 IndexedDB，不随账号跨设备同步。已知约束：登录用户仍可指定服务器上任意绝对路径作为 Agent 工作目录，如需收紧应在网关或后续版本限制在 `ANTLER_WORKSPACE_ROOT` 之下。
+数据隔离：`runs`、会话、`scheduled_tasks` 和 `task_executions` 记录归属用户；local 模式使用本地用户范围。连接同一后端并登录同一账号的设备可查看服务端会话，浏览器中的模型 API Key 不随账号同步。已知约束：登录用户仍可指定服务器上任意绝对路径作为 Agent 工作目录，如需收紧应在网关或后续版本限制在 `ANTLER_WORKSPACE_ROOT` 之下。
 
 后端数据存放在 Postgres（推荐 Supabase）中，启动前必须设置 `DATABASE_URL` 指向 Postgres 连接串（应用运行可使用事务池化连接；`prisma migrate deploy` 需要直连或会话池化连接）。`ANTLER_WORKSPACE_ROOT` 仍决定 Agent 工作空间目录。修改 `backend/prisma/schema.prisma` 后，运行：
 
@@ -55,7 +55,15 @@ pnpm --filter @antler/server db:generate
 
 Web 生产构建支持安装到桌面或手机主屏幕。使用 HTTPS 部署后，可通过浏览器的“安装应用”入口安装；iPhone/iPad 在 Safari 分享菜单中选择“添加到主屏幕”。Service Worker 仅在生产环境的安全浏览器上下文中注册，开发模式不启用。
 
-首次在线访问并完成缓存后，页面和本地保存的会话可离线打开；发送消息、执行任务和读取服务端配置仍需要网络。缓存只包含前端静态资源，不缓存 API、SSE 或模型响应。发现新版本时会显示提示，点击“刷新更新”后应用更新，请先等待当前任务完成。
+首次在线访问并完成缓存后，前端页面可离线打开；读取会话、发送消息、执行任务和读取服务端配置仍需要网络。缓存只包含前端静态资源，不缓存 API、SSE 或模型响应。发现新版本时会显示提示，点击“刷新更新”后应用更新，请先等待当前任务完成。
+
+### 从旧桌面版迁移
+
+1. 启动原有 Fastify 后端或访问已有的远程服务，在浏览器打开其 Web 地址；本地开发仍可使用上述 `pnpm dev`。安装版可在支持的浏览器中选择安装 PWA。
+2. 如果服务使用 Supabase 认证，登录原账号；local 模式使用部署时配置的共享访问令牌（独立 Web 构建可通过 `VITE_ANTLER_ACCESS_TOKEN` 配置）。使用同一后端和账号查看服务端保存的会话。保留现有后端数据库和服务端文件；切换客户端不需要删除它们。
+3. 浏览器不会自动继承旧桌面 WebView 的本地存储。在“设置 → 供应商配置”重新填写本设备的协议、服务地址和 API Key。模型凭据不会随账号同步；如果旧会话使用客户端凭据，配置与会话绑定的协议和地址后即可继续，模型仍使用该会话绑定的值。
+
+不同浏览器、不同站点地址或独立安装的客户端可能使用不同的本地存储，需要分别配置。手机不能使用 `127.0.0.1` 访问开发电脑；发布客户端需要连接可由设备访问的 HTTPS 后端。
 
 本地验证生产版本：
 
@@ -90,7 +98,7 @@ ANTLER_RAG_KEY=your-rag-api-key
 项目通过浏览器或安装 PWA 使用，前端和后端可独立构建：
 
 ```bash
-pnpm build        # 构建前端与后端
+pnpm build        # 构建 Web、后端和移动端验证 bundle
 pnpm build:web    # 仅构建前端，输出 app/dist
 pnpm build:server # 仅构建后端，输出 backend/dist
 ```

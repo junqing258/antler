@@ -1,0 +1,28 @@
+{
+  "name": "@antler/mobile",
+  "private": true,
+  "version": "0.1.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "check": "tsc --noEmit",
+    "export": "expo export --platform all"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "expo": "~58.0.21",
+    "expo-crypto": "~58.0.7",
+    "expo-secure-store": "~58.0.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-native": "0.88.1",
+    "react-native-web": "0.21.4",
+    "@antler/client-runtime": "workspace:*",
+    "@antler/platform": "workspace:*",
+    "@antler/chat-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "typescript": "^6.0.3"
+  }
+}

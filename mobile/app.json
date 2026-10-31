@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Antler P0 Probe",
+    "slug": "antler-p0-probe",
+    "version": "0.1.0",
+    "orientation": "default",
+    "ios": {
+      "bundleIdentifier": "com.antler.p0probe",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSAllowsLocalNetworking": false
+        }
+      }
+    },
+    "android": {
+      "package": "com.antler.p0probe"
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
+  }
+}

@@ -9,6 +9,10 @@ node_modules
 **/node_modules
 dist
 **/dist
+**/dist-p0
+**/.expo
+mobile/ios
+mobile/android
 target
 **/target
 coverage

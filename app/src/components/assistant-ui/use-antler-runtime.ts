@@ -2,7 +2,13 @@ import {
   type ThreadMessageLike,
   useExternalStoreRuntime,
 } from "@assistant-ui/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import type { ChatMessage } from "@antler/chat-core";
+import {
+  ChatSession,
+  getBoundCredential,
+  subscribeRunStream,
+} from "@antler/client-runtime";
 import type { ProviderConfig } from "@/lib/provider-config";
 import {
   displayMessages,
@@ -10,17 +16,48 @@ import {
   getConversation,
   listConversationPage,
   subscribeConversationChanges,
+  subscribeConversationSessionReset,
 } from "@/lib/conversation-store";
-import { authHeaders } from "@/lib/server-info";
-import { createUuid } from "@/lib/utils";
-import {
-  applyRunEvent,
-  isTerminalEvent,
-  mergeMessageSnapshots,
-  subscribeRunEvents,
-} from "@/lib/run-events";
+import { createWebPlatform } from "@/lib/platform/web-platform";
 
-const convertMessage = (message: ThreadMessageLike) => message;
+type JsonValue =
+  null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+function toJsonValue(value: unknown): JsonValue {
+  if (value === null || typeof value === "string" || typeof value === "boolean")
+    return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (Array.isArray(value)) return value.map(toJsonValue);
+  if (typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, toJsonValue(item)]),
+    );
+  return null;
+}
+
+const convertMessage = (message: ChatMessage): ThreadMessageLike => ({
+  id: message.id,
+  role: message.role,
+  content: message.content.map((part) => {
+    if (part.type === "unknown")
+      return { type: "text" as const, text: "[不支持的消息内容]" };
+    if (part.type === "tool-call")
+      return {
+        ...part,
+        args: Object.fromEntries(
+          Object.entries(part.args).map(([key, value]) => [
+            key,
+            toJsonValue(value),
+          ]),
+        ),
+      };
+    return part;
+  }),
+  createdAt: message.createdAt,
+  status: message.status,
+  metadata: {
+    custom: { runId: message.runId, appliedEventId: message.appliedEventId },
+  },
+});
 
 type ServerInfo = { baseUrl: string; token: string };
 export function useAntlerRuntime(
@@ -28,270 +65,139 @@ export function useAntlerRuntime(
   conversationId: string,
   workingDirectory: string,
   getProviderConfig: () => ProviderConfig,
-  initialMessages: ThreadMessageLike[],
+  initialMessages: ChatMessage[],
   onConversationSaved: () => void,
   agentId?: string,
 ) {
-  const [messages, setMessages] = useState(initialMessages);
-  const [hasMore, setHasMore] = useState(false);
-  const firstSeq = useRef<number>();
-  const [running, setRunning] = useState(false);
-  const [isSending, setIsSending] = useState(false);
-  const [contextReason, setContextReason] = useState("");
-  const [notice, setNotice] = useState("");
-  const revision = useRef(0);
-  const activeRun = useRef<string | null>(null);
-  const config = useRef<Record<string, unknown>>();
-  const mounted = useRef(true);
-  const sending = useRef(false);
-  const [watchedRunId, setWatchedRunId] = useState<string | null>(null);
-  const completedRuns = useRef(new Set<string>());
-  const serverInfoRef = useRef(getServerInfo);
-  const savedRef = useRef(onConversationSaved);
-  serverInfoRef.current = getServerInfo;
-  savedRef.current = onConversationSaved;
-  const refresh = useCallback(async () => {
-    const conversation = await getConversation(conversationId);
-    if (
-      !mounted.current ||
-      !conversation ||
-      (conversation.revision ?? 0) < revision.current
-    )
-      return;
-    revision.current = conversation.revision ?? 0;
-    const last = conversation.messages.at(-1);
-    const replayRun =
-      last?.status?.type === "running"
-        ? last.metadata?.custom?.runId
-        : undefined;
-    const candidate =
-      conversation.activeRunId ??
-      (typeof replayRun === "string" ? replayRun : null);
-    activeRun.current =
-      candidate && !completedRuns.current.has(candidate) ? candidate : null;
-    if (activeRun.current) setWatchedRunId(activeRun.current);
-    config.current = conversation.executionConfig;
-    setContextReason(
-      conversation.contextState && conversation.contextState !== "available"
-        ? (conversation.contextReason ?? "模型上下文未恢复，请新建会话。")
-        : "",
-    );
-    setHasMore(conversation.hasMoreMessages ?? false);
-    setMessages((current) => {
-      firstSeq.current =
-        firstSeq.current === undefined
-          ? conversation.firstSeq
-          : Math.min(
-              firstSeq.current,
-              conversation.firstSeq ?? firstSeq.current,
-            );
-      return mergeMessageSnapshots(current, conversation.messages);
-    });
-    setRunning(Boolean(activeRun.current));
-  }, [conversationId]);
-  useEffect(() => {
-    mounted.current = true;
-    let disposed = false;
-    let unsubscribe: (() => void) | undefined;
-    void listConversationPage()
-      .then(async (page) => {
-        await refresh();
-        if (disposed) return;
-        unsubscribe = subscribeConversationChanges(
-          page.lastChangeId,
-          (change) => {
-            if (
-              change.conversationId === conversationId ||
-              change.type === "reset_required"
-            )
-              void refresh().catch(() => {});
-          },
-          (connected) => {
-            if (mounted.current)
-              setNotice(connected ? "" : "连接中断，正在重连");
-            if (connected) void refresh().catch(() => {});
-          },
-        );
-      })
-      .catch(() => {
-        if (mounted.current) setNotice("无法加载会话，请重试。");
-      });
-    const foreground = () => {
-      if (document.visibilityState === "visible")
-        void refresh().catch(() => {});
-    };
-    document.addEventListener("visibilitychange", foreground);
-    return () => {
-      disposed = true;
-      mounted.current = false;
-      unsubscribe?.();
-      document.removeEventListener("visibilitychange", foreground);
-    };
-  }, [conversationId, refresh]);
-  useEffect(() => {
-    if (!watchedRunId) return;
-    let disposed = false;
-    const stop = subscribeRunEvents(
-      () => serverInfoRef.current(),
-      watchedRunId,
-      (event) => {
-        if (disposed || !mounted.current) return;
-        setMessages((current) => applyRunEvent(current, watchedRunId, event));
-        if (isTerminalEvent(event)) {
-          completedRuns.current.add(watchedRunId);
-          if (activeRun.current === watchedRunId) activeRun.current = null;
-          setRunning(false);
-          setWatchedRunId(null);
-          setNotice("");
-          void refresh().catch(() => {});
-          savedRef.current();
-        }
-      },
-      (connected) => {
-        if (!disposed && mounted.current)
-          setNotice(connected ? "" : "连接中断，正在重连");
-      },
-    );
-    return () => {
-      disposed = true;
-      stop();
-    };
-  }, [watchedRunId, refresh]);
-  const runtime = useExternalStoreRuntime<ThreadMessageLike>({
-    messages,
-    isRunning: running,
-    isSendDisabled: isSending || running || Boolean(contextReason),
-    convertMessage,
-    onNew: async (message) => {
-      if (sending.current || activeRun.current) {
-        setNotice("该会话正在回复中");
-        return;
-      }
-      sending.current = true;
-      setIsSending(true);
-      setNotice("发送中…");
-      try {
-        const server = await getServerInfo();
-        const provider = getProviderConfig();
-        const bound = config.current;
-        const body = JSON.stringify({
-          message: message.content
-            .filter((part) => part.type === "text")
-            .map((part) => part.text)
-            .join("\n"),
-          conversationId,
-          clientRequestId: createUuid(),
-          expectedRevision: revision.current,
-          ...(agentId ? { agentId } : {}),
-          ...(bound ? {} : workingDirectory.trim() ? { workingDirectory } : {}),
-          ...(bound?.credentialSource === "server"
-            ? {}
-            : provider.apiKey.trim()
-              ? {
-                  provider: bound
-                    ? {
-                        ...provider,
-                        protocol: bound.protocol,
-                        baseUrl: bound.baseUrl,
-                        model: bound.model,
-                      }
-                    : provider,
-                }
-              : {}),
-        });
-        let response: Response | undefined;
-        // A lost acknowledgement is retried with precisely the same request ID and body.
-        for (let attempt = 0; mounted.current; attempt++) {
-          try {
-            response = await fetch(`${server.baseUrl}/api/runs`, {
-              method: "POST",
-              headers: {
-                ...authHeaders(server),
-                "content-type": "application/json",
-              },
-              body,
-            });
-            break;
-          } catch (error) {
-            if (mounted.current) setNotice("发送待确认，正在重试…");
-            await new Promise((resolve) =>
-              setTimeout(resolve, Math.min(500 * 2 ** attempt, 15000)),
-            );
-          }
-        }
-        if (!response?.ok) {
-          const data = await response?.json();
-          throw new Error(
-            data?.error === "conversation_busy"
-              ? "该会话正在回复中"
-              : (data?.error ?? "发送失败"),
-          );
-        }
-        const accepted = await response.json();
-        if (mounted.current) {
-          setNotice("");
-          if (typeof accepted.runId === "string") {
-            const runId = accepted.runId;
-            activeRun.current = runId;
-            setRunning(true);
-            setMessages((current) => {
-              const id = `${runId}:user`;
-              if (current.some((item) => item.id === id)) return current;
-              return [
-                ...current,
-                {
-                  id,
-                  role: "user",
-                  content: message.content,
-                  createdAt: new Date(),
-                  metadata: {
-                    custom: { runId, appliedEventId: 0, live: true },
-                  },
-                },
-              ];
-            });
-            setWatchedRunId(runId);
-          }
-          await refresh();
-          onConversationSaved();
-        }
-      } catch (error) {
-        if (mounted.current)
-          setNotice(
-            error instanceof Error
-              ? error.message
-              : "发送待确认，请重新连接服务端。",
-          );
-      } finally {
-        sending.current = false;
-        if (mounted.current) setIsSending(false);
-      }
-    },
-    onCancel: async () => {
-      if (!activeRun.current) return;
-      const server = await getServerInfo();
-      await fetch(`${server.baseUrl}/api/runs/${activeRun.current}/cancel`, {
-        method: "POST",
-        headers: authHeaders(server),
-      });
-    },
+  const refs = useRef({
+    getServerInfo,
+    getProviderConfig,
+    onConversationSaved,
   });
-  const loadEarlier = async () => {
-    const page = await getMessagePage(conversationId, firstSeq.current);
-    if (!mounted.current) return;
-    const earlier = displayMessages(page);
-    setMessages((current) => [
-      ...earlier.filter((item) => !current.some((row) => row.id === item.id)),
-      ...current,
-    ]);
-    firstSeq.current = page.messages[0]?.seq;
-    setHasMore(page.hasMore);
-  };
+  refs.current = { getServerInfo, getProviderConfig, onConversationSaved };
+  const platform = useMemo(
+    () => createWebPlatform(() => refs.current.getServerInfo()),
+    [],
+  );
+  const session = useMemo(
+    () =>
+      new ChatSession(
+        { conversationId, workingDirectory, initialMessages, agentId },
+        {
+          initialize: () => platform.initialize(),
+          listChangesCursor: async () =>
+            (await listConversationPage()).lastChangeId,
+          getConversation,
+          getEarlier: async (id, beforeSeq) => {
+            const page = await getMessagePage(id, beforeSeq);
+            return {
+              messages: displayMessages(page),
+              firstSeq: page.messages[0]?.seq,
+              hasMore: page.hasMore,
+            };
+          },
+          subscribeChanges: subscribeConversationChanges,
+          subscribeRun: (runId, onEvent, onConnection) =>
+            subscribeRunStream(platform, runId, onEvent, onConnection),
+          prepareSend: async () => {
+            const server = await platform.connection();
+            return async (body) => {
+              const response = await platform.request(
+                `${server.baseUrl}/api/runs`,
+                {
+                  method: "POST",
+                  headers: {
+                    ...server.headers,
+                    "content-type": "application/json",
+                  },
+                  body,
+                },
+              );
+              const data: { runId?: unknown; error?: string } = await response
+                .json()
+                .catch(() => ({}));
+              return { ok: response.ok, data };
+            };
+          },
+          prepareCancel: async () => {
+            const server = await platform.connection();
+            return async (runId) => {
+              await platform.request(
+                `${server.baseUrl}/api/runs/${runId}/cancel`,
+                {
+                  method: "POST",
+                  headers: server.headers,
+                },
+              );
+            };
+          },
+          getProvider: () => ({ ...refs.current.getProviderConfig() }),
+          createId: platform.createId,
+          delay: (ms) =>
+            new Promise((resolve) => {
+              platform.schedule(resolve, ms);
+            }),
+          onSaved: () => refs.current.onConversationSaved(),
+        },
+      ),
+    [conversationId, workingDirectory, agentId, platform],
+  );
+  const state = useSyncExternalStore(
+    session.subscribe,
+    session.getSnapshot,
+    session.getSnapshot,
+  );
+  const provider = getProviderConfig();
+  useEffect(() => {
+    session.providerChanged();
+  }, [session, provider.apiKey, provider.protocol, provider.baseUrl]);
+  const credentialNotice = session.credentialProblem();
+  useEffect(() => {
+    session.start();
+    const unsubscribeReset = subscribeConversationSessionReset(() =>
+      session.stop(),
+    );
+    const unsubscribeForeground = platform.onForeground(() => {
+      void session.refresh().catch(() => {});
+    });
+    return () => {
+      unsubscribeReset();
+      unsubscribeForeground();
+      session.stop();
+    };
+  }, [session, platform]);
+  const runtime = useExternalStoreRuntime<ChatMessage>({
+    messages: state.messages,
+    isRunning: state.running,
+    isSendDisabled:
+      !state.ready ||
+      state.sending ||
+      state.running ||
+      Boolean(state.contextReason) ||
+      Boolean(credentialNotice),
+    convertMessage,
+    onNew: async (message) =>
+      session.send(
+        message.content
+          .filter((part) => part.type === "text")
+          .map((part) => part.text)
+          .join("\n"),
+      ),
+    onCancel: () => session.cancel(),
+  });
   return {
     runtime,
-    notice: contextReason || notice,
-    hasMore,
-    loadEarlier,
-    boundModel: config.current?.model as string | undefined,
+    notice:
+      state.contextReason ||
+      state.notice ||
+      (!state.ready ? "正在加载会话配置…" : ""),
+    credentialNotice,
+    boundCredential: getBoundCredential(state.executionConfig),
+    hasMore: state.hasMore,
+    loadEarlier: () => session.loadEarlier(),
+    boundModel:
+      typeof state.executionConfig?.model === "string"
+        ? state.executionConfig.model
+        : undefined,
   };
 }

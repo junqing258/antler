@@ -9,6 +9,7 @@ import {
   defaultProviderConfig,
   type ProviderConfig,
 } from "@/lib/provider-config";
+import type { BoundCredential } from "@antler/client-runtime";
 
 export type SettingsTab = "provider" | "profile" | "about";
 import { currentUserProfile, signOut } from "@/lib/auth";
@@ -16,11 +17,13 @@ import { currentUserProfile, signOut } from "@/lib/auth";
 export function SettingsDialog({
   config,
   initialTab = "provider",
+  credentialBinding,
   onSave,
   onClose,
 }: {
   config: ProviderConfig;
   initialTab?: SettingsTab;
+  credentialBinding?: BoundCredential;
   onSave: (config: ProviderConfig) => void;
   onClose: () => void;
 }) {
@@ -129,6 +132,13 @@ export function SettingsDialog({
                   <p className="m-0 mt-1 text-xs text-[#777]">配置仅保存在当前浏览器的本地存储中。</p>
                 </div>
               </div>
+              {credentialBinding && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                  <p className="m-0 font-semibold">当前会话绑定的配置</p>
+                  <p className="mb-0 mt-1 break-all">协议：{credentialBinding.protocol}；服务地址：{credentialBinding.baseUrl || "默认地址"}；模型：{credentialBinding.model}</p>
+                  <p className="mb-0 mt-1">请填写匹配的协议、服务地址和 API Key。保存后可继续此会话，账号不会同步 API Key。</p>
+                </div>
+              )}
               <label className="grid gap-1.5 text-xs font-semibold text-[#4b4b4b]">
                 名称
                 <input className="h-10 w-full rounded-lg border border-[#ddd] px-[11px] text-[13px] font-normal text-[#222] outline-none focus:border-primary focus:ring-4 focus:ring-primary/15"
@@ -168,7 +178,11 @@ export function SettingsDialog({
               </label>
               <div className="grid gap-2 text-xs font-semibold text-[#4b4b4b]">
                 <span>模型</span>
-                {!draft.apiKey.trim() ? (
+                {credentialBinding ? (
+                  <p className="m-0 font-normal text-[#777]">
+                    当前会话继续使用上方绑定的模型，无需将它设为默认模型。
+                  </p>
+                ) : !draft.apiKey.trim() ? (
                   <p className="m-0 font-normal text-[#777]">
                     未填写 API Key 时使用服务端默认模型；填写后可在聊天中选择下方模型。
                   </p>

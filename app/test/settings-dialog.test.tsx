@@ -27,3 +27,29 @@ it("includes a typed model ID when saving without clicking Add first", () => {
     }),
   );
 });
+it("shows the bound configuration without replacing local defaults", () => {
+  render(
+    <SettingsDialog
+      config={defaultProviderConfig}
+      credentialBinding={{
+        protocol: "anthropic-messages",
+        baseUrl: "https://bound.example",
+        model: "bound-model",
+      }}
+      onSave={vi.fn()}
+      onClose={vi.fn()}
+    />,
+  );
+  expect(screen.getByText(/当前会话绑定的配置/)).toBeInTheDocument();
+  expect(screen.getByText(/https:\/\/bound.example/)).toHaveTextContent(
+    "bound-model",
+  );
+  expect(
+    screen.getByText(/当前会话继续使用上方绑定的模型/),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByText(/未填写 API Key 时使用服务端默认模型/),
+  ).not.toBeInTheDocument();
+  expect(screen.getByLabelText("协议")).toHaveValue("openai-responses");
+  expect(screen.getByLabelText("Base URL（可选）")).toHaveValue("");
+});

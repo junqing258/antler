@@ -1,5 +1,10 @@
-import type { ThreadMessageLike } from "@assistant-ui/react";
-import { runErrorMessage } from "./run-events";
+import {
+  messageFromDto,
+  type ChatMessage,
+  type MessageDto,
+} from "@antler/chat-core";
+import { subscribeChangeStream } from "@antler/client-runtime";
+import { createWebPlatform } from "./platform/web-platform";
 import { authHeaders, serverInfo } from "./server-info";
 
 export type Conversation = {
@@ -8,7 +13,7 @@ export type Conversation = {
   title: string;
   createdAt: number;
   updatedAt: number;
-  messages: ThreadMessageLike[];
+  messages: ChatMessage[];
   revision?: number;
   activeRunId?: string | null;
   executionConfig?: Record<string, unknown>;
@@ -25,17 +30,6 @@ type Summary = Omit<Conversation, "createdAt" | "updatedAt" | "messages"> & {
   lastMessageAt: string;
   titleSource: string;
 };
-type MessageDto = {
-  id: string;
-  role: "user" | "assistant";
-  seq: number;
-  runId: string;
-  appliedEventId: number;
-  error?: { code?: string; message: string };
-  content: { schemaVersion: number; parts: unknown[] };
-  status: string;
-  createdAt: string;
-};
 export type MessagePage = {
   messages: MessageDto[];
   revision: number;
@@ -43,7 +37,8 @@ export type MessagePage = {
   hasMore: boolean;
 };
 let generation = 0;
-const subscriptions = new Set<AbortController>();
+const subscriptions = new Set<() => void>();
+const sessionResetListeners = new Set<() => void>();
 type Change = { conversationId: string; type: string; revision: number };
 type ChangeListener = {
   onChange: (change: Change) => void;
@@ -52,12 +47,17 @@ type ChangeListener = {
 let changeHub: { listeners: Set<ChangeListener>; stop: () => void } | undefined;
 const revisions = new Map<string, number>();
 export function resetConversationSession() {
+  for (const listener of sessionResetListeners) listener();
   changeHub?.stop();
   changeHub = undefined;
   generation++;
   revisions.clear();
-  for (const controller of subscriptions) controller.abort();
+  for (const stop of subscriptions) stop();
   subscriptions.clear();
+}
+export function subscribeConversationSessionReset(listener: () => void) {
+  sessionResetListeners.add(listener);
+  return () => sessionResetListeners.delete(listener);
 }
 export async function conversationRequest(path: string, init?: RequestInit) {
   const epoch = generation;
@@ -94,39 +94,8 @@ function summary(row: Summary): Conversation {
     isTitleManuallySet: row.titleSource === "manual",
   };
 }
-export function displayMessages(page: MessagePage): ThreadMessageLike[] {
-  return page.messages.map((message) => {
-    if (message.content.schemaVersion !== 1)
-      throw new Error("消息格式版本不受支持");
-    return {
-      id: message.id,
-      role: message.role,
-      content: message.content.parts,
-      createdAt: new Date(message.createdAt),
-      metadata: {
-        custom: {
-          runId: message.runId,
-          appliedEventId: message.appliedEventId,
-        },
-      },
-      ...(message.role === "assistant"
-        ? {
-            status:
-              message.status === "running" || message.status === "queued"
-                ? { type: "running" }
-                : message.status === "failed"
-                  ? {
-                      type: "incomplete",
-                      reason: "error",
-                      error: runErrorMessage(message.error?.message),
-                    }
-                  : message.status === "cancelled"
-                    ? { type: "incomplete", reason: "cancelled" }
-                    : { type: "complete", reason: "stop" },
-          }
-        : {}),
-    } as ThreadMessageLike;
-  });
+export function displayMessages(page: MessagePage): ChatMessage[] {
+  return page.messages.map(messageFromDto);
 }
 export async function listConversationPage(cursor?: string, agentId?: string) {
   const query = new URLSearchParams({
@@ -192,65 +161,17 @@ function openChangeStream(
   onChange: (change: Change) => void,
   onConnection?: (connected: boolean) => void,
 ) {
-  const controller = new AbortController();
-  subscriptions.add(controller);
-  const epoch = generation;
-  let cursor = afterChangeId;
-  let timer: ReturnType<typeof setTimeout>;
-  let attempt = 0;
-  const connect = async () => {
-    try {
-      const server = await serverInfo();
-      const response = await fetch(
-        `${server.baseUrl}/api/conversations/changes?afterChangeId=${cursor}`,
-        { headers: authHeaders(server), signal: controller.signal },
-      );
-      if (response.status === 409) {
-        const snapshot = await listConversationPage();
-        if (epoch !== generation || controller.signal.aborted) return;
-        cursor = snapshot.lastChangeId;
-        onChange({ conversationId: "", type: "reset_required", revision: 0 });
-        timer = setTimeout(() => void connect(), 0);
-        return;
-      }
-      if (!response.ok || !response.body) throw new Error("连接中断");
-      onConnection?.(true);
-      attempt = 0;
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (!controller.signal.aborted && epoch === generation) {
-        const { done, value } = await reader.read();
-        if (done) throw new Error("连接中断");
-        buffer += decoder.decode(value, { stream: true });
-        let boundary: number;
-        while ((boundary = buffer.indexOf("\n\n")) >= 0) {
-          const block = buffer.slice(0, boundary);
-          buffer = buffer.slice(boundary + 2);
-          const data = block.match(/^data: (.+)$/m)?.[1];
-          if (!data || epoch !== generation) continue;
-          const change = JSON.parse(data);
-          if (change.changeId <= cursor) continue;
-          onChange(change);
-          cursor = change.changeId;
-        }
-      }
-      await reader.cancel();
-    } catch {
-      if (!controller.signal.aborted && epoch === generation) {
-        onConnection?.(false);
-        timer = setTimeout(
-          () => void connect(),
-          Math.min(1000 * 2 ** attempt++, 15000),
-        );
-      }
-    }
-  };
-  void connect();
+  const stop = subscribeChangeStream(
+    createWebPlatform(serverInfo),
+    afterChangeId,
+    async () => (await listConversationPage()).lastChangeId,
+    onChange,
+    onConnection,
+  );
+  subscriptions.add(stop);
   return () => {
-    controller.abort();
-    subscriptions.delete(controller);
-    clearTimeout(timer);
+    stop();
+    subscriptions.delete(stop);
   };
 }
 

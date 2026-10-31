@@ -133,7 +133,7 @@ describe("LoginView", () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
       fireEvent.click(screen.getByRole("button", { name: "重新发送验证码" }));
       await waitFor(() => expect(mocks.sendRecoveryCode).toHaveBeenCalledTimes(3));
-      expect(input).toHaveValue("");
+      await waitFor(() => expect(input).toHaveValue(""));
       expect(mocks.resendSignupCode).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
@@ -219,7 +219,7 @@ describe("LoginView", () => {
       await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
       fireEvent.click(screen.getByRole("button", { name: "重新发送验证码" }));
       await waitFor(() => expect(mocks.resendSignupCode).toHaveBeenCalledWith("alice@example.com"));
-      expect(input).toHaveValue("");
+      await waitFor(() => expect(input).toHaveValue(""));
       expect(screen.getByRole("button", { name: /秒后可重发/ })).toBeDisabled();
     } finally {
       vi.useRealTimers();

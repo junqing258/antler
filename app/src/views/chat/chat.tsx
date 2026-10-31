@@ -1,9 +1,8 @@
 import { Link } from "react-router";
 import { useEffect, useState } from "react";
-import {
-  AssistantRuntimeProvider,
-  type ThreadMessageLike,
-} from "@assistant-ui/react";
+import { AssistantRuntimeProvider } from "@assistant-ui/react";
+import type { ChatMessage } from "@antler/chat-core";
+import type { BoundCredential } from "@antler/client-runtime";
 import {
   CalendarClockIcon,
   MenuIcon,
@@ -46,7 +45,7 @@ export function Chat({
 }: {
   agentId: string;
   conversationId: string;
-  initialMessages: ThreadMessageLike[];
+  initialMessages: ChatMessage[];
   title: string;
   conversations: Conversation[];
   workingDirectory: string;
@@ -58,11 +57,11 @@ export function Chat({
   providerConfig: ProviderConfig;
   serverModel: string;
   onModelChange: (model: string) => void;
-  onOpenSettings: (tab?: SettingsTab) => void;
+  onOpenSettings: (tab?: SettingsTab, credentialBinding?: BoundCredential) => void;
   onOpenScheduler: () => void;
   onConversationSaved: () => void;
 }) {
-  const { runtime, notice, hasMore, loadEarlier, boundModel } = useAntlerRuntime(
+  const { runtime, notice, credentialNotice, boundCredential, hasMore, loadEarlier, boundModel } = useAntlerRuntime(
     serverInfo,
     conversationId,
     workingDirectory,
@@ -239,9 +238,31 @@ export function Chat({
               {sidebar}
             </aside>
           )}
-          <section className="min-w-0 flex-1">
-            {notice && <p role="status" className="px-4 py-2 text-sm text-amber-700">{notice}</p>}
-            {hasMore && <button onClick={() => void loadEarlier()}>加载更早消息</button>}
+          <section className="relative flex min-w-0 flex-1 flex-col">
+            {notice && (
+              <p
+                role="status"
+                className="pointer-events-none absolute inset-x-0 top-2 z-10 mx-auto w-fit rounded-full border border-amber-200 bg-amber-50 px-3.5 py-1 text-[13px] text-amber-800 shadow-sm"
+              >
+                {notice}
+              </p>
+            )}
+            {credentialNotice && (
+              <div role="status" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-amber-100 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+                <span>{credentialNotice}</span>
+                <button type="button" className="underline underline-offset-2" onClick={() => onOpenSettings("provider", boundCredential)}>配置凭据</button>
+              </div>
+            )}
+            {hasMore && (
+              <button
+                type="button"
+                className="mx-auto my-1 shrink-0 rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground hover:bg-muted"
+                onClick={() => void loadEarlier()}
+              >
+                加载更早消息
+              </button>
+            )}
+            <div className="min-h-0 flex-1">
             <AssistantThread
               model={modelPickerConfig.model}
               models={modelPickerConfig.models}
@@ -259,6 +280,7 @@ export function Chat({
               }
               onModelChange={selectModel}
             />
+            </div>
           </section>
         </main>
       </Drawer>

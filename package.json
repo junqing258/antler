@@ -12,15 +12,19 @@
     "dev": "node scripts/dev.mjs",
     "dev:web": "pnpm --filter @antler/app dev",
     "dev:server": "pnpm --filter @antler/server dev",
-    "build": "pnpm build:web && pnpm build:server",
+    "build": "pnpm --filter @antler/platform build && pnpm --filter @antler/chat-core build && pnpm --filter @antler/client-runtime build && pnpm build:web && pnpm build:server && pnpm build:mobile",
     "build:web": "pnpm --filter @antler/app build",
     "build:server": "pnpm --filter @antler/server build",
-    "check": "pnpm --filter @antler/app check && pnpm --filter @antler/server check",
+    "check": "pnpm --filter @antler/platform check && pnpm --filter @antler/chat-core check && pnpm --filter @antler/client-runtime check && pnpm --filter @antler/app check && pnpm --filter @antler/server check && pnpm check:mobile",
     "lint": "pnpm check",
-    "format": "prettier --write \"app/src/**/*.{ts,tsx,css,scss}\" \"backend/src/**/*.ts\"",
-    "test": "pnpm --filter @antler/app test && pnpm --filter @antler/server test",
-    "test:watch": "pnpm --parallel --stream --filter @antler/app --filter @antler/server test:watch",
-    "test:coverage": "pnpm --filter @antler/app test:coverage && pnpm --filter @antler/server test:coverage"
+    "format": "prettier --write \"app/{src,test}/**/*.{ts,tsx,css,scss}\" \"backend/{src,test}/**/*.ts\" \"mobile/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\"",
+    "test": "pnpm --filter @antler/platform test && pnpm --filter @antler/chat-core test && pnpm --filter @antler/client-runtime test && pnpm --filter @antler/app test && pnpm --filter @antler/server test",
+    "test:watch": "pnpm --parallel --stream --filter @antler/platform --filter @antler/chat-core --filter @antler/client-runtime --filter @antler/app --filter @antler/server test:watch",
+    "test:coverage": "pnpm --filter @antler/platform test:coverage && pnpm --filter @antler/chat-core test:coverage && pnpm --filter @antler/client-runtime test:coverage && pnpm --filter @antler/app test:coverage && pnpm --filter @antler/server test:coverage",
+    "check:mobile": "pnpm --filter @antler/mobile check",
+    "dev:mobile": "pnpm --filter @antler/mobile start",
+    "build:mobile": "pnpm --filter @antler/mobile export",
+    "build:probe": "pnpm --filter @antler/app build:probe"
   },
   "devDependencies": {
     "prettier": "^3.6.2"

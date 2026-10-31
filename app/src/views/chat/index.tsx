@@ -1,6 +1,7 @@
 import { agentWorkspace } from "@/lib/platform-api";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ThreadMessageLike } from "@assistant-ui/react";
+import type { ChatMessage } from "@antler/chat-core";
+import type { BoundCredential } from "@antler/client-runtime";
 import { useSearchParams } from "react-router";
 import { SchedulerDialog } from "@/components/scheduler-dialog";
 import { SettingsDialog, type SettingsTab } from "@/components/settings-dialog";
@@ -88,7 +89,7 @@ export function ChatView({
   );
   const [loadedConversation, setLoadedConversation] = useState<{
     id: string;
-    messages: ThreadMessageLike[];
+    messages: ChatMessage[];
   } | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [providerConfig, setProviderConfig] = useState(loadProviderConfig);
@@ -130,6 +131,7 @@ export function ChatView({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [schedulerOpen, setSchedulerOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("provider");
+  const [credentialBinding, setCredentialBinding] = useState<BoundCredential>();
   const refreshLibrary = useCallback(() => {
     void listConversationPage(undefined, agentId)
       .then((page) => {
@@ -153,7 +155,6 @@ export function ChatView({
         if (conversation && (conversation.agentId ?? undefined) !== agentId) {
           const id = newConversationId();
           setSearchParams({ conversationId: id }, { replace: true });
-          setConversationId(id);
           return;
         }
         acceptLibrary(nextConversations);
@@ -249,8 +250,9 @@ export function ChatView({
     saveProviderConfig(next);
     setProviderConfig(next);
   };
-  const openSettings = (tab: SettingsTab = "provider") => {
+  const openSettings = (tab: SettingsTab = "provider", binding?: BoundCredential) => {
     setSettingsTab(tab);
+    setCredentialBinding(binding);
     setSettingsOpen(true);
   };
 
@@ -295,6 +297,7 @@ export function ChatView({
         <SettingsDialog
           config={providerConfig}
           initialTab={settingsTab}
+          credentialBinding={credentialBinding}
           onSave={saveSettings}
           onClose={() => setSettingsOpen(false)}
         />
