@@ -1,5 +1,7 @@
 # 移除 assistant-ui 的 React Native / Web 渐进迁移规划
 
+> 当前工作区的实施进度、验证范围与后续顺序见 [迁移进度与后续计划](16-react-native-migration-progress.md)。本文的现状描述保留方案制定时的基线。
+
 状态：Tauri 退役已完成；assistant-ui 解耦与 RN/RNW 迁移待实施。更新日期：2026-10-31。
 
 Tauri 清理已随 `cfc21a7`（`refactor： 移除 tauri`）合入，作为后续迁移的现有基线，不再列入 P2 待办。本文其余阶段仍是规划，不代表共享包或原生客户端已经实现。

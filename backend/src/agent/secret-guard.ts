@@ -144,7 +144,15 @@ export class SecretGuard {
     );
     if (!root) return;
     const visit = async (directory: string): Promise<void> => {
-      for (const entry of await readdir(directory, { withFileTypes: true })) {
+      // A directory can disappear after its parent was listed, for example
+      // when a concurrent skill runtime atomically renames its staging copy.
+      const entries = await readdir(directory, { withFileTypes: true }).catch(
+        (error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT" && directory !== root) return [];
+          throw error;
+        },
+      );
+      for (const entry of entries) {
         const path = join(directory, entry.name);
         if (/^\.env(?:$|[.-])/i.test(entry.name) && !entry.isDirectory()) {
           await this.collectEnvFile(path);

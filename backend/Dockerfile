@@ -19,6 +19,7 @@ COPY mobile/package.json mobile/package.json
 COPY packages/platform/package.json packages/platform/package.json
 COPY packages/chat-core/package.json packages/chat-core/package.json
 COPY packages/client-runtime/package.json packages/client-runtime/package.json
+COPY packages/ui/package.json packages/ui/package.json
 RUN pnpm install --frozen-lockfile --filter @antler/server... --filter @antler/app... --filter @antler/mobile...
 
 COPY backend backend
@@ -27,9 +28,11 @@ COPY mobile mobile
 COPY packages/platform packages/platform
 COPY packages/chat-core packages/chat-core
 COPY packages/client-runtime packages/client-runtime
+COPY packages/ui packages/ui
 RUN pnpm --filter @antler/platform build \
   && pnpm --filter @antler/chat-core build \
   && pnpm --filter @antler/client-runtime build \
+  && pnpm --filter @antler/ui build \
   && pnpm --filter @antler/app build \
   && pnpm --filter @antler/server build
 

@@ -7,7 +7,6 @@ import {
 } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -19,7 +18,7 @@ import {
   View,
 } from "react-native";
 import * as Crypto from "expo-crypto";
-import type { ChatMessage } from "@antler/chat-core";
+import { Composer, MessageList } from "@antler/ui";
 import {
   ChatSession,
   createHttpSessionDependencies,
@@ -80,37 +79,6 @@ function Action({
     >
       <Text style={styles.buttonText}>{label}</Text>
     </Pressable>
-  );
-}
-function Message({ item }: { item: ChatMessage }) {
-  return (
-    <View style={styles.message}>
-      <Text style={styles.label}>{item.role === "user" ? "你" : "Antler"}</Text>
-      {item.content.map((part, i) => {
-        if (part.type === "text" || part.type === "reasoning")
-          return (
-            <Text selectable key={i}>
-              {part.type === "reasoning" ? `思考：${part.text}` : part.text}
-            </Text>
-          );
-        if (part.type === "tool-call")
-          return (
-            <Text selectable key={i}>
-              工具：{part.toolName}
-              {part.result === undefined
-                ? "（运行中）"
-                : `\n${JSON.stringify(part.result)}`}
-              {part.isError ? "（错误）" : ""}
-            </Text>
-          );
-        return <Text key={i}>[不支持的消息内容]</Text>;
-      })}
-      {item.status?.type === "incomplete" && (
-        <Text>
-          {item.status.reason === "error" ? item.status.error : "已停止"}
-        </Text>
-      )}
-    </View>
   );
 }
 function ChatProbe({
@@ -228,48 +196,25 @@ function ChatProbe({
           }}
         />
       )}
-      <FlatList
-        style={styles.flex}
-        data={state.messages}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <Message item={item} />}
-        ListEmptyComponent={
-          <Text>{state.ready ? "暂无消息" : "正在加载会话…"}</Text>
+      <MessageList messages={state.messages} ready={state.ready} />
+      <Composer
+        value={draft}
+        onChange={setDraft}
+        onSend={send}
+        onStop={() => {
+          setOperationError("");
+          void session
+            .cancel()
+            .catch(() => setOperationError("停止请求失败，请重试。"));
+        }}
+        running={state.running}
+        disabled={
+          !state.ready ||
+          state.sending ||
+          Boolean(state.contextReason) ||
+          Boolean(problem)
         }
       />
-      <View style={styles.row}>
-        <TextInput
-          accessibilityLabel="消息"
-          multiline
-          value={draft}
-          onChangeText={setDraft}
-          style={[styles.input, styles.composer]}
-          placeholder="输入消息"
-        />
-        {state.running ? (
-          <Action
-            label="停止"
-            onPress={() => {
-              setOperationError("");
-              void session
-                .cancel()
-                .catch(() => setOperationError("停止请求失败，请重试。"));
-            }}
-          />
-        ) : (
-          <Action
-            label="发送"
-            onPress={send}
-            disabled={
-              !draft.trim() ||
-              !state.ready ||
-              state.sending ||
-              Boolean(state.contextReason) ||
-              Boolean(problem)
-            }
-          />
-        )}
-      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -507,14 +452,5 @@ const styles = StyleSheet.create({
     gap: 8,
     marginVertical: 8,
   },
-  composer: { flex: 1, maxHeight: 120 },
-  message: {
-    padding: 12,
-    marginVertical: 5,
-    backgroundColor: "#f3f6f5",
-    borderRadius: 8,
-    gap: 4,
-  },
-  label: { fontWeight: "700" },
   warning: { padding: 10, backgroundColor: "#fff5db", borderRadius: 8, gap: 6 },
 });
