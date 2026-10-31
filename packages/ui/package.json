@@ -10,7 +10,11 @@
   },
   "dependencies": {
     "@antler/chat-core": "workspace:*",
-    "markdown-it": "^14.1.0"
+    "lowlight": "^3.3.0",
+    "markdown-it": "^14.1.0",
+    "markdown-it-cjk-friendly": "^3.0.0",
+    "markdown-it-footnote": "^4.0.0",
+    "remend": "^1.4.0"
   },
   "peerDependencies": {
     "react": "^19.3.0",
@@ -19,6 +23,7 @@
   "devDependencies": {
     "@types/markdown-it": "^14",
     "@types/react": "^19.3.0",
+    "highlight.js": "^11.12.0",
     "react": "19.3.0",
     "react-native": "0.88.1",
     "typescript": "^7.0.2"

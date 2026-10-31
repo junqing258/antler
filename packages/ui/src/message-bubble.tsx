@@ -38,7 +38,13 @@ export function MessageBubble({
       </View>
       {message.content.map((part, i) => {
         if (part.type === "text")
-          return <MessageMarkdown key={i} text={part.text} />;
+          return (
+            <MessageMarkdown
+              key={i}
+              text={part.text}
+              streaming={running || message.live}
+            />
+          );
         if (part.type === "reasoning")
           return <ReasoningBlock key={i} text={part.text} running={running} />;
         if (part.type === "tool-call")

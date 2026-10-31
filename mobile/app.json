@@ -2,6 +2,7 @@
   "expo": {
     "name": "Antler P0 Probe",
     "slug": "antler-p0-probe",
+    "scheme": "antler",
     "version": "0.1.0",
     "orientation": "default",
     "ios": {

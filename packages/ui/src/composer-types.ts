@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 export type ComposerProps = {
   value: string;
   onChange: (value: string) => void;
@@ -5,4 +7,5 @@ export type ComposerProps = {
   onStop: () => void;
   running: boolean;
   disabled: boolean;
+  leading?: ReactNode;
 };

@@ -1,6 +1,4 @@
-import type { ReactNode } from "react";
 import type { Root } from "react-dom/client";
-import type { ThreadMessageLike } from "@assistant-ui/react";
 import {
   act,
   fireEvent,
@@ -20,7 +18,7 @@ import { installConversationFixture, saveConversationMessages } from "./conversa
 
 const captured = vi.hoisted(() => ({
   root: undefined as Root | undefined,
-  initialMessages: [] as ThreadMessageLike[][],
+  initialMessages: [] as unknown[][],
   pendingSaves: [] as Promise<unknown>[],
 }));
 
@@ -34,43 +32,37 @@ vi.mock("react-dom/client", async (importOriginal) => {
     },
   };
 });
-vi.mock("@assistant-ui/react", async () => {
-  const { useMemo } = await import("react");
-  return {
-    AssistantRuntimeProvider: ({ children }: { children: ReactNode }) =>
-      children,
-    useExternalStoreRuntime: (
-      options: { messages: ThreadMessageLike[] },
-    ) => {
-      captured.initialMessages.push(options.messages);
-      return useMemo(
-        () => ({
-          thread: {
-            getState: () => ({ messages: options.messages }),
-            subscribe: () => () => {},
-          },
-        }),
-        [],
-      );
-    },
-  };
-});
-vi.mock("@/components/assistant-ui/thread", () => ({
-  AssistantThread: ({
-    title,
-    model,
-    navigation,
-  }: {
-    title: string;
-    model: string;
-    navigation?: ReactNode;
-  }) => (
-    <>
-      {navigation}
-      <h1>{title}</h1>
-      <span data-testid="current-model">{model}</span>
-    </>
-  ),
+vi.mock("@/views/chat/use-chat-session", () => ({
+  useChatSession: (
+    _server: unknown,
+    _conversationId: string,
+    _workingDirectory: string,
+    _getProviderConfig: unknown,
+    initialMessages: unknown[],
+  ) => {
+    captured.initialMessages.push(initialMessages);
+    return {
+      session: { credentialProblem: () => "" },
+      state: {
+        messages: initialMessages,
+        revision: 0,
+        activeRunId: null,
+        running: false,
+        sending: false,
+        ready: true,
+        credentialError: false,
+        hasMore: false,
+        contextReason: "",
+        notice: "",
+      },
+      notice: "",
+      credentialNotice: "",
+      boundCredential: undefined,
+      hasMore: false,
+      loadEarlier: () => {},
+      boundModel: undefined,
+    };
+  },
 }));
 vi.mock("@/components/knowledge-configuration-link", () => ({
   KnowledgeConfigurationLink: () => null,
@@ -93,8 +85,8 @@ describe("New Thread", () => {
     localStorage.clear();
     installConversationFixture("configured-server-model");
     vi.stubGlobal("indexedDB", new IDBFactory());
-    const messages: ThreadMessageLike[] = [
-      { role: "user", content: "上一条会话内容" },
+    const messages = [
+      { role: "user" as const, content: "上一条会话内容" },
     ];
     await saveConversationMessages("previous-thread", messages, "test-agent");
     await renameConversation("previous-thread", "上一条会话标题");
@@ -106,11 +98,9 @@ describe("New Thread", () => {
     await act(async () => {
       await import("../src/main");
     });
-    await screen.findByRole("heading", { name: "上一条会话标题" });
+    await screen.findAllByText("上一条会话标题");
     await waitFor(() =>
-      expect(screen.getByTestId("current-model")).toHaveTextContent(
-        "configured-server-model",
-      ),
+      expect(screen.getByText("configured-server-model")).toBeInTheDocument(),
     );
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(JSON.stringify({ tasks: [], total: 0, page: 1, limit: 20 })),
@@ -129,7 +119,7 @@ describe("New Thread", () => {
     const previousRenderCount = captured.initialMessages.length;
 
     fireEvent.click(screen.getByRole("button", { name: "新建会话" }));
-    await screen.findByRole("heading", { name: "新会话" });
+    await screen.findAllByText("新会话");
 
     const newId = new URLSearchParams(window.location.search).get(
       "conversationId",
@@ -220,14 +210,14 @@ describe("Mobile navigation", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
-    expect(
-      await screen.findByRole("heading", { name: "新会话" }),
-    ).toBeVisible();
+    const threadTitles = await screen.findAllByText("新会话");
+    expect(threadTitles[0]).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "打开导航" }));
     drawer = await screen.findByRole("dialog");
     fireEvent.click(within(drawer).getByRole("button", { name: "历史会话" }));
-    await screen.findByRole("heading", { name: "历史会话" });
+    const historyTitles = await screen.findAllByText("历史会话");
+    expect(historyTitles[0]).toBeVisible();
     expect(
       new URLSearchParams(window.location.search).get("conversationId"),
     ).toBe("mobile-history");

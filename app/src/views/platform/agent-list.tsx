@@ -1,9 +1,10 @@
 import { AgentIcon } from "@/components/agent-icon";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { getConversation } from "@/lib/conversation-store";
 import { authMode } from "@/lib/server-info";
 import { platformApi, type PlatformAgent } from "@/lib/platform-api";
+import { AgentList, type AgentListLink } from "@antler/ui";
 import { ErrorNotice, PlatformLayout, primary } from "./layout";
 import { HomeBackground } from "@/components/home-background";
 export function AgentListPage() {
@@ -65,65 +66,41 @@ export function AgentListPage() {
       </div>
       <ErrorNotice error={error} />
       {loading && <p role="status">正在加载…</p>}
-      {!loading && !error && !agents.length && (
-        <p className="rounded-xl border border-dashed p-12 text-center text-[#777]">
-          还没有 Agent。新建一个，设置提示词并绑定技能即可开始对话。
-        </p>
-      )}
-      {[
-        { name: "我的 Agent", items: agents.filter((a) => a.editable) },
-        { name: "已发布 Agent", items: agents.filter((a) => !a.editable) },
-      ].map(
-        (group) =>
-          group.items.length > 0 && (
-            <section key={group.name} className="mb-10">
-              <h2 className="mb-4 text-lg font-semibold">{group.name}</h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {group.items.map((agent) => (
-                  <article
-                    key={agent.id}
-                    className="flex flex-col rounded-xl border border-[#e6e6e2] bg-white p-6 shadow-sm"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-[#eef4ef] text-primary">
-                          <AgentIcon name={agent.icon} />
-                        </span>
-                        <h3 className="break-words text-lg font-semibold">{agent.name}</h3>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-[#eef4ef] px-2 py-1 text-xs">
-                        {agent.status === "published" ? "已发布" : "草稿"}
-                      </span>
-                    </div>
-                    <p className="my-4 flex-1 whitespace-pre-wrap break-words text-sm leading-6 text-[#666]">
-                      {agent.description}
-                    </p>
-                    <p className="mb-5 text-xs text-[#888]">
-                      {agent._count?.skills ?? 0} 个技能
-                      {!agent.builtin && authMode() === "supabase" && ` · 作者 ${agent.ownerId}`}
-                    </p>
-                    <div className="flex items-center justify-between">
-                      <Link
-                        to={`/agents/${agent.id}`}
-                        className="text-sm font-semibold text-primary"
-                      >
-                        开始对话 →
-                      </Link>
-                      {agent.editable && (
-                        <Link
-                          className="text-sm text-[#666]"
-                          to={`/agents/${agent.id}/edit`}
-                        >
-                          编辑
-                        </Link>
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            </section>
-          ),
-      )}
+      {!loading &&
+        !error && (
+          <AgentList
+            groups={[
+              { name: "我的 Agent", items: agents.filter((a) => a.editable) },
+              {
+                name: "已发布 Agent",
+                items: agents.filter((a) => !a.editable),
+              },
+            ].map((group) => ({
+              name: group.name,
+              items: group.items.map((agent) => ({
+                id: agent.id,
+                name: agent.name,
+                description: agent.description,
+                icon: agent.icon,
+                status: agent.status,
+                skillCount: agent._count?.skills,
+                editable: agent.editable,
+                ownerNote:
+                  !agent.builtin && authMode() === "supabase"
+                    ? ` · 作者 ${agent.ownerId}`
+                    : "",
+              })),
+            }))}
+            renderLink={(link: AgentListLink, content: ReactNode) =>
+              link.kind === "open" ? (
+                <Link to={`/agents/${link.item.id}`}>{content}</Link>
+              ) : (
+                <Link to={`/agents/${link.item.id}/edit`}>{content}</Link>
+              )
+            }
+            renderIcon={(name) => <AgentIcon name={name} />}
+          />
+        )}
     </PlatformLayout>
   );
 }

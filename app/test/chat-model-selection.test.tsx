@@ -10,34 +10,28 @@ const state = vi.hoisted(() => ({
   boundCredential: undefined as
     { protocol: string; baseUrl: string; model: string } | undefined,
 }));
-vi.mock("@assistant-ui/react", () => ({
-  AssistantRuntimeProvider: ({ children }: any) => children,
-}));
-vi.mock("@/components/assistant-ui/use-antler-runtime", () => ({
-  useAntlerRuntime: () => ({
-    runtime: {},
-    boundModel: state.boundModel,
+vi.mock("@/views/chat/use-chat-session", () => ({
+  useChatSession: () => ({
+    session: { credentialProblem: () => state.credentialNotice },
+    state: {
+      messages: [],
+      revision: 0,
+      activeRunId: null,
+      running: false,
+      sending: false,
+      ready: true,
+      credentialError: false,
+      hasMore: false,
+      contextReason: "",
+      notice: "",
+    },
+    notice: "",
     credentialNotice: state.credentialNotice,
     boundCredential: state.boundCredential,
+    hasMore: false,
+    loadEarlier: () => {},
+    boundModel: state.boundModel,
   }),
-}));
-vi.mock("@/components/assistant-ui/thread", () => ({
-  AssistantThread: ({
-    model,
-    models,
-    onModelChange,
-    modelChangeStartsNewThread,
-  }: any) => (
-    <div>
-      <output data-testid="selected-model">{model}</output>
-      {modelChangeStartsNewThread && <p>切换模型会新建会话</p>}
-      {models.map((item: string) => (
-        <button key={item} onClick={() => onModelChange(item)}>
-          {item}
-        </button>
-      ))}
-    </div>
-  ),
 }));
 vi.mock("@/components/knowledge-configuration-link", () => ({
   KnowledgeConfigurationLink: () => null,
@@ -85,14 +79,19 @@ function mount() {
   );
   return { onModelChange, onNewThread, onOpenSettings };
 }
+function openModelMenu() {
+  fireEvent.click(screen.getByRole("button", { name: "选择模型" }));
+}
 it("offers configured models in a bound conversation and starts a new thread on switching", () => {
   const { onModelChange, onNewThread } = mount();
-  expect(screen.getByTestId("selected-model")).toHaveTextContent("old-model");
-  expect(
-    screen.getByRole("button", { name: "other-model" }),
-  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "选择模型" })).toHaveTextContent(
+    "old-model",
+  );
+  openModelMenu();
+  expect(screen.getByRole("button", { name: "other-model" })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "old-model" }));
   expect(onNewThread).not.toHaveBeenCalled();
+  openModelMenu();
   fireEvent.click(screen.getByRole("button", { name: "new-model" }));
   expect(onModelChange).toHaveBeenCalledWith("new-model");
   expect(onNewThread).toHaveBeenCalledOnce();
@@ -116,6 +115,7 @@ it("offers the bound provider configuration when credentials are missing", () =>
 it("changes models in an empty conversation without replacing the thread", () => {
   state.boundModel = undefined;
   const { onModelChange, onNewThread } = mount();
+  openModelMenu();
   fireEvent.click(screen.getByRole("button", { name: "other-model" }));
   expect(onModelChange).toHaveBeenCalledWith("other-model");
   expect(onNewThread).not.toHaveBeenCalled();

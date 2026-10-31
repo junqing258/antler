@@ -1,6 +1,9 @@
-import type { ThreadMessageLike } from "@assistant-ui/react";
 import { vi } from "vitest";
 const rows = new Map<string, any>();
+export type FixtureMessage = {
+  role: "user" | "assistant";
+  content: string | unknown[];
+};
 export function installConversationFixture(model = "test-model") {
   rows.clear();
   vi.stubGlobal(
@@ -49,7 +52,7 @@ export function installConversationFixture(model = "test-model") {
 }
 export async function saveConversationMessages(
   id: string,
-  messages: ThreadMessageLike[],
+  messages: FixtureMessage[],
   agentId?: string,
 ) {
   const current = rows.get(id);

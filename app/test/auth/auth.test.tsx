@@ -167,7 +167,11 @@ describe("LoginView", () => {
     expect(await screen.findByLabelText("验证码")).toBeInTheDocument();
     expect(mocks.signUp).toHaveBeenCalledWith("alice@example.com", "secret123");
     expect(screen.queryByLabelText("密码")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("邮箱")).toBeDisabled();
+    // 共享 AuthForm 经 RNW 渲染：不可编辑通过 readonly 表达（语义同旧版 disabled）。
+    const emailInput = screen.getByLabelText("邮箱");
+    expect(emailInput).toHaveAttribute("readonly");
+    fireEvent.change(emailInput, { target: { value: "changed@example.com" } });
+    expect(screen.getByLabelText("邮箱")).toHaveValue("alice@example.com");
     expect(screen.getByRole("button", { name: /秒后可重发/ })).toBeDisabled();
     fireEvent.change(screen.getByLabelText("验证码"), { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: "验证并完成注册" }));

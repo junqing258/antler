@@ -9,6 +9,7 @@ export function Composer({
   onStop,
   running,
   disabled,
+  leading,
 }: ComposerProps) {
   const input = useRef<HTMLTextAreaElement>(null);
   const composing = useRef(false);
@@ -82,6 +83,7 @@ export function Composer({
           )}
         </div>
       )}
+      {leading && <div style={{ margin: "8px 0 0" }}>{leading}</div>}
       <div
         style={{
           display: "flex",

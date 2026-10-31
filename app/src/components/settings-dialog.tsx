@@ -1,10 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import {
   CircleHelpIcon,
   SettingsIcon,
   UserRoundIcon,
   XIcon,
 } from "lucide-react";
+import { ProviderConfigForm } from "@antler/ui";
 import {
   defaultProviderConfig,
   type ProviderConfig,
@@ -28,7 +29,6 @@ export function SettingsDialog({
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState(config);
-  const [newModel, setNewModel] = useState("");
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [displayName, setDisplayName] = useState("用户");
   const [accountEmail, setAccountEmail] = useState<string>();
@@ -37,40 +37,6 @@ export function SettingsDialog({
       if (profile) setAccountEmail(profile.email);
     });
   }, []);
-  const update = (key: keyof ProviderConfig, value: string) =>
-    setDraft((current) => ({ ...current, [key]: value }));
-  const addModel = () => {
-    const model = newModel.trim();
-    if (!model || draft.models.includes(model)) return;
-    setDraft((current) => ({
-      ...current,
-      models: [...current.models, model],
-      model: current.model || model,
-    }));
-    setNewModel("");
-  };
-  const removeModel = (model: string) =>
-    setDraft((current) => {
-      const models = current.models.filter((item) => item !== model);
-      return {
-        ...current,
-        models,
-        model: current.model === model ? (models[0] ?? "") : current.model,
-      };
-    });
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    const models = [...new Set([...draft.models, newModel].map((model) => model.trim()).filter(Boolean))];
-    const selected = draft.model.trim();
-    onSave({
-      ...draft,
-      name: draft.name.trim() || "自定义供应商",
-      baseUrl: draft.baseUrl.trim(),
-      apiKey: draft.apiKey.trim(),
-      models,
-      model: models.includes(selected) ? selected : (models[0] ?? ""),
-    });
-  };
   const tabs: { id: SettingsTab; label: string; icon: typeof SettingsIcon }[] =
     [
       { id: "provider", label: "供应商配置", icon: SettingsIcon },
@@ -121,126 +87,20 @@ export function SettingsDialog({
         </aside>
         <div className="min-h-0 min-w-0 overflow-y-auto p-5 sm:p-7">
           {activeTab === "provider" && (
-            <form
+            <div
               className="grid max-w-[560px] gap-5"
               aria-labelledby="provider-title"
-              onSubmit={submit}
             >
-              <div className="border-b border-[#eee] pb-4">
-                <div>
-                  <h3 className="m-0 text-lg" id="provider-title">供应商配置</h3>
-                  <p className="m-0 mt-1 text-xs text-[#777]">配置仅保存在当前浏览器的本地存储中。</p>
-                </div>
-              </div>
-              {credentialBinding && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                  <p className="m-0 font-semibold">当前会话绑定的配置</p>
-                  <p className="mb-0 mt-1 break-all">协议：{credentialBinding.protocol}；服务地址：{credentialBinding.baseUrl || "默认地址"}；模型：{credentialBinding.model}</p>
-                  <p className="mb-0 mt-1">请填写匹配的协议、服务地址和 API Key。保存后可继续此会话，账号不会同步 API Key。</p>
-                </div>
-              )}
-              <label className="grid gap-1.5 text-xs font-semibold text-[#4b4b4b]">
-                名称
-                <input className="h-10 w-full rounded-lg border border-[#ddd] px-[11px] text-[13px] font-normal text-[#222] outline-none focus:border-primary focus:ring-4 focus:ring-primary/15"
-                  value={draft.name}
-                  onChange={(event) => update("name", event.target.value)}
-                  placeholder="例如：OpenAI"
-                />
-              </label>
-              <label className="grid gap-1.5 text-xs font-semibold text-[#4b4b4b]">
-                协议
-                <select className="h-10 w-full rounded-lg border border-[#ddd] bg-white px-[11px] text-[13px] font-normal text-[#222] outline-none focus:border-primary focus:ring-4 focus:ring-primary/15"
-                  value={draft.protocol}
-                  onChange={(event) => update("protocol", event.target.value)}
-                >
-                  <option value="openai-responses">OpenAI Responses</option>
-                  <option value="anthropic-messages">Anthropic Messages</option>
-                </select>
-              </label>
-              <label className="grid gap-1.5 text-xs font-semibold text-[#4b4b4b]">
-                Base URL（可选）
-                <input className="h-10 w-full rounded-lg border border-[#ddd] px-[11px] text-[13px] font-normal text-[#222] outline-none focus:border-primary focus:ring-4 focus:ring-primary/15"
-                  type="url"
-                  value={draft.baseUrl}
-                  onChange={(event) => update("baseUrl", event.target.value)}
-                  placeholder="https://api.openai.com/v1"
-                />
-              </label>
-              <label className="grid gap-1.5 text-xs font-semibold text-[#4b4b4b]">
-                API Key
-                <input className="h-10 w-full rounded-lg border border-[#ddd] px-[11px] text-[13px] font-normal text-[#222] outline-none focus:border-primary focus:ring-4 focus:ring-primary/15"
-                  type="password"
-                  value={draft.apiKey}
-                  onChange={(event) => update("apiKey", event.target.value)}
-                  placeholder="仅保存在本地"
-                  autoComplete="off"
-                />
-              </label>
-              <div className="grid gap-2 text-xs font-semibold text-[#4b4b4b]">
-                <span>模型</span>
-                {credentialBinding ? (
-                  <p className="m-0 font-normal text-[#777]">
-                    当前会话继续使用上方绑定的模型，无需将它设为默认模型。
-                  </p>
-                ) : !draft.apiKey.trim() ? (
-                  <p className="m-0 font-normal text-[#777]">
-                    未填写 API Key 时使用服务端默认模型；填写后可在聊天中选择下方模型。
-                  </p>
-                ) : draft.models.length === 0 && (
-                  <p className="m-0 font-normal text-[#777]">请添加供应商支持的模型 ID。</p>
-                )}
-                <div className="grid gap-1.5">
-                  {draft.models.map((model) => (
-                    <div key={model} className="flex items-center justify-between rounded-lg border border-[#eee] px-3 py-2">
-                      <label className="flex items-center gap-2 font-normal">
-                        <input
-                          type="radio"
-                          name="default-model"
-                          checked={draft.model === model}
-                          onChange={() => update("model", model)}
-                        />
-                        <span>{model}</span>
-                      </label>
-                      <button
-                        className="border-0 bg-transparent text-xs text-[#b42318] disabled:opacity-40"
-                        type="button"
-                        onClick={() => removeModel(model)}
-                        aria-label={`删除 ${model}`}
-                      >
-                        删除
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <input className="h-9 min-w-0 flex-1 rounded-lg border border-[#ddd] px-[11px] text-[13px] font-normal text-[#222] outline-none focus:border-primary focus:ring-4 focus:ring-primary/15"
-                    value={newModel}
-                    onChange={(event) => setNewModel(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        addModel();
-                      }
-                    }}
-                    placeholder="输入供应商支持的模型 ID"
-                  />
-                  <button className="h-9 rounded-[7px] border border-[#ddd] bg-white px-3 text-[13px] text-[#333] hover:bg-[#f6f6f6]" type="button" onClick={addModel}>
-                    添加模型
-                  </button>
-                </div>
-              </div>
-              <div className="flex justify-end gap-2 border-t border-[#eee] pt-4">
-                <button className="h-9 rounded-[7px] border border-[#ddd] bg-white px-[13px] text-[13px] text-[#333] hover:bg-[#f6f6f6]"
-                  type="button"
-                  onClick={() => setDraft(defaultProviderConfig)}
-                >
-                  恢复默认
-                </button>
-                <button className="h-9 rounded-[7px] border border-primary bg-primary px-[13px] text-[13px] text-white" type="submit">
-                  保存配置
-                </button>
-              </div>
-            </form>
+              <h3 className="sr-only" id="provider-title">供应商配置</h3>
+              <ProviderConfigForm
+                value={draft}
+                onChange={setDraft}
+                onSubmit={onSave}
+                submitLabel="保存配置"
+                credentialBinding={credentialBinding}
+                onReset={() => setDraft(defaultProviderConfig)}
+              />
+            </div>
           )}
           {activeTab === "profile" && (
             <section className="grid max-w-[560px] gap-5" aria-labelledby="profile-title">

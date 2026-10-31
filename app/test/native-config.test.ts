@@ -47,3 +47,11 @@ it("rejects corrupt configuration and production HTTP or URLs containing credent
     validateServerUrl("https://user:password@server.test", false),
   ).toThrow();
 });
+
+import { parseProviderModels } from "../../mobile/src/native-config";
+
+it("parses the comma-separated model list with trimming and deduplication", () => {
+  expect(parseProviderModels(" m-a, m-b ,m-a\n,  ")).toEqual(["m-a", "m-b"]);
+  expect(parseProviderModels("")).toEqual([]);
+  expect(parseProviderModels("m-c,,m-c")).toEqual(["m-c"]);
+});

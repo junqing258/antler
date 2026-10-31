@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { platformApi, type PlatformSkill } from "@/lib/platform-api";
+import { SkillList, type SkillItem } from "@antler/ui";
 import { ErrorNotice, PlatformLayout, control } from "./layout";
 export function SkillLibraryPage() {
   const [skills, setSkills] = useState<PlatformSkill[]>([]),
@@ -101,57 +102,46 @@ export function SkillLibraryPage() {
         </p>
       )}
       <div className="space-y-3">
-        {skills.map((skill) => (
-          <article
-            key={skill.id}
-            className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-white p-5"
-          >
-            <div className="min-w-0 flex-1">
-              <h2 className="font-semibold">
-                {skill.name}{" "}
-                <span className="ml-2 text-xs font-normal text-[#777]">
-                  {skill.state}
-                  {!skill.bindable && ` · 不可绑定 (${skill.unbindableReason})`}
-                </span>
-              </h2>
-              <p className="my-2 break-words text-sm text-[#666]">
-                {skill.description}
-              </p>
-              <small className="text-[#888]">
-                {skill.fileCount} 个文件 · {(skill.sizeBytes / 1024).toFixed(1)}{" "}
-                KiB · {new Date(skill.createdAt).toLocaleString()}
-              </small>
-            </div>
-            {skill.editable && (
-              <div className="flex items-center gap-3">
-                <label className={`${control} cursor-pointer`}>
-                  覆盖更新
-                  <input
-                    aria-label={`更新 ${skill.name}`}
-                    className="sr-only"
-                    type="file"
-                    accept=".zip"
-                    disabled={busy}
-                    onChange={(e) => {
-                      void upload(e.target.files?.[0], skill);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-                <button
-                  className={`${control} text-red-700`}
+        <SkillList
+          skills={skills.map(
+            (skill): SkillItem => ({
+              id: skill.id,
+              name: skill.name,
+              state: skill.state,
+              bindable: skill.bindable,
+              unbindableReason: skill.unbindableReason,
+              description: skill.description,
+              fileCount: skill.fileCount,
+              sizeLabel: `${(skill.sizeBytes / 1024).toFixed(1)} KiB`,
+              updatedAtLabel: new Date(skill.createdAt).toLocaleString(),
+              editable: skill.editable,
+            }),
+          )}
+          onRemove={(skill) => {
+            const original = skills.find((s) => s.id === skill.id);
+            if (original) void remove(original);
+          }}
+          renderUpload={(skill: SkillItem, label): ReactNode => {
+            const original = skills.find((s) => s.id === skill.id);
+            if (!original) return null;
+            return (
+              <label className={`${control} cursor-pointer`}>
+                {label}
+                <input
+                  aria-label={`更新 ${skill.name}`}
+                  className="sr-only"
+                  type="file"
+                  accept=".zip"
                   disabled={busy}
-                  onClick={() => void remove(skill)}
-                >
-                  删除
-                </button>
-              </div>
-            )}
-          </article>
-        ))}
-        {!skills.length && (
-          <p className="p-12 text-center text-[#888]">还没有平台技能。</p>
-        )}
+                  onChange={(e) => {
+                    void upload(e.target.files?.[0], original);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            );
+          }}
+        />
       </div>
     </PlatformLayout>
   );

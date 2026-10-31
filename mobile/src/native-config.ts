@@ -7,6 +7,7 @@ export type NativeConfig = {
   providerProtocol: "openai-responses" | "anthropic-messages";
   providerBaseUrl: string;
   providerModel: string;
+  providerModels: string;
   providerKey: string;
 };
 export const defaultNativeConfig: NativeConfig = {
@@ -18,8 +19,18 @@ export const defaultNativeConfig: NativeConfig = {
   providerProtocol: "openai-responses",
   providerBaseUrl: "",
   providerModel: "",
+  providerModels: "",
   providerKey: "",
 };
+/** 解析设置中逗号分隔的模型列表：去空白、去空项、去重。 */
+export function parseProviderModels(value: string): string[] {
+  return [...new Set(
+    value
+      .split(",")
+      .map((model) => model.trim())
+      .filter(Boolean),
+  )];
+}
 export function validateServerUrl(value: string, allowHttp: boolean): string {
   let url: URL;
   try {
@@ -92,6 +103,7 @@ export function deserializeNativeConfig(
     providerProtocol,
     providerBaseUrl: str("providerBaseUrl"),
     providerModel: str("providerModel"),
+    providerModels: str("providerModels"),
     providerKey: "",
   };
   if (

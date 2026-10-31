@@ -18,6 +18,7 @@ export function Composer({
   onStop,
   running,
   disabled,
+  leading,
 }: ComposerProps) {
   const input = useRef<ElementRef<typeof TextInput>>(null);
   const commands = useSlashCommands(value, onChange);
@@ -51,6 +52,7 @@ export function Composer({
           )}
         </ScrollView>
       )}
+      {leading && <View style={styles.leading}>{leading}</View>}
       <View style={styles.row}>
         <TextInput
           ref={input}
@@ -86,6 +88,7 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
   },
   option: { padding: 8 },
+  leading: { marginHorizontal: 4 },
   row: {
     flexDirection: "row",
     alignItems: "center",

@@ -1,10 +1,72 @@
 import { useMemo } from "react";
 import MarkdownIt from "markdown-it";
 import type Token from "markdown-it/lib/token.mjs";
+import footnote from "./markdown-footnote";
+import cjkFriendly from "markdown-it-cjk-friendly";
+import remend from "remend";
+import { createLowlight, common } from "lowlight";
 import { Linking, ScrollView, StyleSheet, Text, View } from "react-native";
 
 type Node = { token: Token; children: Node[] };
-const parser = new MarkdownIt({ html: false, linkify: true });
+const parser = new MarkdownIt({ html: false, linkify: true })
+  .use(footnote)
+  .use(cjkFriendly);
+const lowlight = createLowlight(common);
+
+const HLJS_COLORS: Record<string, string> = {
+  "hljs-keyword": "#7c4dff",
+  "hljs-built_in": "#7c4dff",
+  "hljs-type": "#7c4dff",
+  "hljs-string": "#2e7d32",
+  "hljs-regexp": "#2e7d32",
+  "hljs-comment": "#9e9e9e",
+  "hljs-quote": "#9e9e9e",
+  "hljs-number": "#c2410c",
+  "hljs-literal": "#c2410c",
+  "hljs-title": "#1565c0",
+  "hljs-title.function_": "#1565c0",
+  "hljs-function": "#1565c0",
+  "hljs-attr": "#b42318",
+  "hljs-attribute": "#b42318",
+  "hljs-variable": "#b42318",
+  "hljs-meta": "#00838f",
+  "hljs-tag": "#00838f",
+  "hljs-name": "#00838f",
+  "hljs-symbol": "#6d4c41",
+  "hljs-bullet": "#6d4c41",
+};
+
+type Segment = { text: string; color?: string };
+
+type HastNode = {
+  type: string;
+  value?: string;
+  children?: HastNode[];
+  properties?: { className?: string[] };
+};
+
+/** 语法高亮只负责展示；未注册语言或解析失败时按纯文本显示。 */
+function highlightSegments(code: string, lang: string): Segment[] {
+  try {
+    const tree = lowlight.highlight(lang, code);
+    const segments: Segment[] = [];
+    const walk = (node: HastNode, color?: string) => {
+      if (node.type === "text") {
+        if (node.value) segments.push({ text: node.value, color });
+        return;
+      }
+      const className = node.properties?.className?.find((name) =>
+        name.startsWith("hljs-"),
+      );
+      const next = (className && HLJS_COLORS[className]) || color;
+      node.children?.forEach((child) => walk(child, next));
+    };
+    walk(tree as unknown as HastNode);
+    return segments.length ? segments : [{ text: code }];
+  } catch {
+    return [{ text: code }];
+  }
+}
 
 function tree(tokens: Token[]): Node[] {
   const root: Node[] = [];
@@ -79,6 +141,12 @@ function inline(nodes: Node[]): React.ReactNode {
       }
       case "image":
         return <Text key={index}>{token.content || "[图片]"}</Text>;
+      case "footnote_ref":
+        return (
+          <Text key={index} style={styles.footnoteRef}>
+            {`[${token.meta.id + 1}]`}
+          </Text>
+        );
       default:
         return <Text key={index}>{content}</Text>;
     }
@@ -111,16 +179,42 @@ function blocks(nodes: Node[]): React.ReactNode {
           </Text>
         );
       case "fence":
-      case "code_block":
+      case "code_block": {
+        const language = token.info.trim().split(/\s+/)[0] ?? "";
+        const segments = language
+          ? highlightSegments(token.content.replace(/\n$/, ""), language)
+          : [{ text: token.content.replace(/\n$/, "") }];
         return (
           <ScrollView horizontal key={index} style={styles.code}>
             <Text selectable style={styles.codeText}>
-              {token.content.replace(/\n$/, "")}
+              {segments.map((segment, segIndex) => (
+                <Text
+                  key={segIndex}
+                  style={segment.color ? { color: segment.color } : undefined}
+                >
+                  {segment.text}
+                </Text>
+              ))}
             </Text>
           </ScrollView>
         );
+      }
       case "hr":
         return <View key={index} style={styles.rule} />;
+      case "footnote_block_open":
+        return (
+          <View key={index} style={styles.footnotes}>
+            {blocks(children)}
+          </View>
+        );
+      case "footnote_open":
+        return (
+          <View key={index} style={styles.footnoteItem}>
+            {blocks(children)}
+          </View>
+        );
+      case "footnote_anchor":
+        return <Text key={index} style={styles.footnoteRef}>↩</Text>;
       case "blockquote_open":
         return (
           <View key={index} style={styles.quote}>
@@ -184,8 +278,18 @@ function blocks(nodes: Node[]): React.ReactNode {
   });
 }
 
-export function MessageMarkdown({ text }: { text: string }) {
-  const nodes = useMemo(() => tree(parser.parse(text, {})), [text]);
+export function MessageMarkdown({
+  text,
+  streaming = false,
+}: {
+  text: string;
+  streaming?: boolean;
+}) {
+  // 流式补全只作用于展示输入，不改写领域消息。
+  const nodes = useMemo(
+    () => tree(parser.parse(streaming ? remend(text) : text, {})),
+    [text, streaming],
+  );
   return <View>{blocks(nodes)}</View>;
 }
 
@@ -217,4 +321,13 @@ const styles = StyleSheet.create({
     borderBottomColor: "#bcc9c3",
     marginVertical: 6,
   },
+  footnoteRef: { fontSize: 11, color: "#126b9a" },
+  footnotes: {
+    borderTopWidth: 1,
+    borderTopColor: "#bcc9c3",
+    marginTop: 8,
+    paddingTop: 6,
+    gap: 4,
+  },
+  footnoteItem: { flexDirection: "row", alignItems: "flex-start", gap: 4 },
 });

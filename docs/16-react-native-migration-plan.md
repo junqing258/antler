@@ -2,7 +2,9 @@
 
 > 当前工作区的实施进度、验证范围与后续顺序见 [迁移进度与后续计划](16-react-native-migration-progress.md)。本文的现状描述保留方案制定时的基线。
 
-状态：Tauri 退役已完成；assistant-ui 解耦与 RN/RNW 迁移待实施。更新日期：2026-10-31。
+状态：Tauri 退役已完成；M1 已达成（共享聊天界面替换 assistant-ui，2026-11-01）；P4 完成（五域共享组件接入 Web，移动端支持范围已明确）；P2 含 Markdown 增强（高亮/脚注/CJK 强调）与移动端登录；**P0/P5 的模拟器可执行验收全部闭环**——双平台 Debug/Release 构建安装启动、鉴权 API、中文流式 SSE、断线续传、前后台恢复、取消、Supabase 登录与 Token 刷新、iOS/Android 独立 Release 经公信 HTTPS 的 API 与鉴权 SSE（2026-11-01，详见验证记录）。剩余项为物理设备固有约束：真机安装/签名、真机网络表现、P5 跨设备场景（需两台物理客户端）；验收方法与自动化设施已就位可复用。更新日期：2026-11-01。
+
+M1 已随共享聊天组件合入工作区完成：Web 主聊天默认渲染共享 ChatScreen，`@assistant-ui/*` 依赖、旧 adapter、旧样式与测试 mock 已删除。本文其余阶段中与 assistant-ui 相关的过渡描述（P1 adapter、P3 对比开关）已成为历史记录。
 
 Tauri 清理已随 `cfc21a7`（`refactor： 移除 tauri`）合入，作为后续迁移的现有基线，不再列入 P2 待办。本文其余阶段仍是规划，不代表共享包或原生客户端已经实现。
 

@@ -1,18 +1,16 @@
 import { Link } from "react-router";
 import { useEffect, useState } from "react";
-import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import type { ChatMessage } from "@antler/chat-core";
 import type { BoundCredential } from "@antler/client-runtime";
 import {
   CalendarClockIcon,
   MenuIcon,
-  PencilIcon,
   PlusIcon,
   SettingsIcon,
-  Trash2Icon,
 } from "lucide-react";
-import { AssistantThread } from "@/components/assistant-ui/thread";
-import { useAntlerRuntime } from "@/components/assistant-ui/use-antler-runtime";
+import { ConversationList } from "@antler/ui";
+import { useChatSession } from "@/views/chat/use-chat-session";
+import { SharedThread } from "@/views/chat/shared-thread";
 import { KnowledgeConfigurationLink } from "@/components/knowledge-configuration-link";
 import { currentUserProfile } from "@/lib/auth";
 import type { SettingsTab } from "@/components/settings-dialog";
@@ -61,7 +59,7 @@ export function Chat({
   onOpenScheduler: () => void;
   onConversationSaved: () => void;
 }) {
-  const { runtime, notice, credentialNotice, boundCredential, hasMore, loadEarlier, boundModel } = useAntlerRuntime(
+  const { session, state, boundCredential, boundModel } = useChatSession(
     serverInfo,
     conversationId,
     workingDirectory,
@@ -146,51 +144,23 @@ export function Chat({
         className="mt-3.5 min-h-0 overflow-y-auto pb-2"
         aria-label="会话历史"
       >
-        <p className="px-3 py-1.5 text-xs text-[#858585]">会话历史</p>
-        {conversations.length === 0 && (
-          <p className="px-3 py-1.5 text-xs text-[#999]">暂无会话</p>
-        )}
-        {onLoadMore && <button onClick={onLoadMore}>加载更多会话</button>}
-        <div className="grid min-w-0 grid-cols-1 gap-0.5">
-          {conversations.map((conversation) => (
-            <div
-              className="group flex w-full min-w-0 items-center rounded-lg px-2.5 py-px hover:bg-[#f1f1f1] has-[[aria-current=page]]:bg-[#f1f1f1]"
-              key={conversation.id}
-            >
-              <button
-                className="min-w-0 flex-1 truncate border-0 bg-transparent px-0.5 py-1 text-left text-[13px] leading-6 text-[#222]"
-                type="button"
-                title={conversation.title}
-                aria-current={
-                  conversation.id === conversationId ? "page" : undefined
-                }
-                onClick={() =>
-                  navigate(() => onSelectThread(conversation.id))
-                }
-              >
-                {conversation.title}
-              </button>
-              <div className="flex shrink-0 gap-0.5 opacity-0 max-[620px]:opacity-100 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                <button
-                  className="grid size-[26px] place-items-center rounded border-0 bg-transparent text-[#777] hover:bg-[#ddd] hover:text-[#333]"
-                  type="button"
-                  aria-label={`重命名 ${conversation.title}`}
-                  onClick={() => onRenameThread(conversation)}
-                >
-                  <PencilIcon className="size-3.5" />
-                </button>
-                <button
-                  className="grid size-[26px] place-items-center rounded border-0 bg-transparent text-[#777] hover:bg-[#ddd] hover:text-[#333]"
-                  type="button"
-                  aria-label={`删除 ${conversation.title}`}
-                  onClick={() => onDeleteThread(conversation)}
-                >
-                  <Trash2Icon className="size-3.5" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <ConversationList
+          conversations={conversations.map((c) => ({
+            id: c.id,
+            title: c.title,
+          }))}
+          activeId={conversationId}
+          onSelect={(id) => navigate(() => onSelectThread(id))}
+          onRename={(item) => {
+            const conversation = conversations.find((c) => c.id === item.id);
+            if (conversation) onRenameThread(conversation);
+          }}
+          onDelete={(item) => {
+            const conversation = conversations.find((c) => c.id === item.id);
+            if (conversation) onDeleteThread(conversation);
+          }}
+          onLoadMore={onLoadMore}
+        />
       </nav>
       <div className="mt-auto flex items-center justify-between px-1 pt-1.5">
         <button
@@ -226,64 +196,43 @@ export function Chat({
   );
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      <Drawer
-        open={isMobile && navigationOpen}
-        onOpenChange={setNavigationOpen}
-      >
-        <main className="flex h-dvh min-h-0 overflow-hidden bg-white">
-          <DrawerContent>{sidebar}</DrawerContent>
-          {!isMobile && (
-            <aside className="flex w-[250px] shrink-0 flex-col bg-[#fbfbfb] px-3 pb-3.5 pl-[5px] pt-2 max-[800px]:w-[190px]">
-              {sidebar}
-            </aside>
-          )}
-          <section className="relative flex min-w-0 flex-1 flex-col">
-            {notice && (
-              <p
-                role="status"
-                className="pointer-events-none absolute inset-x-0 top-2 z-10 mx-auto w-fit rounded-full border border-amber-200 bg-amber-50 px-3.5 py-1 text-[13px] text-amber-800 shadow-sm"
+    <Drawer
+      open={isMobile && navigationOpen}
+      onOpenChange={setNavigationOpen}
+    >
+      <main className="flex h-dvh min-h-0 overflow-hidden bg-white">
+        <DrawerContent>{sidebar}</DrawerContent>
+        {!isMobile && (
+          <aside className="flex w-[250px] shrink-0 flex-col bg-[#fbfbfb] px-3 pb-3.5 pl-[5px] pt-2 max-[800px]:w-[190px]">
+            {sidebar}
+          </aside>
+        )}
+        <section className="flex min-w-0 flex-1 flex-col">
+          <header className="flex h-[47px] min-w-0 shrink-0 items-center px-5 pl-[25px] text-sm font-semibold tracking-[-0.2px] text-[#202020] max-[800px]:pl-4">
+            {isMobile && (
+              <DrawerTrigger
+                className="mr-2 grid size-10 shrink-0 place-items-center rounded-lg text-[#555] hover:bg-[#f2f2f2] focus-visible:outline-2 focus-visible:outline-primary"
+                aria-label="打开导航"
               >
-                {notice}
-              </p>
+                <MenuIcon className="size-5" aria-hidden="true" />
+              </DrawerTrigger>
             )}
-            {credentialNotice && (
-              <div role="status" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-amber-100 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-                <span>{credentialNotice}</span>
-                <button type="button" className="underline underline-offset-2" onClick={() => onOpenSettings("provider", boundCredential)}>配置凭据</button>
-              </div>
-            )}
-            {hasMore && (
-              <button
-                type="button"
-                className="mx-auto my-1 shrink-0 rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground hover:bg-muted"
-                onClick={() => void loadEarlier()}
-              >
-                加载更早消息
-              </button>
-            )}
-            <div className="min-h-0 flex-1">
-            <AssistantThread
+            <span className="min-w-0 truncate">{title}</span>
+          </header>
+          <div className="min-h-0 flex-1">
+            <SharedThread
+              session={session}
+              state={state}
               model={modelPickerConfig.model}
               models={modelPickerConfig.models}
-              modelChangeStartsNewThread={Boolean(boundModel)}
-              title={title}
-              navigation={
-                isMobile ? (
-                  <DrawerTrigger
-                    className="mr-2 grid size-10 shrink-0 place-items-center rounded-lg text-[#555] hover:bg-[#f2f2f2] focus-visible:outline-2 focus-visible:outline-primary"
-                    aria-label="打开导航"
-                  >
-                    <MenuIcon className="size-5" aria-hidden="true" />
-                  </DrawerTrigger>
-                ) : undefined
-              }
               onModelChange={selectModel}
+              onConfigureCredentials={() =>
+                onOpenSettings("provider", boundCredential)
+              }
             />
-            </div>
-          </section>
-        </main>
-      </Drawer>
-    </AssistantRuntimeProvider>
+          </div>
+        </section>
+      </main>
+    </Drawer>
   );
 }

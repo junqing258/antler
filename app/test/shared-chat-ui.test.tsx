@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Composer, MessageBubble } from "@antler/ui";
+import { Composer, ChatScreen, MessageBubble, ModelPicker } from "@antler/ui";
 import { MessageList } from "../../packages/ui/src/message-list.web";
 
 afterEach(cleanup);
@@ -223,7 +223,8 @@ describe("shared Markdown", () => {
     expect(screen.getByText("加粗")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "链接" })).toBeInTheDocument();
     expect(screen.getByText("甲")).toBeInTheDocument();
-    expect(screen.getByText("const x = 1;")).toBeInTheDocument();
+    // 代码按语法高亮分段渲染，完整文本不再作为单一节点出现
+    expect(screen.getByText("const")).toBeInTheDocument();
     expect(screen.getByText("<script>alert(1)</script>")).toBeInTheDocument();
     expect(document.querySelector("script")).toBeNull();
   });
@@ -235,6 +236,45 @@ describe("shared Markdown", () => {
     expect(screen.getByText("正在 **生成")).toBeInTheDocument();
     rerender(<MessageBubble message={message("正在 **生成**")} />);
     expect(screen.getByText("生成")).toBeInTheDocument();
+  });
+
+  it("parses CJK emphasis, footnotes and highlights code tokens", () => {
+    render(
+      <MessageBubble
+        message={message(
+          "中文**加粗**测试，以及句子结尾的**强调**。\n\n这是一个脚注[^1]。\n\n[^1]: 脚注内容说明。\n\n```ts\nconst done = true; // 完成\n```",
+        )}
+      />,
+    );
+    // CJK 友好强调：加粗与中文相邻时仍解析
+    expect(screen.getByText("加粗")).toBeInTheDocument();
+    expect(screen.getByText("强调")).toBeInTheDocument();
+    // 脚注引用与文末脚注块
+    expect(screen.getByText("[1]")).toBeInTheDocument();
+    expect(screen.getByText(/脚注内容说明/)).toBeInTheDocument();
+    // 代码高亮：关键字与注释渲染为分段着色文本
+    expect(screen.getByText("const")).toBeInTheDocument();
+    expect(screen.getByText("// 完成")).toBeInTheDocument();
+  });
+
+  it("falls back to plain text for unknown code languages", () => {
+    render(
+      <MessageBubble
+        message={message("```unknown-lang\nplain content here\n```")}
+      />,
+    );
+    expect(screen.getByText("plain content here")).toBeInTheDocument();
+  });
+
+  it("completes unclosed emphasis while the message is live, without touching the stored text", () => {
+    const live = { ...message("正在 **加粗"), live: true };
+    render(<MessageBubble message={live} />);
+    expect(screen.getByText("加粗")).toBeInTheDocument();
+    expect(screen.queryByText("**加粗**")).not.toBeInTheDocument();
+    // 展示层补全不回写消息文本：live 标记移除后按原文解析
+    cleanup();
+    render(<MessageBubble message={message("正在 **加粗")} />);
+    expect(screen.getByText("正在 **加粗")).toBeInTheDocument();
   });
 });
 
@@ -339,5 +379,126 @@ describe("shared composer commands", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
     fireEvent.change(input, { target: { value: "/xyz" } });
     expect(screen.getByText("没有匹配的命令")).toBeInTheDocument();
+  });
+});
+
+describe("shared chat screen", () => {
+  const base = {
+    ready: true,
+    running: false,
+    sending: false,
+    draft: "",
+    onDraftChange: vi.fn(),
+    onSend: vi.fn(),
+    onStop: vi.fn(),
+  };
+
+  it("shows the welcome state with the composer when ready and empty, and the loading list otherwise", () => {
+    const { rerender } = render(
+      <ChatScreen
+        {...base}
+        messages={[]}
+        model="m-a"
+        models={["m-a", "m-b"]}
+        onModelChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("今天我能帮你做什么？")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "消息" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "选择模型" })).toBeInTheDocument();
+    rerender(<ChatScreen {...base} ready={false} messages={[]} />);
+    expect(screen.getByText("正在加载会话…")).toBeInTheDocument();
+    expect(
+      screen.queryByText("今天我能帮你做什么？"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("surfaces pagination, notices and the credential config entry", () => {
+    const onLoadEarlier = vi.fn();
+    const onConfigureCredentials = vi.fn();
+    render(
+      <ChatScreen
+        {...base}
+        messages={[
+          {
+            id: "a",
+            role: "user",
+            content: [{ type: "text", text: "旧消息" }],
+          },
+        ]}
+        hasMore
+        notice="发送中…"
+        credentialProblem="需要匹配的 API Key"
+        onLoadEarlier={onLoadEarlier}
+        onConfigureCredentials={onConfigureCredentials}
+      />,
+    );
+    expect(screen.getByText("旧消息")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "加载更早消息" }));
+    expect(onLoadEarlier).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "配置凭据" }));
+    expect(onConfigureCredentials).toHaveBeenCalledOnce();
+  });
+
+  it("disables sending while the session is not ready or blocked", () => {
+    const { rerender } = render(
+      <ChatScreen
+        {...base}
+        ready={false}
+        messages={[
+          {
+            id: "a",
+            role: "user",
+            content: [{ type: "text", text: "旧消息" }],
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+    rerender(<ChatScreen {...base} messages={[]} sending />);
+    rerender(
+      <ChatScreen
+        {...base}
+        messages={[
+          {
+            id: "a",
+            role: "user",
+            content: [{ type: "text", text: "旧消息" }],
+          },
+        ]}
+        contextReason="上下文不可恢复"
+      />,
+    );
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+  });
+});
+
+describe("shared model picker", () => {
+  it("opens the menu and reports a new selection, closing afterwards", () => {
+    const onModelChange = vi.fn();
+    render(
+      <ModelPicker
+        model="m-a"
+        models={["m-a", "m-b"]}
+        onModelChange={onModelChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "选择模型" }));
+    fireEvent.click(screen.getByRole("button", { name: "m-b" }));
+    expect(onModelChange).toHaveBeenCalledOnce();
+    expect(onModelChange).toHaveBeenCalledWith("m-b");
+    expect(screen.queryByRole("button", { name: "m-b" })).not.toBeInTheDocument();
+  });
+
+  it("falls back to the server default label and hides the menu without models", () => {
+    const onModelChange = vi.fn();
+    render(
+      <ModelPicker model="" models={[]} onModelChange={onModelChange} />,
+    );
+    expect(screen.getByText("服务端默认")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "选择模型" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "选择模型" }));
+    expect(screen.queryByRole("button", { name: "m-a" })).not.toBeInTheDocument();
+    expect(onModelChange).not.toHaveBeenCalled();
   });
 });

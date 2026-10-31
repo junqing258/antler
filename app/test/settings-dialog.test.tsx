@@ -50,6 +50,12 @@ it("shows the bound configuration without replacing local defaults", () => {
   expect(
     screen.queryByText(/未填写 API Key 时使用服务端默认模型/),
   ).not.toBeInTheDocument();
-  expect(screen.getByLabelText("协议")).toHaveValue("openai-responses");
+  // 共享 ProviderConfigForm 的协议是分段单选（aria-checked 标注当前选择）。
+  expect(
+    screen.getByRole("radio", { name: "OpenAI Responses" }),
+  ).toBeChecked();
+  expect(
+    screen.getByRole("radio", { name: "Anthropic Messages" }),
+  ).not.toBeChecked();
   expect(screen.getByLabelText("Base URL（可选）")).toHaveValue("");
 });
