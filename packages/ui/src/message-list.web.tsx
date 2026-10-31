@@ -2,7 +2,11 @@ import { Component, createRef } from "react";
 import type { ChatMessage } from "@antler/chat-core";
 import { MessageBubble } from "./message-bubble";
 
-type Props = { messages: ChatMessage[]; ready: boolean };
+type Props = {
+  messages: ChatMessage[];
+  ready: boolean;
+  onCopy?: (text: string) => void;
+};
 type Anchor = { id: string; top: number } | null;
 type Snapshot = { anchor: Anchor; follow: boolean };
 
@@ -90,7 +94,10 @@ export class MessageList extends Component<Props> {
           {this.props.messages.length
             ? this.props.messages.map((message) => (
                 <div key={message.id} data-message-id={message.id}>
-                  <MessageBubble message={message} />
+                  <MessageBubble
+                    message={message}
+                    onCopy={this.props.onCopy}
+                  />
                 </div>
               ))
             : this.props.ready

@@ -6,9 +6,11 @@ import { MessageBubble } from "./message-bubble";
 export function MessageList({
   messages,
   ready,
+  onCopy,
 }: {
   messages: ChatMessage[];
   ready: boolean;
+  onCopy?: (text: string) => void;
 }) {
   const list = useRef<FlatList<ChatMessage>>(null);
   const following = useRef(true);
@@ -40,7 +42,9 @@ export function MessageList({
       style={{ flex: 1 }}
       data={messages}
       keyExtractor={(item) => item.id}
-      renderItem={({ item }) => <MessageBubble message={item} />}
+      renderItem={({ item }) => (
+        <MessageBubble message={item} onCopy={onCopy} />
+      )}
       ListEmptyComponent={<Text>{ready ? "暂无消息" : "正在加载会话…"}</Text>}
       maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
       onContentSizeChange={follow}

@@ -1,36 +1,70 @@
 import type { ChatMessage } from "@antler/chat-core";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { MessageMarkdown } from "./message-markdown";
+import { ReasoningBlock } from "./reasoning-block";
+import { ToolCallBlock } from "./tool-call-block";
 
-export function MessageBubble({ message }: { message: ChatMessage }) {
+function messageText(message: ChatMessage) {
+  return message.content
+    .map((part) => (part.type === "text" ? part.text : ""))
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+export function MessageBubble({
+  message,
+  onCopy,
+}: {
+  message: ChatMessage;
+  onCopy?: (text: string) => void;
+}) {
+  const running = message.status?.type === "running";
+  const copyable = message.role === "assistant" && !running && !!messageText(message);
   return (
     <View style={styles.message}>
-      <Text style={styles.label}>
-        {message.role === "user" ? "你" : "Antler"}
-      </Text>
+      <View style={styles.header}>
+        <Text style={styles.label}>
+          {message.role === "user" ? "你" : "Antler"}
+        </Text>
+        {copyable && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="复制回复"
+            onPress={() => onCopy?.(messageText(message))}
+          >
+            <Text style={styles.action}>复制</Text>
+          </Pressable>
+        )}
+      </View>
       {message.content.map((part, i) => {
         if (part.type === "text")
           return <MessageMarkdown key={i} text={part.text} />;
         if (part.type === "reasoning")
-          return (
-            <Text selectable key={i}>
-              {`思考：${part.text}`}
-            </Text>
-          );
+          return <ReasoningBlock key={i} text={part.text} running={running} />;
         if (part.type === "tool-call")
           return (
-            <Text selectable key={i}>
-              工具：{part.toolName}
-              {part.result === undefined
-                ? "（运行中）"
-                : `\n${JSON.stringify(part.result)}`}
-              {part.isError ? "（错误）" : ""}
-            </Text>
+            <ToolCallBlock
+              key={i}
+              toolName={part.toolName}
+              args={part.args}
+              result={part.result}
+              isError={part.isError}
+            />
           );
         return <Text key={i}>[不支持的消息内容]</Text>;
       })}
+      {running && message.content.length === 0 && (
+        <Text accessibilityLiveRegion="polite" style={styles.muted}>
+          正在等待 Agent 回复…
+        </Text>
+      )}
       {message.status?.type === "incomplete" && (
-        <Text>
+        <Text
+          accessibilityLiveRegion="polite"
+          style={
+            message.status.reason === "error" ? styles.error : styles.muted
+          }
+        >
           {message.status.reason === "error" ? message.status.error : "已停止"}
         </Text>
       )}
@@ -46,5 +80,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     gap: 4,
   },
-  label: { fontWeight: "700" },
+  header: { flexDirection: "row", alignItems: "center" },
+  label: { fontWeight: "700", flex: 1 },
+  action: { fontSize: 12, color: "#126b9a" },
+  muted: { fontSize: 12, color: "#686868" },
+  error: { fontSize: 12, color: "#b42318" },
 });

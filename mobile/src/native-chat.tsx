@@ -196,7 +196,17 @@ function ChatProbe({
           }}
         />
       )}
-      <MessageList messages={state.messages} ready={state.ready} />
+      <MessageList
+        messages={state.messages}
+        ready={state.ready}
+        onCopy={
+          Platform.OS === "web"
+            ? (text) => {
+                void navigator.clipboard?.writeText(text).catch(() => {});
+              }
+            : undefined
+        }
+      />
       <Composer
         value={draft}
         onChange={setDraft}

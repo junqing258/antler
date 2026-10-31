@@ -30,10 +30,73 @@ describe("shared chat UI on RNW", () => {
         }}
       />,
     );
-    expect(screen.getByText("思考：思考内容")).toBeInTheDocument();
-    expect(screen.getByText(/工具：搜索/)).toHaveTextContent("（错误）");
+    fireEvent.click(screen.getByRole("button", { name: "思考过程" }));
+    expect(screen.getByText("思考内容")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "搜索 调用失败" }));
+    expect(screen.getByText("失败")).toBeInTheDocument();
     expect(screen.getByText("[不支持的消息内容]")).toBeInTheDocument();
     expect(screen.getByText("运行失败")).toBeInTheDocument();
+  });
+
+  it("auto-opens reasoning and tool calls while running and shows the waiting state", () => {
+    const { rerender } = render(
+      <MessageBubble
+        message={{
+          id: "assistant",
+          role: "assistant",
+          content: [],
+          status: { type: "running" },
+        }}
+      />,
+    );
+    expect(screen.getByText("正在等待 Agent 回复…")).toBeInTheDocument();
+    rerender(
+      <MessageBubble
+        message={{
+          id: "assistant",
+          role: "assistant",
+          content: [
+            { type: "reasoning", text: "推理中" },
+            {
+              type: "tool-call",
+              toolCallId: "1",
+              toolName: "检索",
+              args: { query: "迁移计划" },
+              argsText: '{"query":"迁移计划"}',
+            },
+          ],
+          status: { type: "running" },
+        }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "正在思考" })).toBeEnabled();
+    expect(screen.getByText("推理中")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "正在调用 检索" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("查询：迁移计划")).toBeInTheDocument();
+  });
+
+  it("offers copying the assistant text parts through the injected handler", () => {
+    const onCopy = vi.fn();
+    render(
+      <MessageBubble
+        onCopy={onCopy}
+        message={{
+          id: "assistant",
+          role: "assistant",
+          content: [
+            { type: "text", text: "第一段" },
+            { type: "reasoning", text: "不应被复制" },
+            { type: "text", text: "第二段" },
+          ],
+          status: { type: "complete", reason: "stop" },
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "复制回复" }));
+    expect(onCopy).toHaveBeenCalledOnce();
+    expect(onCopy).toHaveBeenCalledWith("第一段\n\n第二段");
   });
 
   it("disables empty or unavailable sends while leaving stop available", () => {
