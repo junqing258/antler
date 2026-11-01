@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import type { NativeConfig } from "../../lib/native-config";
 import { createNativePlatform } from "../../lib/native-platform";
+import { Toggle } from "../../components/ui/toggle";
 import {
   getRagConfig,
   resetRagConfig,
@@ -154,18 +155,14 @@ export function KnowledgeSettings({
               : "尚未配置密钥。"}
         </Text>
         {!!config_?.ragKeyConfigured && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={clearKey ? "取消清除密钥" : "清除密钥"}
-            onPress={() => {
-              setClearKey(!clearKey);
+          <Toggle
+            value={clearKey}
+            onChange={(value) => {
+              setClearKey(value);
               setRagKey("");
             }}
-          >
-            <Text style={styles.danger}>
-              {clearKey ? "取消清除密钥" : "清除密钥"}
-            </Text>
-          </Pressable>
+            label={clearKey ? "取消清除密钥" : "清除密钥"}
+          />
         )}
         <View style={styles.actions}>
           <Pressable

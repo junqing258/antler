@@ -82,8 +82,16 @@ SDK 基线：`expo ~58.0.21`、React Native 0.88.1、react 19.3.0、react-native
 - `mobile/tsconfig.json` 已配置 `paths: {"@/*": ["./src/*"]}`（TS 6 弃用 baseUrl，paths 相对 tsconfig 解析）。
 - 但 mobile 源码内部**保持相对导入**：app 包 vite/vitest 把 `@` 解析到 `app/src`，且 `app/test/native-*` 经组件树传递性导入全部 mobile 源码，mobile 内使用 `@/` 会在 app 测试中错解析到 app/src。别名仅供未来 app 测试不再传递导入 mobile 源码后启用。
 
-## 旧计划（doc 18）未完成的设备验证（不因本计划视为完成）
+## 阶段 4 试点记录：@expo/ui Switch（清除密钥）
 
+- 安装 `@expo/ui ~58.0.26`（expo install 匹配 SDK 58）；universal API 三端可用（web 走 `createWebComponent` DOM 实现，iOS/Android 走 SwiftUI/Compose + `Host`）。
+- 试点控件：知识库设置"清除密钥"（原为 Pressable 文字切换），替换为 `components/ui/toggle.tsx` 封装的 `<Host matchContents><Switch value onValueChange label/></Host>`；接口仅 value/onChange/label/disabled。
+- 验证：`pnpm check` 通过；jsdom 测试渲染为 `role="switch"`（可访问名"清除密钥/取消清除密钥"）且交互断言全部通过；`pnpm build:mobile` 三平台导出通过（web bundle 含 @expo/ui DOM 实现）。
+- **未验证**：iOS/Android 原生 Switch 的实际渲染、尺寸、动态字体与 VoiceOver/TalkBack（本机无 Simulator GUI，延续 doc 18 设备验证受阻记录）。
+- 维护代码对比：删除 Pressable+Text 约 10 行，新增封装 20 行 + 一个依赖（约 21 个包）。此规模下**无代码净减少**，收益是原生平台控件与统一主题入口（Host colorScheme/seedColor）。
+- 结论：试点可用、予以保留；其余控件（对话框、输入、消息列表）已有共享实现且更复杂，**暂不推广**替换，待设备验收确认原生表现后再评估逐个收益。
+
+## 旧计划（doc 18）未完成的设备验证（不因本计划视为完成）
 - iOS：聊天页/抽屉交互验证受阻（本机 Xcode 无 Simulator.app GUI，无法注入点击）；深链确认弹窗未能点按。
 - Android：APK 构建成功；交互验收按用户指示暂停。
 - 键盘、安全区、动态字体、横屏、VoiceOver/TalkBack、弱网、跨账号、真机 Release + HTTPS 后端登录/SSE/后台恢复：均未验证。

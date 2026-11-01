@@ -126,11 +126,11 @@ it("replaces the key when a new one is entered", async () => {
 it("sends an empty key only after an explicit clear request", async () => {
   render(<Harness />);
   await screen.findByText("密钥已配置；输入新密钥可替换，留空则保留。");
-  fireEvent.click(screen.getByRole("button", { name: "清除密钥" }));
+  fireEvent.click(screen.getByRole("switch", { name: "清除密钥" }));
   expect(
     await screen.findByText("保存后将清除现有密钥。"),
   ).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "取消清除密钥" }));
+  fireEvent.click(screen.getByRole("switch", { name: "取消清除密钥" }));
   fireEvent.click(screen.getByRole("button", { name: "保存知识库配置" }));
   await waitFor(() =>
     expect(updateMock).toHaveBeenCalledWith(
@@ -138,7 +138,7 @@ it("sends an empty key only after an explicit clear request", async () => {
       { ragUrl: "https://rag.example.com/" },
     ),
   );
-  fireEvent.click(screen.getByRole("button", { name: "清除密钥" }));
+  fireEvent.click(screen.getByRole("switch", { name: "清除密钥" }));
   fireEvent.click(screen.getByRole("button", { name: "保存知识库配置" }));
   await waitFor(() =>
     expect(updateMock).toHaveBeenLastCalledWith(
