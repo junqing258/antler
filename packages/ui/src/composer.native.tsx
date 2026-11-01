@@ -24,7 +24,7 @@ export function Composer({
   const commands = useSlashCommands(value, onChange);
   const unavailable = !running && (disabled || !value.trim());
   return (
-    <View>
+    <View style={styles.container}>
       {commands.open && (
         <ScrollView
           style={styles.menu}
@@ -52,8 +52,7 @@ export function Composer({
           )}
         </ScrollView>
       )}
-      {leading && <View style={styles.leading}>{leading}</View>}
-      <View style={styles.row}>
+      <View style={styles.card}>
         <TextInput
           ref={input}
           accessibilityLabel="消息"
@@ -63,53 +62,71 @@ export function Composer({
           value={value}
           onChangeText={onChange}
           style={styles.input}
-          placeholder="输入消息"
+          placeholder="随心输入，/ 使用命令"
+          placeholderTextColor="#999"
         />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ disabled: unavailable }}
-          disabled={unavailable}
-          style={[styles.button, unavailable && styles.disabled]}
-          onPress={running ? onStop : onSend}
-        >
-          <Text style={styles.buttonText}>{running ? "停止" : "发送"}</Text>
-        </Pressable>
+        <View style={styles.row}>
+          <View style={styles.leading}>{leading}</View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={running ? "停止" : "发送"}
+            accessibilityState={{ disabled: unavailable }}
+            disabled={unavailable}
+            style={[styles.button, unavailable && styles.disabled]}
+            onPress={running ? onStop : onSend}
+          >
+            <Text style={styles.buttonText}>{running ? "■" : "↑"}</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  menu: {
-    maxHeight: 200,
+  container: { zIndex: 10 },
+  card: {
     borderWidth: 1,
-    borderColor: "#aaa",
-    borderRadius: 8,
+    borderColor: "#e3e3e3",
+    borderRadius: 24,
+    padding: 12,
+    paddingTop: 12,
+    gap: 4,
+    backgroundColor: "#fff",
+  },
+  menu: {
+    position: "absolute",
+    bottom: "100%",
+    marginBottom: 8,
+    width: "100%",
+    maxHeight: 200,
+    zIndex: 20,
+    borderWidth: 1,
+    borderColor: "#e3e3e3",
+    borderRadius: 14,
     backgroundColor: "white",
   },
-  option: { padding: 8 },
-  leading: { marginHorizontal: 4 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginVertical: 8,
-  },
+  option: { padding: 12 },
+  leading: { flex: 1, minWidth: 0, alignItems: "flex-end" },
+  row: { flexDirection: "row", alignItems: "center", gap: 8, zIndex: 10 },
   input: {
-    flex: 1,
     maxHeight: 120,
-    minHeight: 44,
-    borderWidth: 1,
-    borderColor: "#aaa",
-    borderRadius: 8,
-    padding: 10,
+    minHeight: 36,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    fontSize: 15,
+    lineHeight: 24,
+    color: "#292929",
+    textAlignVertical: "top",
   },
   button: {
-    borderRadius: 8,
-    backgroundColor: "#087d61",
-    padding: 10,
-    alignSelf: "flex-start",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#292929",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  buttonText: { color: "white", fontWeight: "600" },
-  disabled: { opacity: 0.45 },
+  buttonText: { color: "white", fontSize: 24, lineHeight: 28 },
+  disabled: { backgroundColor: "#999" },
 });

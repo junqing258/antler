@@ -119,18 +119,24 @@ export function ChatScreen({
     <View style={styles.flex}>
       {notices}
       <MessageList messages={messages} ready={ready} onCopy={onCopy} />
-      <View>
+      <View style={styles.composerDock}>
         {composer}
-        <Text style={styles.disclaimer}>
-          Antler 可能出错，请核查重要结果。
-        </Text>
+        <Text style={styles.disclaimer}>Antler 可能出错，请核查重要结果。</Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, minHeight: 0 },
+  flex: { flex: 1, minHeight: 0, backgroundColor: "#fff" },
+  composerDock: {
+    width: "100%",
+    maxWidth: 1064,
+    alignSelf: "center",
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
   welcome: {
     flex: 1,
     alignItems: "center",
@@ -138,7 +144,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   welcomeTitle: { fontSize: 24, fontWeight: "600", marginBottom: 24 },
-  welcomeComposer: { width: "100%", maxWidth: 700 },
+  welcomeComposer: { width: "100%", maxWidth: 1024 },
   notices: { gap: 4, paddingHorizontal: 12, paddingTop: 4 },
   loadEarlier: { alignSelf: "center", padding: 8 },
   warning: {
@@ -154,6 +160,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 12,
     color: "#8a8a8a",
-    marginVertical: 6,
+    marginTop: 8,
+    marginBottom: 4,
   },
 });

@@ -88,16 +88,30 @@ export class MessageList extends Component<Props> {
           minHeight: 0,
           overflowY: "auto",
           overflowAnchor: "none",
+          padding: "20px 20px 0",
         }}
       >
-        <div ref={this.content}>
+        <div
+          ref={this.content}
+          style={{
+            width: "100%",
+            maxWidth: 1024,
+            minWidth: 0,
+            margin: "0 auto",
+          }}
+        >
           {this.props.messages.length
             ? this.props.messages.map((message) => (
-                <div key={message.id} data-message-id={message.id}>
-                  <MessageBubble
-                    message={message}
-                    onCopy={this.props.onCopy}
-                  />
+                <div
+                  key={message.id}
+                  data-message-id={message.id}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    minWidth: 0,
+                  }}
+                >
+                  <MessageBubble message={message} onCopy={this.props.onCopy} />
                 </div>
               ))
             : this.props.ready

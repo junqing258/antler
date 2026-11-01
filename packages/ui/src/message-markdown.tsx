@@ -214,7 +214,11 @@ function blocks(nodes: Node[]): React.ReactNode {
           </View>
         );
       case "footnote_anchor":
-        return <Text key={index} style={styles.footnoteRef}>↩</Text>;
+        return (
+          <Text key={index} style={styles.footnoteRef}>
+            ↩
+          </Text>
+        );
       case "blockquote_open":
         return (
           <View key={index} style={styles.quote}>
@@ -294,7 +298,7 @@ export function MessageMarkdown({
 }
 
 const styles = StyleSheet.create({
-  paragraph: { marginVertical: 3, lineHeight: 21 },
+  paragraph: { marginVertical: 3, fontSize: 15, lineHeight: 24, color: "#333" },
   heading: { fontSize: 18, fontWeight: "700", marginVertical: 5 },
   h1: { fontSize: 22 },
   strong: { fontWeight: "700" },

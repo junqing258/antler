@@ -40,6 +40,9 @@ export function MessageList({
     <FlatList
       ref={list}
       style={{ flex: 1 }}
+      contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20 }}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
       data={messages}
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => (
