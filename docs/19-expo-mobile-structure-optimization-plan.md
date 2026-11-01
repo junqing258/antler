@@ -1,7 +1,7 @@
 # Expo 与移动端目录优化计划
 
 日期：2026-11-01  
-状态：规划，尚未实施
+状态：阶段 1-4 已实施（见文末实施记录与[基线盘点](19-expo-mobile-structure-optimization-baseline.md)）；设备侧验收与共享逻辑抽取待后续。
 
 ## 目标与边界
 
@@ -94,3 +94,14 @@ Router 接管链接可能造成重复分发、认证绕过或历史栈变化；�
 - [Expo Router 现有项目安装](https://docs.expo.dev/router/installation/)、[src 目录](https://docs.expo.dev/router/reference/src-directory/)
 - [Expo UI](https://docs.expo.dev/versions/latest/sdk/ui/)、[Universal 组件](https://docs.expo.dev/versions/latest/sdk/ui/universal/)
 - [Expo SDK 升级指南](https://docs.expo.dev/workflow/upgrading-expo-sdk-walkthrough/)
+
+## 实施记录（2026-11-01）
+
+每阶段独立提交：阶段 1-2 `b665611`、阶段 3 `ca480c0`、阶段 4 `570303c`。
+
+- **阶段 1-2（目录整理）**：`mobile/src` 重组为 `app/`（阶段 3 起为路由）、`views/{home,chat,settings,root}`、`components/{,ui/}`、`lib/`、`experiments/`；平台存储文件（`.native.ts`/`.web.ts`）与存储键全部原样保留。`@/*` 别名已配置于 `mobile/tsconfig.json`，但 mobile 源码保持相对导入——app 侧 vite/vitest 把 `@` 解析到 `app/src`，且 app 测试传递性导入全部 mobile 源码（约束记录于基线文档）。基线与盘点见 [19-expo-mobile-structure-optimization-baseline.md](19-expo-mobile-structure-optimization-baseline.md)。
+- **阶段 3（Expo Router）**：入口 `expo-router/entry`（旧 `index.ts` 已删），`expo-router ~58.0.29` 及匹配依赖。根容器收敛到 `views/root/app-container.tsx`（启动、认证门禁、`antler://autostart` 唯一分发、全局设置模态）；路由文件仅解析参数并组装页面，参数与导航动作经 `RootContext` 提供，路由文件零 Router 依赖（也让 app 测试可用假 Router 驱动全部逻辑）。导航语义：主页→会话 `push`；抽屉切换/新建/删除当前会话/自动化 `replace`；认证失效与登出清 `pendingAuto` 并回 `/`。`[...unmatched]` 兜底页挂载即回主页。自动化 `message`/`cancelAfter` 只走内存上下文，不进路由参数（有回归测试）；旧实现中未登录时无凭据的 autostart 链接被丢弃的行为保持不变。
+- **阶段 4（@expo/ui 试点）**：见基线文档"阶段 4 试点记录"——知识库设置"清除密钥"换为 `Switch`（web 验证通过），无代码净减少，暂不推广。
+- **验证情况**：每阶段 `pnpm check`、`pnpm test`（app 209 用例、server 375 用例等全部通过）、`pnpm build:mobile`（web/android/ios 导出，web 已按路由分包）通过；根测试命令收集数量与基线一致（迁移的路径引用全部更新）。
+- **未验证（需设备，延续 doc 18 受阻记录）**：iOS/Android 模拟器的启动、登录、抽屉、键盘、安全区、深链（`antler://autostart` 冷/热启动经 Router 后的实际表现）、后台恢复、返回手势；@expo/ui Switch 的原生渲染与无障碍；真机 Release + HTTPS 后端的登录/流式/恢复。验收时重点关注：Router 接管链接后 autostart 是否只分发一次（代码层已防重）、返回行为与历史栈、`[...unmatched]` 兜底是否干扰冷启动深链。
+- **未实施（按计划留待后续）**：共享逻辑分批抽取（盘点结论：现有 `@antler/ui`/`client-runtime` 已覆盖主要复用面，无确证重复点）；Expo UI 其余控件替换。

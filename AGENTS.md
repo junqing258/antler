@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Antler is a pnpm workspace with two packages. `app/` contains the React/Vite Web/PWA UI: page components in `src/views`, reusable components in `src/components`, browser services in `src/lib`, styles in `src/styles`, and static assets in `public`. `backend/` is the Fastify/TypeScript service, organized by routes, agent runtime, skills, knowledge, and persistence. Prisma files live in `backend/prisma/`; architecture material and deployment utilities are in `docs/` and `scripts/`.
+Antler is a pnpm workspace with three packages. `app/` contains the React/Vite Web/PWA UI: page components in `src/views`, reusable components in `src/components`, browser services in `src/lib`, styles in `src/styles`, and static assets in `public`. `backend/` is the Fastify/TypeScript service, organized by routes, agent runtime, skills, knowledge, and persistence. `mobile/` is the Expo (SDK 58) React Native app: Expo Router routes in `src/app`, pages in `src/views`, shared widgets in `src/components`, services and platform adapters in `src/lib`, and diagnostics under `src/experiments`; its root container (boot, auth gate, automation deep links) lives in `src/views/root`. Prisma files live in `backend/prisma/`; architecture material and deployment utilities are in `docs/` and `scripts/`.
 
 ## Build, Test, and Development Commands
 
@@ -10,10 +10,11 @@ Run commands from the repository root with pnpm 10:
 
 - `pnpm install` installs all workspace dependencies.
 - `pnpm dev` runs the web UI and backend; use `pnpm dev:web` or `pnpm dev:server` for one.
-- `pnpm check` type-checks both TypeScript packages.
+- `pnpm check` type-checks all TypeScript packages (including `check:mobile`).
 - `pnpm test` runs all Vitest suites; `pnpm test:watch` reruns on changes.
 - `pnpm test:coverage` writes V8 text and HTML coverage reports.
-- `pnpm build` builds the Web UI and backend; use `pnpm build:web` or `pnpm build:server` for one.
+- `pnpm build` builds the Web UI and backend; use `pnpm build:web`, `pnpm build:server`, or `pnpm build:mobile` (Expo export) for one.
+- `pnpm dev:mobile` starts the Expo dev server for the mobile app.
 - `pnpm --filter @antler/server db:migrate -- --name <name>` creates a Prisma migration after schema changes.
 
 ## Coding Style & Naming Conventions
