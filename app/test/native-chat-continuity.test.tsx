@@ -12,7 +12,7 @@ const capture = vi.hoisted(() => ({
 vi.mock("../../mobile/node_modules/expo-clipboard", () => ({
   setStringAsync: vi.fn(),
 }));
-vi.mock("../../mobile/src/native-platform", () => ({
+vi.mock("../../mobile/src/lib/native-platform", () => ({
   createNativePlatform: () => ({
     onForeground: () => () => {},
     connection: async () => ({
@@ -71,8 +71,8 @@ vi.mock("@antler/ui", () => ({
     </>
   ),
 }));
-import { NativeChat } from "../../mobile/src/native-chat";
-import { defaultNativeConfig } from "../../mobile/src/native-config";
+import { NativeChat } from "../../mobile/src/views/chat/native-chat";
+import { defaultNativeConfig } from "../../mobile/src/lib/native-config";
 
 afterEach(() => {
   cleanup();

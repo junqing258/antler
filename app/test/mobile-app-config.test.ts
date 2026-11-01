@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({ extra: {} as Record<string, unknown> }));
 vi.mock("../../mobile/node_modules/expo-constants", () => ({ default: { expoConfig: { get extra() { return state.extra; } } } }));
-import { readAppConfig } from "../../mobile/src/app-config";
+import { readAppConfig } from "../../mobile/src/lib/app-config";
 it("validates the embedded endpoint and build policy", () => {
   state.extra = {};
   expect(readAppConfig).toThrow("未配置");

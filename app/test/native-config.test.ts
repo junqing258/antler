@@ -4,7 +4,7 @@ import {
   deserializeNativeConfig,
   serializeNativeConfig,
   validateServerUrl,
-} from "../../mobile/src/native-config";
+} from "../../mobile/src/lib/native-config";
 
 it("stores secrets separately and never restores them to a different endpoint or auth mode", () => {
   const config = {
@@ -48,7 +48,7 @@ it("rejects corrupt configuration and production HTTP or URLs containing credent
   ).toThrow();
 });
 
-import { parseProviderModels } from "../../mobile/src/native-config";
+import { parseProviderModels } from "../../mobile/src/lib/native-config";
 
 it("parses the comma-separated model list with trimming and deduplication", () => {
   expect(parseProviderModels(" m-a, m-b ,m-a\n,  ")).toEqual(["m-a", "m-b"]);
@@ -57,7 +57,7 @@ it("parses the comma-separated model list with trimming and deduplication", () =
 });
 
 it("reuses an old local token only for the same normalized endpoint and auth mode", async () => {
-  const { legacyLocalToken, defaultNativeConfig } = await import("../../mobile/src/native-config");
+  const { legacyLocalToken, defaultNativeConfig } = await import("../../mobile/src/lib/native-config");
   const old = { ...defaultNativeConfig, serverUrl: "https://server.example/", accessToken: "old-token" };
   expect(legacyLocalToken(old, "https://server.example")).toBe("old-token");
   expect(legacyLocalToken(old, "https://other.example")).toBe("");

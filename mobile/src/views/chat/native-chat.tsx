@@ -22,8 +22,8 @@ import {
   getModelPickerConfig,
   type BoundCredential,
 } from "@antler/client-runtime";
-import type { NativeConfig } from "./native-config";
-import { createNativePlatform } from "./native-platform";
+import type { NativeConfig } from "../../lib/native-config";
+import { createNativePlatform } from "../../lib/native-platform";
 
 function Action({ label, onPress }: { label: string; onPress: () => void }) {
   return (

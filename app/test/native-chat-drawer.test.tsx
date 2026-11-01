@@ -13,12 +13,12 @@ import {
   listConversations,
   renameConversation,
   type ConversationSummary,
-} from "../../mobile/src/conversation-service";
-import { ChatDrawer } from "../../mobile/src/chat-drawer";
+} from "../../mobile/src/lib/conversation-service";
+import { ChatDrawer } from "../../mobile/src/views/chat/chat-drawer";
 import {
   defaultNativeConfig,
   type NativeConfig,
-} from "../../mobile/src/native-config";
+} from "../../mobile/src/lib/native-config";
 
 const state = vi.hoisted(() => ({
   changeHandler: undefined as
@@ -32,7 +32,7 @@ const state = vi.hoisted(() => ({
   unsubscribe: undefined as (() => void) | undefined,
 }));
 
-vi.mock("../../mobile/src/conversation-service", () => ({
+vi.mock("../../mobile/src/lib/conversation-service", () => ({
   listConversations: vi.fn(),
   renameConversation: vi.fn(),
   deleteConversation: vi.fn(),
@@ -52,7 +52,7 @@ vi.mock("../../mobile/src/conversation-service", () => ({
   },
 }));
 
-vi.mock("../../mobile/src/native-platform", () => ({
+vi.mock("../../mobile/src/lib/native-platform", () => ({
   createNativePlatform: () => ({
     connection: async () => ({
       baseUrl: "https://server.example",

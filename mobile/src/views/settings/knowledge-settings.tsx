@@ -8,14 +8,14 @@ import {
   TextInput,
   View,
 } from "react-native";
-import type { NativeConfig } from "./native-config";
-import { createNativePlatform } from "./native-platform";
+import type { NativeConfig } from "../../lib/native-config";
+import { createNativePlatform } from "../../lib/native-platform";
 import {
   getRagConfig,
   resetRagConfig,
   updateRagConfig,
   type RagConfig,
-} from "./rag-config-service";
+} from "../../lib/rag-config-service";
 
 /** 知识库配置：读取、保存、恢复默认与外部管理页入口；语义对齐 Web 版。 */
 export function KnowledgeSettings({

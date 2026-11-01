@@ -46,7 +46,7 @@ beforeEach(() => {
 });
 it("isolates projects and recreates clients for key changes without discarding project storage", async () => {
   const { currentAccessToken, signOut } =
-    await import("../../mobile/src/native-auth");
+    await import("../../mobile/src/lib/native-auth");
   await currentAccessToken("https://auth.example/project-a/", "key-a");
   const first = mocks.clients[0];
   await currentAccessToken("https://auth.example/project-a", "key-b");
@@ -63,7 +63,7 @@ it("isolates projects and recreates clients for key changes without discarding p
   expect(third.auth.signOut).toHaveBeenCalledWith({ scope: "local" });
 });
 it("never reads the old unscoped session, and preserves a new session if old-key cleanup fails", async () => {
-  const { currentAccessToken } = await import("../../mobile/src/native-auth");
+  const { currentAccessToken } = await import("../../mobile/src/lib/native-auth");
   mocks.data.set("antler.native.supabase.auth", "old-token");
   await currentAccessToken("https://auth.example/project-a", "key-a");
   const { storage, storageKey } = mocks.clients[0].options.auth;
@@ -88,7 +88,7 @@ it("never reads the old unscoped session, and preserves a new session if old-key
 
 it("surfaces sign-out failures instead of claiming the session was removed", async () => {
   const { currentAccessToken, signOut } =
-    await import("../../mobile/src/native-auth");
+    await import("../../mobile/src/lib/native-auth");
   await currentAccessToken("https://auth.example/project-a", "key-a");
   mocks.clients[0].auth.signOut.mockResolvedValue({
     error: new Error("storage unavailable"),
@@ -100,7 +100,7 @@ it("surfaces sign-out failures instead of claiming the session was removed", asy
 
 it("detaches old auth listeners before switching projects", async () => {
   const { currentAccessToken, onNativeSignedOut } =
-    await import("../../mobile/src/native-auth");
+    await import("../../mobile/src/lib/native-auth");
   const signedOut = vi.fn();
   const unsubscribe = onNativeSignedOut(
     "https://auth.example/project-a",
@@ -117,7 +117,7 @@ it("detaches old auth listeners before switching projects", async () => {
 
 it("rejects an in-flight old project token when the project changes", async () => {
   const { currentAccessToken, onNativeSignedOut } =
-    await import("../../mobile/src/native-auth");
+    await import("../../mobile/src/lib/native-auth");
   onNativeSignedOut("https://auth.example/project-a", "key-a", () => {});
   let resolveOld!: (value: unknown) => void;
   mocks.clients[0].auth.getSession.mockReturnValueOnce(
@@ -134,7 +134,7 @@ it("rejects an in-flight old project token when the project changes", async () =
 
 it("invalidates an in-flight token read when authentication is deactivated", async () => {
   const { currentAccessToken, disposeNativeAuth, onNativeSignedOut } =
-    await import("../../mobile/src/native-auth");
+    await import("../../mobile/src/lib/native-auth");
   onNativeSignedOut("https://auth.example/project-a", "key-a", () => {});
   const old = mocks.clients[0];
   let resolveOld!: (value: unknown) => void;
@@ -153,7 +153,7 @@ it("invalidates an in-flight token read when authentication is deactivated", asy
 });
 
 it("does not confuse projects when URL and key contain separator characters", async () => {
-  const { currentAccessToken } = await import("../../mobile/src/native-auth");
+  const { currentAccessToken } = await import("../../mobile/src/lib/native-auth");
   await currentAccessToken("https://auth.example/a|b", "c");
   await currentAccessToken("https://auth.example/a", "b|c");
   expect(mocks.clients).toHaveLength(2);

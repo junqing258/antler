@@ -13,30 +13,30 @@ import {
 } from "react-native";
 import * as Crypto from "expo-crypto";
 import { fetch as expoFetch } from "expo/fetch";
-import { Probe } from "./probe";
+import { Probe } from "./experiments/probe";
 import {
   AuthForm,
   ProviderConfigForm,
   type ProviderConfigDraft,
 } from "@antler/ui";
 import type { BoundCredential } from "@antler/client-runtime";
-import { HomePage } from "./home-page";
-import { NativeChat } from "./native-chat";
-import { ChatDrawer } from "./chat-drawer";
-import { KnowledgeSettings } from "./knowledge-settings";
-import { readAppConfig } from "./app-config";
+import { HomePage } from "./views/home/home-page";
+import { NativeChat } from "./views/chat/native-chat";
+import { ChatDrawer } from "./views/chat/chat-drawer";
+import { KnowledgeSettings } from "./views/settings/knowledge-settings";
+import { readAppConfig } from "./lib/app-config";
 import {
   defaultNativeConfig,
   legacyLocalToken,
   type NativeConfig,
-} from "./native-config";
-import { loadNativeConfig } from "./native-storage";
+} from "./lib/native-config";
+import { loadNativeConfig } from "./lib/native-storage";
 import {
   defaultProvider,
   loadProviderConfig,
   saveProviderConfig,
   subscribeProviderConfig,
-} from "./provider-storage";
+} from "./lib/provider-storage";
 import {
   currentAccessToken,
   currentAccountEmail,
@@ -47,8 +47,8 @@ import {
   signIn,
   signOut,
   type AuthBackendConfig,
-} from "./native-auth";
-import { createNativePlatform } from "./native-platform";
+} from "./lib/native-auth";
+import { createNativePlatform } from "./lib/native-platform";
 
 type Boot = {
   config: NativeConfig;

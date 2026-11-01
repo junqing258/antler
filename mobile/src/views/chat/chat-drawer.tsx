@@ -12,16 +12,16 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { ConversationList } from "@antler/ui";
-import type { NativeConfig } from "./native-config";
-import { createNativePlatform } from "./native-platform";
+import type { NativeConfig } from "../../lib/native-config";
+import { createNativePlatform } from "../../lib/native-platform";
 import {
   deleteConversation,
   listConversations,
   renameConversation,
   subscribeConversationChanges,
   type ConversationSummary,
-} from "./conversation-service";
-import { ConfirmDialog, InputDialog } from "./dialogs";
+} from "../../lib/conversation-service";
+import { ConfirmDialog, InputDialog } from "../../components/dialogs";
 
 const BRAND_COLOR = "#087d61";
 

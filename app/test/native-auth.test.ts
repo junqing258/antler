@@ -31,7 +31,7 @@ import {
   currentAccessToken,
   loadAuthBackendConfig,
   signIn,
-} from "../../mobile/src/native-auth";
+} from "../../mobile/src/lib/native-auth";
 
 afterEach(() => {
   vi.unstubAllGlobals();

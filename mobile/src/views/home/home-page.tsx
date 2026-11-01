@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
 import { AgentList, type AgentCardItem } from "@antler/ui";
-import { createNativePlatform } from "./native-platform";
-import type { NativeConfig } from "./native-config";
+import { createNativePlatform } from "../../lib/native-platform";
+import type { NativeConfig } from "../../lib/native-config";
 
 type PlatformAgent = {
   id: string;

@@ -27,7 +27,7 @@ vi.mock("../../mobile/node_modules/expo-secure-store", () => ({
     stores.secrets.delete(key);
   },
 }));
-vi.mock("../../mobile/src/native-storage", () => ({
+vi.mock("../../mobile/src/lib/native-storage", () => ({
   loadNativeConfig: async () => ({
     providerProtocol: "openai-responses",
     providerBaseUrl: "https://provider.example",
@@ -40,7 +40,7 @@ import {
   loadProviderConfig,
   saveProviderConfig,
   subscribeProviderConfig,
-} from "../../mobile/src/provider-storage.native";
+} from "../../mobile/src/lib/provider-storage.native";
 
 beforeEach(() => {
   stores.settings.clear();

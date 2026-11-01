@@ -8,20 +8,20 @@ import {
   resetRagConfig,
   updateRagConfig,
   type RagConfig,
-} from "../../mobile/src/rag-config-service";
-import { KnowledgeSettings } from "../../mobile/src/knowledge-settings";
+} from "../../mobile/src/lib/rag-config-service";
+import { KnowledgeSettings } from "../../mobile/src/views/settings/knowledge-settings";
 import {
   defaultNativeConfig,
   type NativeConfig,
-} from "../../mobile/src/native-config";
+} from "../../mobile/src/lib/native-config";
 
-vi.mock("../../mobile/src/rag-config-service", () => ({
+vi.mock("../../mobile/src/lib/rag-config-service", () => ({
   getRagConfig: vi.fn(),
   updateRagConfig: vi.fn(),
   resetRagConfig: vi.fn(),
 }));
 
-vi.mock("../../mobile/src/native-platform", () => ({
+vi.mock("../../mobile/src/lib/native-platform", () => ({
   createNativePlatform: () => ({
     connection: async () => ({ baseUrl: "https://server.example", headers: {} }),
     request: async () => new Response("{}", { status: 200 }),

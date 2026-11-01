@@ -9,8 +9,8 @@ vi.mock("../../mobile/node_modules/expo-crypto", () => ({
 vi.mock("react-native", () => ({
   AppState: { addEventListener: () => ({ remove() {} }) },
 }));
-import { createNativePlatform } from "../../mobile/src/native-platform";
-import { defaultNativeConfig } from "../../mobile/src/native-config";
+import { createNativePlatform } from "../../mobile/src/lib/native-platform";
+import { defaultNativeConfig } from "../../mobile/src/lib/native-config";
 beforeEach(() => capture.request.mockReset());
 
 it("rejects a stale connection and never starts a request after authentication changes", async () => {

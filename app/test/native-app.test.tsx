@@ -29,11 +29,11 @@ const state = vi.hoisted(() => ({
   listener: undefined as (() => void) | undefined,
 }));
 vi.mock("../../mobile/node_modules/expo/fetch", () => ({ fetch: vi.fn() }));
-vi.mock("../../mobile/src/probe", () => ({ Probe: () => null }));
+vi.mock("../../mobile/src/experiments/probe", () => ({ Probe: () => null }));
 vi.mock("../../mobile/node_modules/expo-crypto", () => ({
   randomUUID: () => "new-session",
 }));
-vi.mock("../../mobile/src/app-config", () => ({
+vi.mock("../../mobile/src/lib/app-config", () => ({
   readAppConfig: () => {
     if (state.bootError) throw new Error(state.bootError);
     return {
@@ -42,10 +42,10 @@ vi.mock("../../mobile/src/app-config", () => ({
     };
   },
 }));
-vi.mock("../../mobile/src/native-storage", () => ({
+vi.mock("../../mobile/src/lib/native-storage", () => ({
   loadNativeConfig: async () => state.legacy,
 }));
-vi.mock("../../mobile/src/native-auth", () => ({
+vi.mock("../../mobile/src/lib/native-auth", () => ({
   loadAuthBackendConfig: async () => state.backend,
   currentAccessToken: async () => state.token,
   currentAccountEmail: async () => "user@example.com",
@@ -59,7 +59,7 @@ vi.mock("../../mobile/src/native-auth", () => ({
   createNativeAuthActions: () => ({ actions: {}, clear: () => {} }),
   signOut: async () => {},
 }));
-vi.mock("../../mobile/src/provider-storage", () => {
+vi.mock("../../mobile/src/lib/provider-storage", () => {
   const value = {
     name: "OpenAI",
     protocol: "openai-responses",
@@ -78,7 +78,7 @@ vi.mock("../../mobile/src/provider-storage", () => {
     },
   };
 });
-vi.mock("../../mobile/src/native-platform", () => ({
+vi.mock("../../mobile/src/lib/native-platform", () => ({
   createNativePlatform: (config: any) => ({
     connection: async () => {
       state.connection(config);
@@ -87,12 +87,12 @@ vi.mock("../../mobile/src/native-platform", () => ({
     request: async () => new Response("{}", { status: state.requestStatus }),
   }),
 }));
-vi.mock("../../mobile/src/home-page", () => ({
+vi.mock("../../mobile/src/views/home/home-page", () => ({
   HomePage: ({ onOpenAgent }: any) => (
     <button onClick={() => onOpenAgent()}>开始对话</button>
   ),
 }));
-vi.mock("../../mobile/src/native-chat", () => ({
+vi.mock("../../mobile/src/views/chat/native-chat", () => ({
   NativeChat: ({ onConfigure, config, getToken, onUnauthorized }: any) => {
     state.chatConfig = config;
     state.chatGetToken = getToken;
