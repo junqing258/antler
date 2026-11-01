@@ -59,6 +59,7 @@ module.exports = {
     },
   },
   plugins: [
+    "expo-router",
     ...(base.expo.plugins ?? []),
     ["./with-network-policy", { allowHttp: development }],
   ],

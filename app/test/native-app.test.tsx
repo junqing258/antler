@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   token: "",
   signedOut: undefined as (() => void) | undefined,
   chatConfig: null as any,
+  autoMessage: undefined as string | undefined,
   chatGetToken: undefined as (() => Promise<string>) | undefined,
   bootError: "",
   backend: { mode: "local", requiresAccessToken: true } as any,
@@ -28,6 +29,69 @@ const state = vi.hoisted(() => ({
   connection: vi.fn(),
   listener: undefined as (() => void) | undefined,
 }));
+// Expo Router 假实现：可驱动的路由状态 + 渲染真实路由组件。
+const routerState = vi.hoisted(() => {
+  const listeners = new Set<() => void>();
+  return {
+    route: "/",
+    params: {} as Record<string, string>,
+    listeners,
+    emit: () => listeners.forEach((l) => l()),
+  };
+});
+const routerFake = vi.hoisted(() => {
+  const normalize = (target: any) => {
+    if (typeof target === "string") return { route: target, params: {} };
+    const route = String(target.pathname).replace(
+      /\[id\]/g,
+      String(target.params?.id ?? ""),
+    );
+    return { route, params: (target.params ?? {}) as Record<string, string> };
+  };
+  const go = (target: any) => {
+    Object.assign(routerState, normalize(target));
+    routerState.emit();
+  };
+  return {
+    push: go,
+    replace: go,
+    back: () => go("/"),
+    canDismiss: () => false,
+  };
+});
+vi.mock("../../mobile/node_modules/expo-router", async () => {
+  const React = await import("react");
+  const { HomeRoute } = await import("../../mobile/src/app/index");
+  const { ChatRoute } = await import("../../mobile/src/app/chat/[id]");
+  const { RootContext } = await import(
+    "../../mobile/src/views/root/root-context"
+  );
+  function Stack() {
+    const route = React.useSyncExternalStore(
+      (onStoreChange) => {
+        routerState.listeners.add(onStoreChange);
+        return () => routerState.listeners.delete(onStoreChange);
+      },
+      () => routerState.route,
+    );
+    if (!React.useContext(RootContext)) return null;
+    return route.startsWith("/chat/")
+      ? React.createElement(ChatRoute)
+      : React.createElement(HomeRoute);
+  }
+  const subscribeParams = (onStoreChange: () => void) => {
+    routerState.listeners.add(onStoreChange);
+    return () => routerState.listeners.delete(onStoreChange);
+  };
+  return {
+    useRouter: () => routerFake,
+    useGlobalSearchParams: () =>
+      React.useSyncExternalStore(subscribeParams, () => routerState.params),
+    useLocalSearchParams: () =>
+      React.useSyncExternalStore(subscribeParams, () => routerState.params),
+    Stack,
+  };
+});
 vi.mock("../../mobile/node_modules/expo/fetch", () => ({ fetch: vi.fn() }));
 vi.mock("../../mobile/src/experiments/probe", () => ({ Probe: () => null }));
 vi.mock("../../mobile/node_modules/expo-crypto", () => ({
@@ -93,8 +157,9 @@ vi.mock("../../mobile/src/views/home/home-page", () => ({
   ),
 }));
 vi.mock("../../mobile/src/views/chat/native-chat", () => ({
-  NativeChat: ({ onConfigure, config, getToken, onUnauthorized }: any) => {
+  NativeChat: ({ onConfigure, config, getToken, onUnauthorized, autoMessage }: any) => {
     state.chatConfig = config;
+    state.autoMessage = autoMessage;
     state.chatGetToken = getToken;
     return (
       <div>
@@ -112,13 +177,16 @@ vi.mock("@antler/ui", () => ({
   ),
   ConversationList: () => <div>会话列表</div>,
 }));
-import { App } from "../../mobile/src/app";
+import { AppContainer } from "../../mobile/src/views/root/app-container";
 beforeEach(() => {
+  routerState.route = "/";
+  routerState.params = {};
   state.automation = false;
   state.requestStatus = 200;
   state.token = "";
   state.signedOut = undefined;
   state.chatConfig = null;
+  state.autoMessage = undefined;
   state.chatGetToken = undefined;
   state.bootError = "";
   state.backend = { mode: "local", requiresAccessToken: true };
@@ -134,7 +202,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 it("rejects a token bound to another endpoint and permits retry", async () => {
-  render(<App />);
+  render(<AppContainer />);
   expect(await screen.findByRole("alert")).toHaveTextContent("不支持");
   expect(state.connection).not.toHaveBeenCalled();
   state.legacy.serverUrl = "https://server.example/";
@@ -149,7 +217,7 @@ it("rejects a token bound to another endpoint and permits retry", async () => {
 });
 it("keeps the chat and draft mounted while saving settings", async () => {
   state.backend = { mode: "local", requiresAccessToken: false };
-  render(<App />);
+  render(<AppContainer />);
   fireEvent.click(await screen.findByText("开始对话"));
   fireEvent.change(screen.getByLabelText("草稿"), {
     target: { value: "尚未发送" },
@@ -169,12 +237,12 @@ it("ignores automation in release and never accepts an endpoint override in test
     .mockResolvedValue(
       "antler://autostart?serverUrl=https%3A%2F%2Fevil.example&message=hello",
     );
-  const first = render(<App />);
+  const first = render(<AppContainer />);
   await screen.findByText("开始对话");
   expect(initialUrl).not.toHaveBeenCalled();
   first.unmount();
   state.automation = true;
-  render(<App />);
+  render(<AppContainer />);
   await screen.findByLabelText("草稿");
   expect(state.chatConfig.serverUrl).toBe("https://server.example");
 });
@@ -182,7 +250,7 @@ it("ignores automation in release and never accepts an endpoint override in test
 it("reports a rejected matching legacy token and can retry when it is restored", async () => {
   state.legacy.serverUrl = "https://server.example";
   state.requestStatus = 401;
-  render(<App />);
+  render(<AppContainer />);
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "旧访问令牌已被拒绝",
   );
@@ -200,7 +268,7 @@ it("explains a rejected restored Supabase session on the login screen", async ()
   };
   state.token = "expired-token";
   state.requestStatus = 401;
-  render(<App />);
+  render(<AppContainer />);
   await screen.findByText("登录表单");
   expect(screen.getByRole("alert")).toHaveTextContent("登录已过期，请重新登录");
   expect(screen.queryByText("开始对话")).not.toBeInTheDocument();
@@ -208,7 +276,7 @@ it("explains a rejected restored Supabase session on the login screen", async ()
 
 it("invalidates an old token source immediately after a rejected credential", async () => {
   state.legacy.serverUrl = "https://server.example";
-  render(<App />);
+  render(<AppContainer />);
   fireEvent.click(await screen.findByText("开始对话"));
   const oldGetToken = state.chatGetToken!;
   expect(await oldGetToken()).toBe("old-token");
@@ -226,7 +294,7 @@ it("returns to login and rejects old token readers after Supabase signs out", as
     publishableKey: "pk",
   };
   state.token = "project-token";
-  render(<App />);
+  render(<AppContainer />);
   fireEvent.click(await screen.findByText("开始对话"));
   const oldGetToken = state.chatGetToken!;
   expect(await oldGetToken()).toBe("project-token");
@@ -242,7 +310,7 @@ it("closes the previous conversation if the current Supabase session disappears"
     publishableKey: "pk",
   };
   state.token = "project-token";
-  render(<App />);
+  render(<AppContainer />);
   fireEvent.click(await screen.findByText("开始对话"));
   const oldGetToken = state.chatGetToken!;
   state.token = "";
@@ -252,4 +320,18 @@ it("closes the previous conversation if the current Supabase session disappears"
   expect(await screen.findByText("登录表单")).toBeInTheDocument();
   expect(screen.queryByLabelText("草稿")).not.toBeInTheDocument();
   await expect(oldGetToken()).rejects.toThrow("认证配置已更改");
+});
+
+it("delivers an automation message to the chat without exposing it in route params", async () => {
+  state.backend = { mode: "local", requiresAccessToken: false };
+  state.automation = true;
+  vi.spyOn(Linking, "getInitialURL").mockResolvedValue(
+    "antler://autostart?conversationId=conv-1&message=hello",
+  );
+  render(<AppContainer />);
+  await screen.findByLabelText("草稿");
+  expect(routerState.route).toBe("/chat/conv-1");
+  // 敏感的自动化参数只经内存上下文传递，不进入路由参数或历史。
+  expect(routerState.params).toEqual({ id: "conv-1", agentId: "" });
+  expect(state.autoMessage).toBe("hello");
 });

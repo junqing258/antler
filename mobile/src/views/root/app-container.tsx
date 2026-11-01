@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Linking,
   Platform,
-  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -12,31 +17,25 @@ import {
   View,
 } from "react-native";
 import * as Crypto from "expo-crypto";
-import { fetch as expoFetch } from "expo/fetch";
-import { Probe } from "./experiments/probe";
-import {
-  AuthForm,
-  ProviderConfigForm,
-  type ProviderConfigDraft,
-} from "@antler/ui";
+import { useRouter, useGlobalSearchParams, Stack } from "expo-router";
+import { AuthForm, ProviderConfigForm } from "@antler/ui";
 import type { BoundCredential } from "@antler/client-runtime";
-import { HomePage } from "./views/home/home-page";
-import { NativeChat } from "./views/chat/native-chat";
-import { ChatDrawer } from "./views/chat/chat-drawer";
-import { KnowledgeSettings } from "./views/settings/knowledge-settings";
-import { readAppConfig } from "./lib/app-config";
+import { Button } from "../../components/button";
+import { KnowledgeSettings } from "../settings/knowledge-settings";
+import { readAppConfig } from "../../lib/app-config";
+import { createNativePlatform } from "../../lib/native-platform";
 import {
   defaultNativeConfig,
   legacyLocalToken,
   type NativeConfig,
-} from "./lib/native-config";
-import { loadNativeConfig } from "./lib/native-storage";
+} from "../../lib/native-config";
+import { loadNativeConfig } from "../../lib/native-storage";
 import {
   defaultProvider,
   loadProviderConfig,
   saveProviderConfig,
   subscribeProviderConfig,
-} from "./lib/provider-storage";
+} from "../../lib/provider-storage";
 import {
   currentAccessToken,
   currentAccountEmail,
@@ -47,8 +46,13 @@ import {
   signIn,
   signOut,
   type AuthBackendConfig,
-} from "./lib/native-auth";
-import { createNativePlatform } from "./lib/native-platform";
+} from "../../lib/native-auth";
+import {
+  RootContext,
+  type ChatRouteParams,
+  type PendingAuto,
+  type RootContextValue,
+} from "./root-context";
 
 type Boot = {
   config: NativeConfig;
@@ -57,7 +61,13 @@ type Boot = {
   generation: number;
 };
 
-export function App() {
+/**
+ * 根容器：启动、认证边界、自动化深链分发与全局设置。
+ * 路由栈由 Expo Router 接管；本组件只决定是否渲染路由（认证门禁）
+ * 以及持有跨页面共享状态。antler://autostart 不作为普通页面路由：
+ * 由这里的 Linking 监听解析后经 openChat 进入 /chat/[id]。
+ */
+export function AppContainer() {
   const [boot, setBoot] = useState<Boot>();
   const bootGeneration = useRef(0);
   const [attempt, setAttempt] = useState(0);
@@ -65,28 +75,21 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [provider, setProvider] =
-    useState<ProviderConfigDraft>(defaultProvider);
-  const [draftProvider, setDraftProvider] =
-    useState<ProviderConfigDraft>(defaultProvider);
+  const [provider, setProvider] = useState(defaultProvider);
+  const [draftProvider, setDraftProvider] = useState(defaultProvider);
   const [settings, setSettings] = useState(false);
   const [settingsError, setSettingsError] = useState("");
   const [settingsTab, setSettingsTab] = useState<"provider" | "knowledge">(
     "provider",
   );
   const [binding, setBinding] = useState<BoundCredential>();
-  const [showProbe, setShowProbe] = useState(false);
+  const [pendingAuto, setPendingAuto] = useState<PendingAuto>();
   const autoLoginStarted = useRef(false);
   const pendingAutoUrl = useRef<string | null>(null);
-  const [chat, setChat] = useState<{
-    id: string;
-    agentId?: string;
-    title?: string;
-    message?: string;
-    cancelAfter?: number;
-  }>();
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const initialUrlTaken = useRef(false);
   const [accountEmail, setAccountEmail] = useState("");
+  const router = useRouter();
+  const routeParams = useChatParams();
 
   useEffect(() => {
     let alive = true;
@@ -229,73 +232,80 @@ export function App() {
       alive = false;
     };
   }, [boot, authenticated]);
+
+  // 自动化深链：唯一入口。antler://autostart 仅在 automationEnabled 构建中生效；
+  // 会话参数转入 pendingAuto（内存），登录信息仅用于自动登录，绝不进入路由历史。
   useEffect(() => {
-    if (!boot?.automationEnabled || !authenticated) return;
+    if (!boot?.automationEnabled) return;
     const handle = (value: string | null | undefined) => {
       if (!value) return;
       try {
         const url = new URL(value);
         if (url.hostname !== "autostart") return;
-        pendingAutoUrl.current = null;
-        setChat({
+        const parseAuto = (): PendingAuto => ({
           id: url.searchParams.get("conversationId") || Crypto.randomUUID(),
           agentId: url.searchParams.get("agentId") || undefined,
           message: url.searchParams.get("message") || undefined,
           cancelAfter: Number(url.searchParams.get("cancelAfter") || 0),
         });
+        if (!authenticated) {
+          const email = url.searchParams.get("email");
+          const password = url.searchParams.get("password");
+          if (
+            !email ||
+            !password ||
+            autoLoginStarted.current ||
+            boot.backend.mode !== "supabase" ||
+            !boot.backend.url ||
+            !boot.backend.publishableKey
+          )
+            return;
+          autoLoginStarted.current = true;
+          pendingAutoUrl.current = value;
+          void signIn(
+            boot.backend.url,
+            boot.backend.publishableKey,
+            email,
+            password,
+          )
+            .then(() => setAttempt((n) => n + 1))
+            .catch((cause) => {
+              autoLoginStarted.current = false;
+              setError(cause instanceof Error ? cause.message : "自动登录失败。");
+            });
+          return;
+        }
+        pendingAutoUrl.current = null;
+        setPendingAuto(parseAuto());
       } catch {
         /* ignore invalid links */
       }
     };
-    if (pendingAutoUrl.current) handle(pendingAutoUrl.current);
-    else
-      void Linking.getInitialURL()
-        .then(handle)
-        .catch(() => {});
+    if (!initialUrlTaken.current) {
+      initialUrlTaken.current = true;
+      if (pendingAutoUrl.current) {
+        const value = pendingAutoUrl.current;
+        pendingAutoUrl.current = null;
+        handle(value);
+      } else
+        void Linking.getInitialURL()
+          .then(handle)
+          .catch(() => {});
+    }
     const subscription = Linking.addEventListener("url", ({ url }) =>
       handle(url),
     );
     return () => subscription.remove();
   }, [boot, authenticated]);
 
+  // pendingAuto 变化即导航到对应会话（replace，避免历史栈堆积）。
   useEffect(() => {
-    if (
-      !boot?.automationEnabled ||
-      authenticated ||
-      boot.backend.mode !== "supabase" ||
-      !boot.backend.url ||
-      !boot.backend.publishableKey
-    )
-      return;
-    const url = boot.backend.url;
-    const key = boot.backend.publishableKey;
-    const handle = (value: string | null | undefined) => {
-      if (!value || autoLoginStarted.current) return;
-      try {
-        const link = new URL(value);
-        const email = link.searchParams.get("email");
-        const password = link.searchParams.get("password");
-        if (link.hostname !== "autostart" || !email || !password) return;
-        autoLoginStarted.current = true;
-        pendingAutoUrl.current = value;
-        void signIn(url, key, email, password)
-          .then(() => setAttempt((n) => n + 1))
-          .catch((cause) => {
-            autoLoginStarted.current = false;
-            setError(cause instanceof Error ? cause.message : "自动登录失败。");
-          });
-      } catch {
-        /* ignore malformed automation links */
-      }
-    };
-    void Linking.getInitialURL()
-      .then(handle)
-      .catch(() => {});
-    const subscription = Linking.addEventListener("url", ({ url: link }) =>
-      handle(link),
-    );
-    return () => subscription.remove();
-  }, [boot, authenticated]);
+    if (!authenticated || !boot || !pendingAuto) return;
+    router.replace({
+      pathname: "/chat/[id]",
+      params: { id: pendingAuto.id, agentId: pendingAuto.agentId ?? "" },
+    });
+  }, [authenticated, boot, pendingAuto, router]);
 
   const invalidateBoot = useCallback(() => {
     if (!boot || boot.generation !== bootGeneration.current) return false;
@@ -307,6 +317,11 @@ export function App() {
     () => !!boot && boot.generation === bootGeneration.current,
     [boot],
   );
+  const dropSession = useCallback(() => {
+    setPendingAuto(undefined);
+    setAccountEmail("");
+    router.replace("/");
+  }, [router]);
   const getToken = useCallback(async () => {
     if (!boot || boot.generation !== bootGeneration.current)
       throw new Error("认证配置已更改，请重试。");
@@ -324,15 +339,14 @@ export function App() {
       if (!token) {
         invalidateBoot();
         setError("登录已过期，请重新登录。");
-        setChat(undefined);
-        setDrawerOpen(false);
         setAuthenticated(false);
+        dropSession();
         throw new Error("登录已过期，请重新登录。");
       }
       return token;
     }
     return boot.config.accessToken;
-  }, [boot, invalidateBoot]);
+  }, [boot, dropSession, invalidateBoot]);
   useEffect(() => {
     if (
       !boot ||
@@ -347,26 +361,23 @@ export function App() {
       () => {
         if (!invalidateBoot()) return;
         setError("请登录后继续使用。");
-        setChat(undefined);
-        setDrawerOpen(false);
-        setAccountEmail("");
         setAuthenticated(false);
+        dropSession();
       },
     );
-  }, [boot, invalidateBoot]);
+  }, [boot, dropSession, invalidateBoot]);
   const onUnauthorized = useCallback(() => {
     if (!boot || !invalidateBoot()) return;
-    setDrawerOpen(false);
     if (boot.backend.mode === "supabase") {
       setError("登录已过期，请重新登录。");
-      setAccountEmail("");
-      setChat(undefined);
       setAuthenticated(false);
+      dropSession();
     } else {
       setError("服务端拒绝了访问，请联系管理员检查认证配置。");
+      setPendingAuto(undefined);
       setBoot(undefined);
     }
-  }, [boot, invalidateBoot]);
+  }, [boot, dropSession, invalidateBoot]);
   const openSettings = (value?: BoundCredential) => {
     setBinding(value);
     setDraftProvider(provider);
@@ -374,7 +385,19 @@ export function App() {
     setSettingsTab("provider");
     setSettings(true);
   };
-  const save = async (value: ProviderConfigDraft) => {
+  const saveProviderModel = async (model: string) => {
+    const next = { ...provider, model };
+    try {
+      await saveProviderConfig(next);
+      setProvider(next);
+      return true;
+    } catch {
+      openSettings();
+      setSettingsError("保存模型失败，请重试。");
+      return false;
+    }
+  };
+  const save = async (value: Parameters<typeof saveProviderConfig>[0]) => {
     setBusy(true);
     setSettingsError("");
     try {
@@ -387,6 +410,63 @@ export function App() {
       setBusy(false);
     }
   };
+  const handleSignOut = () => {
+    if (!boot || !boot.backend.url || !boot.backend.publishableKey) return;
+    void signOut(boot.backend.url, boot.backend.publishableKey)
+      .then(() => {
+        invalidateBoot();
+        setAuthenticated(false);
+        dropSession();
+      })
+      .catch(() => setError("退出登录失败，请重试。"));
+  };
+  const openChat = useCallback<RootContextValue["openChat"]>(
+    (params, mode) => {
+      if (mode === "replace") setPendingAuto(undefined);
+      router[mode]({
+        pathname: "/chat/[id]",
+        params: {
+          id: params.id,
+          agentId: params.agentId ?? "",
+          title: params.title ?? "",
+        },
+      });
+    },
+    [router],
+  );
+  const goHome = useCallback(() => {
+    setPendingAuto(undefined);
+    router.replace("/");
+  }, [router]);
+  const contextValue = useMemo<RootContextValue>(
+    () => ({
+      boot,
+      provider,
+      accountEmail,
+      pendingAuto,
+      routeParams,
+      getToken,
+      isCurrent,
+      onUnauthorized,
+      openSettings,
+      saveProviderModel,
+      signOut: handleSignOut,
+      openChat,
+      goHome,
+    }),
+    [
+      accountEmail,
+      boot,
+      getToken,
+      goHome,
+      isCurrent,
+      onUnauthorized,
+      openChat,
+      pendingAuto,
+      provider,
+      routeParams,
+    ],
+  );
   if (loading)
     return (
       <SafeAreaView style={styles.center}>
@@ -410,167 +490,58 @@ export function App() {
         onSignedIn={() => setAttempt((n) => n + 1)}
       />
     );
-  const chatConfig: NativeConfig = {
-    ...boot.config,
-    conversationId: chat?.id ?? "",
-    agentId: chat?.agentId ?? "",
-  };
-  const handleSignOut = () => {
-    if (!boot.backend.url || !boot.backend.publishableKey) return;
-    void signOut(boot.backend.url, boot.backend.publishableKey)
-      .then(() => {
-        invalidateBoot();
-        setDrawerOpen(false);
-        setAccountEmail("");
-        setAuthenticated(false);
-        setChat(undefined);
-      })
-      .catch(() => setError("退出登录失败，请重试。"));
-  };
   return (
-    <SafeAreaView style={styles.flex}>
-      {boot.automationEnabled && !chat && (
-        <Button
-          label={showProbe ? "返回主页" : "流式诊断"}
-          onPress={() => setShowProbe((value) => !value)}
-        />
-      )}
-      {showProbe && boot.automationEnabled && !chat ? (
-        <Probe streamFetch={expoFetch} />
-      ) : chat ? (
-        <View style={styles.flex}>
-          <NativeChat
-            key={chat.id}
-            config={chatConfig}
-            provider={provider}
-            getToken={getToken}
-            onUnauthorized={onUnauthorized}
-            isCurrent={isCurrent}
-            autoMessage={chat.message}
-            cancelAfter={chat.cancelAfter}
-            title={chat.title}
-            onOpenDrawer={() => setDrawerOpen(true)}
-            onConfigure={openSettings}
-            onModelSelected={(model, startNew) => {
-              const next = { ...provider, model };
-              void saveProviderConfig(next)
-                .then(() => {
-                  setProvider(next);
-                  if (startNew)
-                    setChat({
-                      id: Crypto.randomUUID(),
-                      agentId: chat.agentId,
-                      title: "新对话",
-                    });
-                })
-                .catch(() => {
-                  openSettings();
-                  setSettingsError("保存模型失败，请重试。");
-                });
-            }}
-          />
-          <ChatDrawer
-            visible={drawerOpen}
-            activeId={chat.id}
-            agentId={chat.agentId}
-            config={boot.config}
-            getToken={getToken}
-            onUnauthorized={onUnauthorized}
-            isCurrent={isCurrent}
-            email={accountEmail || undefined}
-            onClose={() => setDrawerOpen(false)}
-            onBackHome={() => {
-              setDrawerOpen(false);
-              setChat(undefined);
-            }}
-            onNewConversation={() => {
-              setDrawerOpen(false);
-              setChat({
-                id: Crypto.randomUUID(),
-                agentId: chat.agentId,
-                title: "新对话",
-              });
-            }}
-            onSelectConversation={(id, agentId, title) => {
-              setDrawerOpen(false);
-              setChat({ id, agentId, title });
-            }}
-            onActiveTitle={(id, title) =>
-              setChat((current) =>
-                current && current.id === id ? { ...current, title } : current,
-              )
-            }
-            onActiveDeleted={() =>
-              setChat((current) =>
-                current
-                  ? {
-                      id: Crypto.randomUUID(),
-                      agentId: current.agentId,
-                      title: "新对话",
-                    }
-                  : current,
-              )
-            }
-            onOpenSettings={() => openSettings()}
-            onSignOut={
-              boot.backend.mode === "supabase" ? handleSignOut : undefined
-            }
-          />
-        </View>
-      ) : (
-        <HomePage
-          config={boot.config}
-          getToken={getToken}
-          onUnauthorized={onUnauthorized}
-          isCurrent={isCurrent}
-          onOpenSettings={() => openSettings()}
-          onOpenAgent={(agentId) =>
-            setChat({ id: Crypto.randomUUID(), agentId, title: "新对话" })
-          }
-          onOpenConversation={(id, agentId, title) => setChat({ id, agentId, title })}
-        />
-      )}
-      {!!error && <Text accessibilityRole="alert">{error}</Text>}
-      {boot.backend.mode === "supabase" && !chat && (
-        <Button label="退出登录" onPress={handleSignOut} />
-      )}
-      {settings && (
-        <View style={styles.overlay}>
-          <Button label="关闭设置" onPress={() => setSettings(false)} />
-          <View style={styles.tabRow}>
-            <Button
-              label={settingsTab === "provider" ? "模型供应商 ●" : "模型供应商"}
-              onPress={() => setSettingsTab("provider")}
-            />
-            <Button
-              label={settingsTab === "knowledge" ? "知识库 ●" : "知识库"}
-              onPress={() => setSettingsTab("knowledge")}
-            />
+    <RootContext.Provider value={contextValue}>
+      <SafeAreaView style={styles.flex}>
+        <Stack screenOptions={{ headerShown: false, animation: "none" }} />
+        {!!error && <Text accessibilityRole="alert">{error}</Text>}
+        {settings && (
+          <View style={styles.overlay}>
+            <Button label="关闭设置" onPress={() => setSettings(false)} />
+            <View style={styles.tabRow}>
+              <Button
+                label={settingsTab === "provider" ? "模型供应商 ●" : "模型供应商"}
+                onPress={() => setSettingsTab("provider")}
+              />
+              <Button
+                label={settingsTab === "knowledge" ? "知识库 ●" : "知识库"}
+                onPress={() => setSettingsTab("knowledge")}
+              />
+            </View>
+            {settingsTab === "provider" ? (
+              <ProviderConfigForm
+                value={draftProvider}
+                onChange={setDraftProvider}
+                onSubmit={(value) => void save(value)}
+                busy={busy}
+                error={settingsError}
+                credentialBinding={binding}
+                onReset={() => setDraftProvider(defaultProvider)}
+                description="配置只保存在当前设备，账号不会同步 API Key。"
+              />
+            ) : (
+              <KnowledgeSettings
+                config={boot.config}
+                getToken={getToken}
+                onUnauthorized={onUnauthorized}
+                isCurrent={isCurrent}
+              />
+            )}
           </View>
-          {settingsTab === "provider" ? (
-            <ProviderConfigForm
-              value={draftProvider}
-              onChange={setDraftProvider}
-              onSubmit={(value) => void save(value)}
-              busy={busy}
-              error={settingsError}
-              credentialBinding={binding}
-              onReset={() => setDraftProvider(defaultProvider)}
-              description="配置只保存在当前设备，账号不会同步 API Key。"
-            />
-          ) : (
-            <KnowledgeSettings
-              config={boot.config}
-              getToken={getToken}
-              onUnauthorized={onUnauthorized}
-              isCurrent={isCurrent}
-            />
-          )}
-        </View>
-      )}
-    </SafeAreaView>
+        )}
+      </SafeAreaView>
+    </RootContext.Provider>
   );
 }
+
+/** 当前活跃路由的会话参数；由根布局统一直入上下文，路由文件保持零 Router 依赖。 */
+function useChatParams(): ChatRouteParams {
+  const params = useGlobalSearchParams();
+  const pick = (key: string) =>
+    typeof params[key] === "string" ? (params[key] as string) : undefined;
+  return { id: pick("id"), agentId: pick("agentId"), title: pick("title") };
+}
+
 function Login({
   url,
   publishableKey,
@@ -604,23 +575,11 @@ function Login({
     </SafeAreaView>
   );
 }
-function Button({ label, onPress }: { label: string; onPress: () => void }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={styles.button}
-    >
-      <Text style={styles.buttonText}>{label}</Text>
-    </Pressable>
-  );
-}
+
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: "#fff" },
   center: { flex: 1, justifyContent: "center", padding: 24, gap: 12 },
   loginContent: { flexGrow: 1, justifyContent: "center", padding: 24, gap: 12 },
-  button: { padding: 12, alignSelf: "flex-start" },
-  buttonText: { color: "#087d61", fontWeight: "600" },
   overlay: {
     position: "absolute",
     top: 0,
