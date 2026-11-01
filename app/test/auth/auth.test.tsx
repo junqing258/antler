@@ -60,6 +60,26 @@ afterEach(() => {
 });
 
 describe("LoginView", () => {
+  it("does not render bare text nodes when switching authentication modes", () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      render(<LoginView />);
+      fireEvent.click(screen.getByRole("button", { name: "忘记密码？" }));
+      fireEvent.click(screen.getByRole("button", { name: "返回登录" }));
+      fireEvent.click(screen.getByRole("button", { name: "没有账号？注册" }));
+      expect(
+        errors.mock.calls.filter((args) =>
+          args.some(
+            (arg) =>
+              typeof arg === "string" &&
+              arg.includes("A text node cannot be a child of a <View>"),
+          ),
+        ),
+      ).toEqual([]);
+    } finally {
+      errors.mockRestore();
+    }
+  });
   const enterEmail = () => {
     fireEvent.click(screen.getByRole("button", { name: "没有账号？注册" }));
     fireEvent.change(screen.getByLabelText("密码"), { target: { value: "secret123" } });
@@ -96,6 +116,7 @@ describe("LoginView", () => {
     mocks.updatePassword.mockRejectedValueOnce({ code: "same_password" });
     fireEvent.click(screen.getByRole("button", { name: "重置密码" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("不能与原密码相同");
+    await waitFor(() => expect(screen.getByRole("button", { name: "重置密码" })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "重置密码" }));
     expect(await screen.findByRole("button", { name: "登录" })).toBeInTheDocument();
     expect(mocks.updatePassword).toHaveBeenLastCalledWith("new-secret123");

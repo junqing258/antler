@@ -53,21 +53,7 @@ export function loadProviderConfig(): ProviderConfig {
   }
 }
 
-export function getModelPickerConfig(
-  config: ProviderConfig,
-  serverModel: string,
-  boundModel?: string,
-): Pick<ProviderConfig, "model" | "models"> {
-  if (config.apiKey.trim())
-    return {
-      model: boundModel ?? config.model,
-      models:
-        boundModel && config.models.length
-          ? [...new Set([boundModel, ...config.models])]
-          : config.models,
-    };
-  return { model: boundModel ?? serverModel, models: [] };
-}
+export { getModelPickerConfig } from "@antler/client-runtime";
 
 const PROVIDER_CONFIG_CHANGED = "antler:provider-config-changed";
 

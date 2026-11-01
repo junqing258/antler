@@ -10,6 +10,8 @@ export function installConversationFixture(model = "test-model") {
     "fetch",
     vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = new URL(String(input), "http://localhost");
+      if (url.pathname === "/api/auth-config")
+        return Response.json({ mode: "local", requiresAccessToken: false });
       if (url.pathname === "/api/conversations/changes")
         return new Response(new ReadableStream({ start() {} }));
       if (url.pathname === "/api/conversations")

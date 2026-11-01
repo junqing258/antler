@@ -16,7 +16,7 @@ export type SupabaseTokenVerifier = (
 export function createSupabaseTokenVerifier(
   config: AppConfig,
 ): SupabaseTokenVerifier {
-  const issuer = `${config.supabaseUrl}/auth/v1`;
+  const issuer = `${config.supabaseUrl?.replace(/\/+$/, "")}/auth/v1`;
   const jwks = createRemoteJWKSet(new URL(`${issuer}/.well-known/jwks.json`));
   let mode: "jwks" | "auth-server" | undefined;
 

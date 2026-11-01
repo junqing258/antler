@@ -105,10 +105,11 @@ export function createHttpSessionDependencies(
     prepareCancel: async () => {
       const connection = await platform.connection();
       return async (runId) => {
-        await platform.request(
+        const response = await platform.request(
           `${connection.baseUrl}/api/runs/${encodeURIComponent(runId)}/cancel`,
           { method: "POST", headers: connection.headers },
         );
+        if (!response.ok) throw new Error("停止请求失败，请重试。");
       };
     },
     getProvider,

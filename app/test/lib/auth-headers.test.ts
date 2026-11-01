@@ -31,8 +31,8 @@ describe("loadAuthConfig / authHeaders", () => {
     });
   });
 
-  it("local 模式（含配置缺失）返回共享令牌头", async () => {
-    stubAuthConfig({ mode: "local" });
+  it("local 模式返回共享令牌头", async () => {
+    stubAuthConfig({ mode: "local", requiresAccessToken: false });
     const { loadAuthConfig, authHeaders } = await import("@/lib/server-info");
     await expect(loadAuthConfig()).resolves.toBe("local");
     expect(authHeaders({ baseUrl: "", token: "shared-token" })).toEqual({
@@ -40,17 +40,16 @@ describe("loadAuthConfig / authHeaders", () => {
     });
   });
 
-  it("后端不可达时按 local 模式降级", async () => {
+  it("后端不可达时拒绝并允许重试", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {
         throw new Error("ECONNREFUSED");
       }),
     );
-    const { loadAuthConfig, authHeaders } = await import("@/lib/server-info");
+    const { loadAuthConfig } = await import("@/lib/server-info");
+    await expect(loadAuthConfig()).rejects.toThrow("ECONNREFUSED");
+    stubAuthConfig({ mode: "local", requiresAccessToken: false });
     await expect(loadAuthConfig()).resolves.toBe("local");
-    expect(authHeaders({ baseUrl: "", token: "shared-token" })).toEqual({
-      "x-antler-token": "shared-token",
-    });
   });
 });

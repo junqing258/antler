@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { AppConfig } from "../config/env.js";
+import { validateAuthConfig, type AppConfig } from "../config/env.js";
 import {
   type SupabaseTokenVerifier,
   createSupabaseTokenVerifier,
@@ -16,7 +16,10 @@ function setCorsHeaders(reply: FastifyReply) {
   // The service only binds to loopback. The token protects requests from other local processes.
   reply
     .header("access-control-allow-origin", "*")
-    .header("access-control-allow-methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+    .header(
+      "access-control-allow-methods",
+      "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+    )
     .header(
       "access-control-allow-headers",
       "content-type, x-antler-token, authorization",
@@ -48,9 +51,10 @@ function bearerToken(request: FastifyRequest) {
 }
 
 export function registerHttpHooks(app: FastifyInstance, config: AppConfig) {
+  validateAuthConfig(config);
   app.decorateRequest("antlerAuthorized", false);
   const verifyToken: SupabaseTokenVerifier | undefined =
-    config.authMode === "supabase" && config.supabaseUrl
+    config.authMode === "supabase"
       ? createSupabaseTokenVerifier(config)
       : undefined;
 

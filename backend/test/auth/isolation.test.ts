@@ -53,6 +53,7 @@ describe("Supabase 多用户数据隔离", () => {
       maxRunDurationMs: 1_000,
       authMode: "supabase",
       supabaseUrl,
+      supabasePublishableKey: "test-publishable-key",
     });
     await app.ready();
   });

@@ -23,7 +23,7 @@ export function ModelPicker({
         style={styles.trigger}
       >
         <Text style={styles.label} numberOfLines={1}>
-          {model || "服务端默认"}
+          {model || "服务端默认模型"}
         </Text>
         <Text style={styles.chevron}>▾</Text>
       </Pressable>

@@ -55,3 +55,12 @@ it("parses the comma-separated model list with trimming and deduplication", () =
   expect(parseProviderModels("")).toEqual([]);
   expect(parseProviderModels("m-c,,m-c")).toEqual(["m-c"]);
 });
+
+it("reuses an old local token only for the same normalized endpoint and auth mode", async () => {
+  const { legacyLocalToken, defaultNativeConfig } = await import("../../mobile/src/native-config");
+  const old = { ...defaultNativeConfig, serverUrl: "https://server.example/", accessToken: "old-token" };
+  expect(legacyLocalToken(old, "https://server.example")).toBe("old-token");
+  expect(legacyLocalToken(old, "https://other.example")).toBe("");
+  expect(legacyLocalToken({ ...old, authMode: "supabase" }, "https://server.example")).toBe("");
+  expect(legacyLocalToken({ ...old, serverUrl: "invalid" }, "https://server.example")).toBe("");
+});

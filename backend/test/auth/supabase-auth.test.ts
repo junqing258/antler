@@ -54,11 +54,10 @@ describe("Supabase token verifier", () => {
     server.close();
   });
 
-  function verifierConfig(
-    overrides: Partial<AppConfig> = {},
-  ): AppConfig {
+  function verifierConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     return {
       supabaseUrl,
+      supabasePublishableKey: "test-publishable-key",
       ...overrides,
     } as AppConfig;
   }
@@ -75,8 +74,14 @@ describe("Supabase token verifier", () => {
       }
       response.writeHead(404).end();
     });
-    const token = await signToken(privateKey, "test-key", `${supabaseUrl}/auth/v1`);
-    const verifier = createSupabaseTokenVerifier(verifierConfig());
+    const token = await signToken(
+      privateKey,
+      "test-key",
+      `${supabaseUrl}/auth/v1`,
+    );
+    const verifier = createSupabaseTokenVerifier(
+      verifierConfig({ supabaseUrl: `${supabaseUrl}/` }),
+    );
     await expect(verifier(token)).resolves.toEqual({ id: "user-1" });
   });
 
@@ -94,7 +99,11 @@ describe("Supabase token verifier", () => {
     });
     const verifier = createSupabaseTokenVerifier(verifierConfig());
     await expect(
-      verifier(await signToken(privateKey, "test-key", `${supabaseUrl}/auth/v1`, { exp: "-1h" })),
+      verifier(
+        await signToken(privateKey, "test-key", `${supabaseUrl}/auth/v1`, {
+          exp: "-1h",
+        }),
+      ),
     ).rejects.toThrow();
     const { privateKey: otherKey } = await generateKeyPair("RS256");
     await expect(
@@ -137,7 +146,9 @@ describe("Supabase token verifier", () => {
       verifierConfig({ supabasePublishableKey: "publishable-key" }),
     );
     await expect(withKey("bad-token")).resolves.toBeUndefined();
-    const withoutKey = createSupabaseTokenVerifier(verifierConfig());
+    const withoutKey = createSupabaseTokenVerifier(
+      verifierConfig({ supabasePublishableKey: undefined }),
+    );
     await expect(withoutKey("any-token")).resolves.toBeUndefined();
   });
 });
@@ -171,6 +182,7 @@ describe("Supabase 认证模式下的 HTTP 钩子", () => {
       maxRunDurationMs: 1_000,
       authMode: "supabase",
       supabaseUrl,
+      supabasePublishableKey: "test-publishable-key",
     });
   });
 
@@ -180,10 +192,12 @@ describe("Supabase 认证模式下的 HTTP 钩子", () => {
   });
 
   it("API 未带令牌返回 401，探活保持公开", async () => {
-    expect((await app.inject({ method: "GET", url: "/api/config" })).statusCode)
-      .toBe(401);
-    expect((await app.inject({ method: "GET", url: "/health" })).statusCode)
-      .toBe(200);
+    expect(
+      (await app.inject({ method: "GET", url: "/api/config" })).statusCode,
+    ).toBe(401);
+    expect(
+      (await app.inject({ method: "GET", url: "/health" })).statusCode,
+    ).toBe(200);
   });
 
   it("带有效 Bearer 令牌可访问 API", async () => {

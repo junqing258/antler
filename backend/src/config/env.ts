@@ -57,11 +57,18 @@ const smtp =
       }
     : undefined;
 
+/** Unknown modes must not silently disable authentication. */
+export function parseAuthMode(value: string | undefined): "local" | "supabase" {
+  if (value === undefined || value === "local") return "local";
+  if (value === "supabase") return "supabase";
+  throw new Error("ANTLER_AUTH_MODE 无效：仅支持 local 或 supabase。");
+}
+
 export const config: AppConfig = {
   host: process.env.ANTLER_HOST ?? "127.0.0.1",
   port: Number(process.env.ANTLER_PORT ?? 3210),
   accessToken: process.env.ANTLER_ACCESS_TOKEN,
-  authMode: process.env.ANTLER_AUTH_MODE === "supabase" ? "supabase" : "local",
+  authMode: parseAuthMode(process.env.ANTLER_AUTH_MODE),
   supabaseUrl: process.env.ANTLER_SUPABASE_URL,
   supabasePublishableKey: process.env.ANTLER_SUPABASE_PUBLISHABLE_KEY,
   schedulerEnableScript: process.env.ANTLER_SCHEDULER_ENABLE_SCRIPT === "true",
@@ -95,3 +102,35 @@ export const config: AppConfig = {
     : undefined,
   databaseUrl: process.env.DATABASE_URL,
 };
+
+/** Fail closed before starting a server with incomplete Supabase authentication. */
+export function validateAuthConfig(config: AppConfig): void {
+  if (
+    config.authMode !== undefined &&
+    config.authMode !== "local" &&
+    config.authMode !== "supabase"
+  )
+    throw new Error("ANTLER_AUTH_MODE 无效：仅支持 local 或 supabase。");
+  if (config.authMode !== "supabase") return;
+  let validUrl = false;
+  try {
+    const url = new URL(config.supabaseUrl ?? "");
+    validUrl =
+      (url.protocol === "https:" || url.protocol === "http:") &&
+      !url.username &&
+      !url.password &&
+      !url.search &&
+      !url.hash &&
+      config.supabaseUrl === config.supabaseUrl?.trim();
+  } catch {
+    /* reported below */
+  }
+  if (
+    !validUrl ||
+    !config.supabasePublishableKey?.trim() ||
+    config.supabasePublishableKey !== config.supabasePublishableKey.trim()
+  )
+    throw new Error(
+      "Supabase 认证配置无效：请检查 ANTLER_SUPABASE_URL 和 ANTLER_SUPABASE_PUBLISHABLE_KEY。",
+    );
+}

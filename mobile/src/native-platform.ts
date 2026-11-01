@@ -4,17 +4,34 @@ import { AppState } from "react-native";
 import type { ClientPlatform } from "@antler/platform";
 import type { NativeConfig } from "./native-config";
 
-export function createNativePlatform(config: NativeConfig): ClientPlatform {
+export function createNativePlatform(
+  config: NativeConfig,
+  getToken: () => Promise<string> = async () => config.accessToken,
+  onUnauthorized?: () => void,
+  isCurrent: () => boolean = () => true,
+): ClientPlatform {
+  const assertCurrent = () => {
+    if (!isCurrent()) throw new Error("认证配置已更改，请重试。");
+  };
   return {
     initialize: async () => {},
     connection: async () => {
+      assertCurrent();
+      const token = await getToken();
+      assertCurrent();
       const headers: Record<string, string> =
         config.authMode === "supabase"
-          ? { authorization: `Bearer ${config.accessToken}` }
-          : { "x-antler-token": config.accessToken };
+          ? { authorization: `Bearer ${token}` }
+          : { "x-antler-token": token };
       return { baseUrl: config.serverUrl, headers };
     },
-    request: (url, init) => expoFetch(url, init),
+    request: async (url, init) => {
+      assertCurrent();
+      const response = await expoFetch(url, init);
+      assertCurrent();
+      if (response.status === 401) onUnauthorized?.();
+      return response;
+    },
     abortController: () => new AbortController(),
     decoder: () => new TextDecoder(),
     schedule: (callback, ms) => {

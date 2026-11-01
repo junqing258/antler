@@ -235,6 +235,9 @@ importers:
       expo-clipboard:
         specifier: ~58.0.4
         version: 58.0.4(expo@58.0.22)(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
+      expo-constants:
+        specifier: ~58.0.14
+        version: 58.0.14(expo@58.0.22)(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(typescript@6.0.3)
       expo-crypto:
         specifier: ~58.0.7
         version: 58.0.7(expo@58.0.22)
@@ -8984,7 +8987,7 @@ snapshots:
 
   '@expo/env@2.5.3':
     dependencies:
-      chalk: 4.1.1
+      chalk: 4.1.2
       debug: 4.4.3
       getenv: 2.0.0
     transitivePeerDependencies:
@@ -9354,7 +9357,7 @@ snapshots:
       '@types/istanbul-reports': 3.0.4
       '@types/node': 26.2.0
       '@types/yargs': 17.0.35
-      chalk: 4.1.1
+      chalk: 4.1.2
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
@@ -12946,7 +12949,7 @@ snapshots:
     dependencies:
       '@jest/types': 29.6.3
       '@types/node': 26.2.0
-      chalk: 4.1.1
+      chalk: 4.1.2
       ci-info: 3.9.0
       graceful-fs: 4.2.11
       picomatch: 2.3.2
@@ -12955,7 +12958,7 @@ snapshots:
     dependencies:
       '@jest/types': 29.6.3
       camelcase: 6.3.0
-      chalk: 4.1.1
+      chalk: 4.1.2
       jest-get-type: 29.6.3
       leven: 3.1.0
       pretty-format: 29.7.0

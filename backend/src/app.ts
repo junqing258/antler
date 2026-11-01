@@ -1,3 +1,4 @@
+import { validateAuthConfig } from "./config/env.js";
 import { generateAgentIcon } from "./platform/agent-icon.js";
 import { agentWorkspace } from "./platform/agent-workspace.js";
 import { createHash } from "node:crypto";
@@ -50,6 +51,7 @@ import { currentRunUserId } from "./run-context.js";
 import { skillEnvironment } from "./config/tool-environment.js";
 
 export function createApp(config: AppConfig) {
+  validateAuthConfig(config);
   mkdirSync(config.workspaceRoot, { recursive: true });
   // Schema-free embedded apps have ephemeral storage just like their in-memory database.
   const ephemeralPlatform =

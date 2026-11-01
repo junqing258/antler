@@ -78,3 +78,22 @@ it("maps server snapshots and submits with the host's authenticated connection",
     }),
   );
 });
+
+it("reports cancellation rejected by the server", async () => {
+  const platform: ClientPlatform = {
+    initialize: async () => {},
+    connection: async () => ({ baseUrl: "https://backend", headers: {} }),
+    request: async () => new Response("", { status: 503 }),
+    abortController: () => new AbortController(),
+    decoder: () => new TextDecoder(),
+    schedule: () => () => {},
+    createId: () => "id",
+    onForeground: () => () => {},
+  };
+  const cancel = await createHttpSessionDependencies(
+    platform,
+    () => ({ apiKey: "" }),
+    () => {},
+  ).prepareCancel();
+  await expect(cancel("run")).rejects.toThrow("停止请求失败");
+});

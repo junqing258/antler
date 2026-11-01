@@ -329,6 +329,18 @@ describe("ChatSession", () => {
     f.session.stop();
   });
 
+  it("lets the server choose a provider for a new session without a local API key", async () => {
+    const f = fixture();
+    f.deps.getProvider = () => ({ apiKey: "", protocol: "openai-responses", baseUrl: "https://old.example", model: "old-model" });
+    vi.mocked(f.deps.getConversation).mockResolvedValue(undefined);
+    f.session.start();
+    await vi.waitFor(() => expect(f.session.getSnapshot().ready).toBe(true));
+    await f.session.send("hello");
+    expect(f.post).toHaveBeenCalledOnce();
+    expect(JSON.parse(f.post.mock.calls[0][0])).not.toHaveProperty("provider");
+    f.session.stop();
+  });
+
   it("keeps server credentials independent of the current device", async () => {
     const f = fixture();
     f.deps.getProvider = () => ({

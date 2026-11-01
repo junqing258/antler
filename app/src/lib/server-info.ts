@@ -39,42 +39,70 @@ export function createPasswordRecoveryClient(): SupabaseClient | undefined {
 
 /**
  * 从后端拉取认证配置并按需创建 Supabase 客户端。
- * 后端未就绪或 local 模式时保持无登录行为（本地开发场景）。
+ * 仅明确的 local 配置免登录；读取失败由认证门显示错误并允许重试。
  */
 export async function loadAuthConfig(): Promise<AuthMode> {
   if (!loaded) {
     loaded = (async () => {
-      // 后端启动通常慢于前端（tsx 编译 + 数据库连接），重试避免误降级为无登录。
-      for (let attempt = 0; attempt < 5; attempt++) {
-        try {
-          const response = await fetch(`${localBaseUrl()}/api/auth-config`, {
-            signal: AbortSignal.timeout(5_000),
-          });
-          if (!response.ok) return;
-          const config = (await response.json()) as {
-            mode?: unknown;
-            url?: unknown;
-            publishableKey?: unknown;
-          };
-          if (
-            config.mode === "supabase" &&
-            typeof config.url === "string" &&
-            typeof config.publishableKey === "string"
-          ) {
-            authModeValue = "supabase";
-            publicAuthConfig = { url: config.url, publishableKey: config.publishableKey };
-            client = createClient(config.url, config.publishableKey, {
-              auth: { autoRefreshToken: true, persistSession: true },
-            });
-          }
-          return;
-        } catch {
-          if (attempt < 4) await new Promise((r) => setTimeout(r, 800));
-        }
+      const response = await fetch(`${localBaseUrl()}/api/auth-config`, {
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!response.ok) throw new Error("无法读取认证配置，请检查服务连接。");
+      const config = (await response.json().catch(() => {
+        throw new Error("服务端认证配置无效。");
+      })) as Record<string, unknown>;
+      if (
+        config &&
+        config.mode === "local" &&
+        typeof config.requiresAccessToken === "boolean"
+      ) {
+        authModeValue = "local";
+        return;
       }
+      if (
+        config &&
+        config.mode === "supabase" &&
+        typeof config.url === "string" &&
+        typeof config.publishableKey === "string" &&
+        config.publishableKey.trim()
+      ) {
+        let url: URL;
+        try {
+          url = new URL(config.url);
+        } catch {
+          throw new Error("服务端认证配置无效。");
+        }
+        if (
+          (url.protocol !== "https:" && url.protocol !== "http:") ||
+          url.username ||
+          url.password ||
+          url.search ||
+          url.hash
+        )
+          throw new Error("服务端认证配置无效。");
+        authModeValue = "supabase";
+        publicAuthConfig = {
+          url: config.url,
+          publishableKey: config.publishableKey,
+        };
+        client = createClient(config.url, config.publishableKey, {
+          auth: { autoRefreshToken: true, persistSession: true },
+        });
+        return;
+      }
+      throw new Error(
+        config?.mode === "local"
+          ? "服务端版本过旧，请升级服务端。"
+          : "服务端认证配置无效。",
+      );
     })();
   }
-  await loaded;
+  try {
+    await loaded;
+  } catch (error) {
+    loaded = undefined;
+    throw error;
+  }
   return authModeValue;
 }
 

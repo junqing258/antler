@@ -444,3 +444,17 @@ export { subscribeRunStream } from "./run-stream";
 export { subscribeChangeStream } from "./change-stream";
 export type { ConversationChange } from "./change-stream";
 export { createHttpSessionDependencies } from "./http-session";
+
+/** Shared model-picker semantics for local and server-bound conversations. */
+export function getModelPickerConfig(
+  config: { apiKey: string; model: string; models: string[] },
+  serverModel: string,
+  boundModel?: string,
+): { model: string; models: string[] } {
+  if (config.apiKey.trim()) return {
+    model: boundModel ?? config.model,
+    models: boundModel && config.models.length
+      ? [...new Set([boundModel, ...config.models])] : config.models,
+  };
+  return { model: boundModel ?? serverModel, models: [] };
+}

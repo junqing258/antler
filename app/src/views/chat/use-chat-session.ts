@@ -79,13 +79,14 @@ export function useChatSession(
           prepareCancel: async () => {
             const server = await platform.connection();
             return async (runId) => {
-              await platform.request(
-                `${server.baseUrl}/api/runs/${runId}/cancel`,
+              const response = await platform.request(
+                `${server.baseUrl}/api/runs/${encodeURIComponent(runId)}/cancel`,
                 {
                   method: "POST",
                   headers: server.headers,
                 },
               );
+              if (!response.ok) throw new Error("停止请求失败，请重试。");
             };
           },
           getProvider: () => ({ ...refs.current.getProviderConfig() }),

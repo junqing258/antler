@@ -228,7 +228,7 @@ export function AuthForm({
           />
         </>
       )}
-      {sentEmail && !recoveryVerified && (
+      {!!sentEmail && !recoveryVerified && (
         <>
           <Text style={styles.fieldLabel}>验证码</Text>
           <TextInput
@@ -265,7 +265,7 @@ export function AuthForm({
       >
         <Text style={styles.submitText}>{busy ? "请稍候…" : submitLabel}</Text>
       </Pressable>
-      {sentEmail && !recoveryVerified && (
+      {!!sentEmail && !recoveryVerified && (
         <View style={styles.resendRow}>
           <Pressable
             accessibilityRole="button"

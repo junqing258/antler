@@ -30,18 +30,17 @@ OPENAI_API_KEY=your-api-key
 
 自托管 Web 部署可启用 Supabase Auth（邮箱密码注册/登录）：浏览器持有 Supabase 会话并随请求发送 `Authorization: Bearer <access_token>`，backend 校验签名后按用户 ID 隔离运行记录与定时任务。`local` 模式不展示登录页，仍使用共享访问令牌。
 
-Supabase 控制台准备：开启 Email provider；项目使用非对称 JWT 签名密钥（新项目默认即是，`GET <项目URL>/auth/v1/.well-known/jwks.json` 能返回密钥）。若项目仍是 HS256 共享密钥，需配置 `ANTLER_SUPABASE_PUBLISHABLE_KEY`，backend 会改走 `/auth/v1/user` 在线校验。
+Supabase 控制台准备：开启 Email provider；项目使用非对称 JWT 签名密钥（新项目默认即是，`GET <项目URL>/auth/v1/.well-known/jwks.json` 能返回密钥）。项目必须配置 `ANTLER_SUPABASE_PUBLISHABLE_KEY`，供客户端登录；若项目仍是 HS256 共享密钥，backend 也会使用它调用 `/auth/v1/user` 在线校验。
 
 backend 环境变量（`.env`）：
 
 ```dotenv
 ANTLER_AUTH_MODE=supabase
 ANTLER_SUPABASE_URL=https://<project-ref>.supabase.co
-# 仅 HS256 项目需要：
-# ANTLER_SUPABASE_PUBLISHABLE_KEY=<publishable key>
+ANTLER_SUPABASE_PUBLISHABLE_KEY=<publishable key>
 ```
 
-前端无需单独配置：启动时从 `GET /api/auth-config` 获取认证配置（含 Supabase URL 与 publishable key），随后在浏览器直连 Supabase 完成邮箱密码登录。`ANTLER_AUTH_MODE=supabase` 时本地开发与 Web 部署行为一致。
+Supabase URL 或 publishable key 缺失或无效时服务端拒绝启动；`ANTLER_AUTH_MODE` 若已设置，只能为 `local` 或 `supabase`。前端无需单独配置：启动时从 `GET /api/auth-config` 获取认证配置（含 Supabase URL 与 publishable key），随后在浏览器直连 Supabase 完成邮箱密码登录。`ANTLER_AUTH_MODE=supabase` 时本地开发与 Web 部署行为一致。
 数据隔离：`runs`、会话、`scheduled_tasks` 和 `task_executions` 记录归属用户；local 模式使用本地用户范围。连接同一后端并登录同一账号的设备可查看服务端会话，浏览器中的模型 API Key 不随账号同步。已知约束：登录用户仍可指定服务器上任意绝对路径作为 Agent 工作目录，如需收紧应在网关或后续版本限制在 `ANTLER_WORKSPACE_ROOT` 之下。
 
 后端数据存放在 Postgres（推荐 Supabase）中，启动前必须设置 `DATABASE_URL` 指向 Postgres 连接串（应用运行可使用事务池化连接；`prisma migrate deploy` 需要直连或会话池化连接）。`ANTLER_WORKSPACE_ROOT` 仍决定 Agent 工作空间目录。修改 `backend/prisma/schema.prisma` 后，运行：
@@ -174,3 +173,7 @@ v1 **每个数据库仅允许一个 backend 进程**（会话上下文、调度�
 `read` / `write` / `edit` 对平台根进行路径拒绝，技能资源读取限制在单技能目录内。**bash 没有文件系统沙箱**，仍可访问进程用户可访问的绝对路径；`0700` 不能隔离同一用户启动的 bash。bash 改写或删除缓存文件不会污染数据库：下次读取检测到指纹不符即从数据库重建缓存，技能保持 `ready`；只有数据库行自身不一致才会标记 `tampered`，`broken` 表示数据库内容本身不可用（如回填失败），作者重新上传同一技能可恢复。真正隔离需在部署层让 bash 使用另一个用户或容器。运行持有技能读租约直到工具执行结束，覆盖更新与删除等待租约释放。
 
 升级前没有技能上下文的普通聊天，首次成功续聊建立技能基线；此后重启也严格校验。无法据此检测升级前的技能变化。历史空属主或多属主冲突会话在 supabase 模式下拒绝自动认领，需明确迁移。`/api/runs` 不再要求 `projectId`；数据库中的旧项目字段仅为历史兼容保留，不参与会话组织。
+
+## Mobile 构建
+
+移动端后端地址、构建环境与设备验证步骤见 [Mobile 构建配置](docs/mobile-build-configuration.md)。

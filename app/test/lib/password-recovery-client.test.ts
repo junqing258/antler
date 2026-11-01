@@ -39,7 +39,7 @@ describe("password recovery client", () => {
   });
 
   it("does not create a recovery client in local mode", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ mode: "local" })));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ mode: "local", requiresAccessToken: false })));
     const { loadAuthConfig, createPasswordRecoveryClient } = await import("@/lib/server-info");
     await loadAuthConfig();
     expect(createPasswordRecoveryClient()).toBeUndefined();

@@ -24,12 +24,14 @@ export const defaultNativeConfig: NativeConfig = {
 };
 /** 解析设置中逗号分隔的模型列表：去空白、去空项、去重。 */
 export function parseProviderModels(value: string): string[] {
-  return [...new Set(
-    value
-      .split(",")
-      .map((model) => model.trim())
-      .filter(Boolean),
-  )];
+  return [
+    ...new Set(
+      value
+        .split(",")
+        .map((model) => model.trim())
+        .filter(Boolean),
+    ),
+  ];
 }
 export function validateServerUrl(value: string, allowHttp: boolean): string {
   let url: URL;
@@ -119,4 +121,19 @@ export function deserializeNativeConfig(
   )
     config.providerKey = saved.providerKey;
   return config;
+}
+
+/** Only a credential bound to the same local endpoint can survive an upgrade. */
+export function legacyLocalToken(
+  config: NativeConfig,
+  serverUrl: string,
+): string {
+  if (config.authMode !== "local") return "";
+  try {
+    return validateServerUrl(config.serverUrl, true) === serverUrl
+      ? config.accessToken
+      : "";
+  } catch {
+    return "";
+  }
 }

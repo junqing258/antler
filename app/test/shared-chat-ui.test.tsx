@@ -495,7 +495,7 @@ describe("shared model picker", () => {
     render(
       <ModelPicker model="" models={[]} onModelChange={onModelChange} />,
     );
-    expect(screen.getByText("服务端默认")).toBeInTheDocument();
+    expect(screen.getByText("服务端默认模型")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "选择模型" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "选择模型" }));
     expect(screen.queryByRole("button", { name: "m-a" })).not.toBeInTheDocument();
