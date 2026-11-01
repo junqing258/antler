@@ -14,7 +14,7 @@ Run commands from the repository root with pnpm 10:
 - `pnpm test` runs all Vitest suites; `pnpm test:watch` reruns on changes.
 - `pnpm test:coverage` writes V8 text and HTML coverage reports.
 - `pnpm build` builds the Web UI and backend; use `pnpm build:web`, `pnpm build:server`, or `pnpm build:mobile` (Expo export) for one.
-- `pnpm dev:mobile` starts the Expo dev server for the mobile app.
+- `pnpm dev:mobile` starts the Metro dev server for the mobile app with dev env vars (device/simulator preview; use `pnpm --filter @antler/mobile ios:device` to build and install on a USB-connected iPhone).
 - `pnpm --filter @antler/server db:migrate -- --name <name>` creates a Prisma migration after schema changes.
 
 ## Coding Style & Naming Conventions

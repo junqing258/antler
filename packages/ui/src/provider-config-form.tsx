@@ -260,9 +260,9 @@ export function ProviderConfigForm({
 }
 
 const styles = StyleSheet.create({
-  form: { maxWidth: 560, gap: 14 },
+  form: { maxWidth: 560 },
   title: { fontSize: 18, fontWeight: "600", color: "#222" },
-  description: { fontSize: 12, color: "#777" },
+  description: { fontSize: 12, color: "#777", marginTop: 4 },
   binding: {
     borderRadius: 8,
     borderWidth: 1,
@@ -270,10 +270,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#fffbeb",
     padding: 12,
     gap: 4,
+    marginTop: 16,
   },
   bindingTitle: { fontSize: 12, fontWeight: "600", color: "#78350f" },
   bindingText: { fontSize: 12, color: "#92400e" },
-  fieldLabel: { fontSize: 12, fontWeight: "600", color: "#4b4b4b" },
+  fieldLabel: { fontSize: 12, fontWeight: "600", color: "#4b4b4b", marginTop: 16, marginBottom: 6 },
   input: {
     borderWidth: 1,
     borderColor: "#ddd",
@@ -297,7 +298,7 @@ const styles = StyleSheet.create({
   protocolActive: { borderColor: "#087d61", backgroundColor: "#f2faf5" },
   protocolText: { fontSize: 13, color: "#222" },
   protocolActiveText: { fontSize: 13, color: "#087d61", fontWeight: "600" },
-  hint: { fontSize: 12, color: "#777" },
+  hint: { fontSize: 12, color: "#777", marginBottom: 8 },
   modelRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -307,6 +308,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    marginBottom: 8,
   },
   modelSelect: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
   radio: { color: "#777" },
@@ -342,6 +344,7 @@ const styles = StyleSheet.create({
     color: "#b42318",
     fontSize: 12,
     padding: 10,
+    marginTop: 12,
   },
   notice: {
     borderRadius: 8,
@@ -351,8 +354,9 @@ const styles = StyleSheet.create({
     color: "#087d61",
     fontSize: 12,
     padding: 10,
+    marginTop: 12,
   },
-  footerRow: { flexDirection: "row", gap: 8 },
+  footerRow: { flexDirection: "row", gap: 8, marginTop: 16 },
   secondaryButton: {
     borderWidth: 1,
     borderColor: "#ddd",

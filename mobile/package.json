@@ -4,9 +4,10 @@
   "version": "0.1.0",
   "main": "expo-router/entry",
   "scripts": {
-    "start": "expo start",
+    "ios:device": "bash scripts/ios-device.sh",
+    "start:device": "bash scripts/ios-device.sh metro",
     "check": "tsc --noEmit",
-    "export": "expo export --platform all"
+    "export": "npx expo export --platform all"
   },
   "dependencies": {
     "@antler/chat-core": "workspace:*",

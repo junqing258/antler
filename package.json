@@ -22,7 +22,7 @@
     "test:watch": "pnpm --parallel --stream --filter @antler/platform --filter @antler/chat-core --filter @antler/client-runtime --filter @antler/app --filter @antler/server test:watch",
     "test:coverage": "pnpm --filter @antler/platform test:coverage && pnpm --filter @antler/chat-core test:coverage && pnpm --filter @antler/client-runtime test:coverage && pnpm --filter @antler/app test:coverage && pnpm --filter @antler/server test:coverage",
     "check:mobile": "pnpm --filter @antler/mobile check",
-    "dev:mobile": "pnpm --filter @antler/mobile start",
+    "dev:mobile": "pnpm --filter @antler/mobile start:device",
     "build:mobile": "pnpm --filter @antler/mobile export",
     "build:probe": "pnpm --filter @antler/app build:probe"
   },
