@@ -46,6 +46,8 @@ export function NativeChat({
   isCurrent,
   autoMessage = "",
   cancelAfter = 0,
+  title = "",
+  onOpenDrawer,
 }: {
   config: NativeConfig;
   provider: ProviderConfigDraft;
@@ -56,6 +58,8 @@ export function NativeChat({
   isCurrent?: () => boolean;
   autoMessage?: string;
   cancelAfter?: number;
+  title?: string;
+  onOpenDrawer?: () => void;
 }) {
   const providerRef = useRef(provider);
   providerRef.current = provider;
@@ -194,10 +198,25 @@ export function NativeChat({
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.row}>
+        {onOpenDrawer && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="打开会话菜单"
+            onPress={onOpenDrawer}
+            hitSlop={8}
+            style={styles.menuButton}
+          >
+            <Text style={styles.menuIcon}>☰</Text>
+          </Pressable>
+        )}
         <View style={styles.title}>
-          <Text style={styles.heading}>对话</Text>
+          <Text numberOfLines={1} style={styles.heading}>
+            {title || "对话"}
+          </Text>
           {!!boundModel && (
-            <Text>{`${state.executionConfig?.protocol ?? "服务端配置"} · ${state.executionConfig?.baseUrl || "默认地址"} · ${boundModel}`}</Text>
+            <Text numberOfLines={1} style={styles.subtitle}>
+              {`${state.executionConfig?.protocol ?? "服务端配置"} · ${state.executionConfig?.baseUrl || "默认地址"} · ${boundModel}`}
+            </Text>
           )}
         </View>
         <Action
@@ -249,8 +268,16 @@ export function NativeChat({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  title: { flex: 1 },
+  title: { flex: 1, minWidth: 0 },
   heading: { fontSize: 18, fontWeight: "700" },
+  subtitle: { fontSize: 12, color: "#777" },
+  menuButton: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuIcon: { fontSize: 22, color: "#333" },
   button: { borderRadius: 8, backgroundColor: "#087d61", padding: 10 },
   buttonText: { color: "white", fontWeight: "600" },
   row: {

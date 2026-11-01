@@ -48,6 +48,7 @@ vi.mock("../../mobile/src/native-storage", () => ({
 vi.mock("../../mobile/src/native-auth", () => ({
   loadAuthBackendConfig: async () => state.backend,
   currentAccessToken: async () => state.token,
+  currentAccountEmail: async () => "user@example.com",
   disposeNativeAuth: () => {},
   onNativeSignedOut: (_url: string, _key: string, callback: () => void) => {
     state.signedOut = callback;
@@ -109,6 +110,7 @@ vi.mock("@antler/ui", () => ({
   ProviderConfigForm: ({ onSubmit, value }: any) => (
     <button onClick={() => onSubmit(value)}>保存供应商</button>
   ),
+  ConversationList: () => <div>会话列表</div>,
 }));
 import { App } from "../../mobile/src/app";
 beforeEach(() => {

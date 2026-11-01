@@ -28,7 +28,7 @@ export function HomePage({
 }: {
   onOpenAgent: (agentId?: string) => void;
   onOpenSettings: () => void;
-  onOpenConversation: (id: string, agentId?: string) => void;
+  onOpenConversation: (id: string, agentId?: string, title?: string) => void;
   config: NativeConfig;
   getToken: () => Promise<string>;
   onUnauthorized: () => void;
@@ -176,7 +176,7 @@ export function HomePage({
         <Pressable
           key={item.id}
           accessibilityRole="button"
-          onPress={() => onOpenConversation(item.id, item.agentId)}
+          onPress={() => onOpenConversation(item.id, item.agentId, item.title || "新会话")}
           style={styles.history}
         >
           <Text numberOfLines={1}>{item.title || "新会话"}</Text>

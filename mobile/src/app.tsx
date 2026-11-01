@@ -22,6 +22,8 @@ import {
 import type { BoundCredential } from "@antler/client-runtime";
 import { HomePage } from "./home-page";
 import { NativeChat } from "./native-chat";
+import { ChatDrawer } from "./chat-drawer";
+import { KnowledgeSettings } from "./knowledge-settings";
 import { readAppConfig } from "./app-config";
 import {
   defaultNativeConfig,
@@ -37,6 +39,7 @@ import {
 } from "./provider-storage";
 import {
   currentAccessToken,
+  currentAccountEmail,
   loadAuthBackendConfig,
   createNativeAuthActions,
   disposeNativeAuth,
@@ -68,6 +71,9 @@ export function App() {
     useState<ProviderConfigDraft>(defaultProvider);
   const [settings, setSettings] = useState(false);
   const [settingsError, setSettingsError] = useState("");
+  const [settingsTab, setSettingsTab] = useState<"provider" | "knowledge">(
+    "provider",
+  );
   const [binding, setBinding] = useState<BoundCredential>();
   const [showProbe, setShowProbe] = useState(false);
   const autoLoginStarted = useRef(false);
@@ -75,9 +81,12 @@ export function App() {
   const [chat, setChat] = useState<{
     id: string;
     agentId?: string;
+    title?: string;
     message?: string;
     cancelAfter?: number;
   }>();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [accountEmail, setAccountEmail] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -202,6 +211,25 @@ export function App() {
     [],
   );
   useEffect(() => {
+    if (
+      !authenticated ||
+      !boot ||
+      boot.backend.mode !== "supabase" ||
+      !boot.backend.url ||
+      !boot.backend.publishableKey
+    )
+      return;
+    let alive = true;
+    void currentAccountEmail(boot.backend.url, boot.backend.publishableKey)
+      .then((email) => {
+        if (alive) setAccountEmail(email);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [boot, authenticated]);
+  useEffect(() => {
     if (!boot?.automationEnabled || !authenticated) return;
     const handle = (value: string | null | undefined) => {
       if (!value) return;
@@ -297,6 +325,7 @@ export function App() {
         invalidateBoot();
         setError("登录已过期，请重新登录。");
         setChat(undefined);
+        setDrawerOpen(false);
         setAuthenticated(false);
         throw new Error("登录已过期，请重新登录。");
       }
@@ -319,14 +348,18 @@ export function App() {
         if (!invalidateBoot()) return;
         setError("请登录后继续使用。");
         setChat(undefined);
+        setDrawerOpen(false);
+        setAccountEmail("");
         setAuthenticated(false);
       },
     );
   }, [boot, invalidateBoot]);
   const onUnauthorized = useCallback(() => {
     if (!boot || !invalidateBoot()) return;
+    setDrawerOpen(false);
     if (boot.backend.mode === "supabase") {
       setError("登录已过期，请重新登录。");
+      setAccountEmail("");
       setChat(undefined);
       setAuthenticated(false);
     } else {
@@ -338,6 +371,7 @@ export function App() {
     setBinding(value);
     setDraftProvider(provider);
     setSettingsError("");
+    setSettingsTab("provider");
     setSettings(true);
   };
   const save = async (value: ProviderConfigDraft) => {
@@ -381,6 +415,18 @@ export function App() {
     conversationId: chat?.id ?? "",
     agentId: chat?.agentId ?? "",
   };
+  const handleSignOut = () => {
+    if (!boot.backend.url || !boot.backend.publishableKey) return;
+    void signOut(boot.backend.url, boot.backend.publishableKey)
+      .then(() => {
+        invalidateBoot();
+        setDrawerOpen(false);
+        setAccountEmail("");
+        setAuthenticated(false);
+        setChat(undefined);
+      })
+      .catch(() => setError("退出登录失败，请重试。"));
+  };
   return (
     <SafeAreaView style={styles.flex}>
       {boot.automationEnabled && !chat && (
@@ -393,7 +439,6 @@ export function App() {
         <Probe streamFetch={expoFetch} />
       ) : chat ? (
         <View style={styles.flex}>
-          <Button label="← 主页" onPress={() => setChat(undefined)} />
           <NativeChat
             key={chat.id}
             config={chatConfig}
@@ -403,6 +448,8 @@ export function App() {
             isCurrent={isCurrent}
             autoMessage={chat.message}
             cancelAfter={chat.cancelAfter}
+            title={chat.title}
+            onOpenDrawer={() => setDrawerOpen(true)}
             onConfigure={openSettings}
             onModelSelected={(model, startNew) => {
               const next = { ...provider, model };
@@ -410,13 +457,64 @@ export function App() {
                 .then(() => {
                   setProvider(next);
                   if (startNew)
-                    setChat({ id: Crypto.randomUUID(), agentId: chat.agentId });
+                    setChat({
+                      id: Crypto.randomUUID(),
+                      agentId: chat.agentId,
+                      title: "新对话",
+                    });
                 })
                 .catch(() => {
                   openSettings();
                   setSettingsError("保存模型失败，请重试。");
                 });
             }}
+          />
+          <ChatDrawer
+            visible={drawerOpen}
+            activeId={chat.id}
+            agentId={chat.agentId}
+            config={boot.config}
+            getToken={getToken}
+            onUnauthorized={onUnauthorized}
+            isCurrent={isCurrent}
+            email={accountEmail || undefined}
+            onClose={() => setDrawerOpen(false)}
+            onBackHome={() => {
+              setDrawerOpen(false);
+              setChat(undefined);
+            }}
+            onNewConversation={() => {
+              setDrawerOpen(false);
+              setChat({
+                id: Crypto.randomUUID(),
+                agentId: chat.agentId,
+                title: "新对话",
+              });
+            }}
+            onSelectConversation={(id, agentId, title) => {
+              setDrawerOpen(false);
+              setChat({ id, agentId, title });
+            }}
+            onActiveTitle={(id, title) =>
+              setChat((current) =>
+                current && current.id === id ? { ...current, title } : current,
+              )
+            }
+            onActiveDeleted={() =>
+              setChat((current) =>
+                current
+                  ? {
+                      id: Crypto.randomUUID(),
+                      agentId: current.agentId,
+                      title: "新对话",
+                    }
+                  : current,
+              )
+            }
+            onOpenSettings={() => openSettings()}
+            onSignOut={
+              boot.backend.mode === "supabase" ? handleSignOut : undefined
+            }
           />
         </View>
       ) : (
@@ -427,40 +525,47 @@ export function App() {
           isCurrent={isCurrent}
           onOpenSettings={() => openSettings()}
           onOpenAgent={(agentId) =>
-            setChat({ id: Crypto.randomUUID(), agentId })
+            setChat({ id: Crypto.randomUUID(), agentId, title: "新对话" })
           }
-          onOpenConversation={(id, agentId) => setChat({ id, agentId })}
+          onOpenConversation={(id, agentId, title) => setChat({ id, agentId, title })}
         />
       )}
       {!!error && <Text accessibilityRole="alert">{error}</Text>}
       {boot.backend.mode === "supabase" && !chat && (
-        <Button
-          label="退出登录"
-          onPress={() => {
-            if (boot.backend.url && boot.backend.publishableKey)
-              void signOut(boot.backend.url, boot.backend.publishableKey)
-                .then(() => {
-                  invalidateBoot();
-                  setAuthenticated(false);
-                  setChat(undefined);
-                })
-                .catch(() => setError("退出登录失败，请重试。"));
-          }}
-        />
+        <Button label="退出登录" onPress={handleSignOut} />
       )}
       {settings && (
         <View style={styles.overlay}>
           <Button label="关闭设置" onPress={() => setSettings(false)} />
-          <ProviderConfigForm
-            value={draftProvider}
-            onChange={setDraftProvider}
-            onSubmit={(value) => void save(value)}
-            busy={busy}
-            error={settingsError}
-            credentialBinding={binding}
-            onReset={() => setDraftProvider(defaultProvider)}
-            description="配置只保存在当前设备，账号不会同步 API Key。"
-          />
+          <View style={styles.tabRow}>
+            <Button
+              label={settingsTab === "provider" ? "模型供应商 ●" : "模型供应商"}
+              onPress={() => setSettingsTab("provider")}
+            />
+            <Button
+              label={settingsTab === "knowledge" ? "知识库 ●" : "知识库"}
+              onPress={() => setSettingsTab("knowledge")}
+            />
+          </View>
+          {settingsTab === "provider" ? (
+            <ProviderConfigForm
+              value={draftProvider}
+              onChange={setDraftProvider}
+              onSubmit={(value) => void save(value)}
+              busy={busy}
+              error={settingsError}
+              credentialBinding={binding}
+              onReset={() => setDraftProvider(defaultProvider)}
+              description="配置只保存在当前设备，账号不会同步 API Key。"
+            />
+          ) : (
+            <KnowledgeSettings
+              config={boot.config}
+              getToken={getToken}
+              onUnauthorized={onUnauthorized}
+              isCurrent={isCurrent}
+            />
+          )}
         </View>
       )}
     </SafeAreaView>
@@ -525,5 +630,10 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     padding: 16,
     paddingTop: 48,
+  },
+  tabRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 8,
   },
 });

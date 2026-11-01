@@ -192,6 +192,19 @@ export async function currentAccessToken(
   return data.session?.access_token ?? "";
 }
 
+/** 读取当前账号邮箱；不可得时返回空串，由界面显示中性占位。 */
+export async function currentAccountEmail(
+  url: string,
+  publishableKey: string,
+): Promise<string> {
+  const current = ensureClient(url, publishableKey);
+  const generation = authGeneration;
+  const { data } = await current.auth.getUser();
+  if (generation !== authGeneration || current !== client)
+    throw new Error("认证配置已更改，请重试。");
+  return typeof data.user?.email === "string" ? data.user.email : "";
+}
+
 /** A recovery flow uses an isolated in-memory client and cannot sign in the app. */
 export function createNativeAuthActions(
   url: string,
