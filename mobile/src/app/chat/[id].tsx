@@ -1,14 +1,29 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { View, StyleSheet } from "react-native";
 import * as Crypto from "expo-crypto";
-import { NativeChat } from "../../views/chat/native-chat";
-import { ChatDrawer } from "../../views/chat/chat-drawer";
+import { CachedNativeChat } from "../../views/chat/cached-native-chat";
+import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { CachedChatDrawer } from "../../views/chat/cached-chat-drawer";
+import type { ConversationSummary } from "../../lib/conversation-service";
 import type { NativeConfig } from "../../lib/native-config";
 import { useRoot } from "../../views/root/root-context";
 
 /** `/chat/[id]` 会话路由：解析会话参数并组装聊天页与抽屉。 */
 export function ChatRoute() {
   const root = useRoot();
+  const queryClient = useQueryClient();
+  const onConversationDeleted = useCallback((deletedId: string) => {
+    queryClient.removeQueries({ queryKey: ["conversation-messages", deletedId], exact: true });
+    queryClient.setQueriesData<ConversationSummary[]>({ queryKey: ["drawer-conversations"] },
+      (rows) => rows?.filter((row) => row.id !== deletedId));
+    queryClient.setQueryData<InfiniteData<{ conversations: { id: string }[]; nextCursor: string | null }>>(
+      ["home-conversations"],
+      (data) => data && ({ ...data, pages: data.pages.map((page) => ({
+        ...page, conversations: page.conversations.filter((row) => row.id !== deletedId),
+      })) }),
+    );
+    void queryClient.invalidateQueries({ queryKey: ["home-conversations"] });
+  }, [queryClient]);
   const [titles, setTitles] = useState<Record<string, string>>({});
   const [drawerOpen, setDrawerOpen] = useState(false);
   const id = root.routeParams.id;
@@ -25,7 +40,7 @@ export function ChatRoute() {
   };
   return (
     <View style={styles.flex}>
-      <NativeChat
+      <CachedNativeChat
         key={id}
         config={chatConfig}
         provider={root.provider}
@@ -47,7 +62,7 @@ export function ChatRoute() {
           });
         }}
       />
-      <ChatDrawer
+      <CachedChatDrawer
         visible={drawerOpen}
         activeId={id}
         agentId={agentId}
@@ -84,6 +99,7 @@ export function ChatRoute() {
             "replace",
           )
         }
+        onConversationDeleted={onConversationDeleted}
         onOpenSettings={() => root.openSettings()}
         onOpenProfile={() => root.openSettings(undefined, "profile")}
       />

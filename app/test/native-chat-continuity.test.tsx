@@ -10,6 +10,7 @@ const capture = vi.hoisted(() => ({
   running: false,
   ready: true,
   notice: "",
+  messages: [] as any[],
 }));
 vi.mock("../../mobile/node_modules/react-native-safe-area-context", () => ({
   SafeAreaInsetsContext: React.createContext({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -51,7 +52,7 @@ vi.mock("@antler/client-runtime", async (importOriginal) => ({
       ready: capture.ready,
       running: capture.running,
       sending: false,
-      messages: [],
+      messages: capture.messages,
       hasMore: false,
       notice: capture.notice,
       contextReason: "",
@@ -63,7 +64,7 @@ vi.mock("@antler/client-runtime", async (importOriginal) => ({
   },
 }));
 vi.mock("@antler/ui", () => ({
-  ChatScreen: ({ draft, onDraftChange, model, models, onModelChange, onConfigureCredentials }: any) => (
+  ChatScreen: ({ draft, onDraftChange, model, models, onModelChange, onConfigureCredentials, messages, ready, notice }: any) => (
     <>
       <input
         aria-label="聊天输入"
@@ -72,6 +73,9 @@ vi.mock("@antler/ui", () => ({
       />
       <span data-testid="model">{model || "服务端默认模型"}</span>
       <span data-testid="models">{models.join(",")}</span>
+      <span data-testid="message-preview">{messages.map((message: any) => message.content[0]?.text).join(",")}</span>
+      <span data-testid="chat-ready">{String(ready)}</span>
+      <span>{notice}</span>
       <button onClick={() => onModelChange("other-model")}>选择其他模型</button>
       <button onClick={onConfigureCredentials}>配置凭据</button>
     </>
@@ -89,6 +93,33 @@ afterEach(() => {
   capture.running = false;
   capture.ready = true;
   capture.notice = "";
+  capture.messages = [];
+});
+it("shows cached messages read-only while the live session is reconnecting", () => {
+  capture.ready = false;
+  render(<NativeChat
+    config={{ ...defaultNativeConfig, conversationId: "c" }}
+    provider={{ name: "x", protocol: "openai-responses", baseUrl: "", apiKey: "", model: "", models: [] }}
+    getToken={async () => ""} onUnauthorized={() => {}} onConfigure={() => {}} onModelSelected={() => {}}
+    cachedMessages={[{ id: "m", role: "user", content: [{ type: "text", text: "本地消息" }] }]}
+  />);
+  expect(screen.getByTestId("message-preview")).toHaveTextContent("本地消息");
+  expect(screen.getByTestId("chat-ready")).toHaveTextContent("false");
+  expect(screen.getByText(/显示本地缓存/)).toBeInTheDocument();
+});
+it("only caches server-sequenced messages after the session is ready", () => {
+  const save = vi.fn();
+  capture.messages = [
+    { id: "server", role: "user", seq: 2, content: [{ type: "text", text: "已保存" }] },
+    { id: "pending", role: "user", content: [{ type: "text", text: "未确认" }] },
+  ];
+  render(<NativeChat
+    config={{ ...defaultNativeConfig, conversationId: "c" }}
+    provider={{ name: "x", protocol: "openai-responses", baseUrl: "", apiKey: "", model: "", models: [] }}
+    getToken={async () => ""} onUnauthorized={() => {}} onConfigure={() => {}} onModelSelected={() => {}}
+    onCacheMessages={save}
+  />);
+  expect(save).toHaveBeenCalledWith([capture.messages[0]], false);
 });
 it("shows one centered loading state and connection notice while the session initializes", () => {
   capture.ready = false;
@@ -104,7 +135,7 @@ it("shows one centered loading state and connection notice while the session ini
     />,
   );
   expect(screen.getAllByText("正在加载会话…")).toHaveLength(1);
-  expect(screen.getByText("连接中断，正在重连")).toBeInTheDocument();
+  expect(screen.getByLabelText("连接中断，正在重连")).toBeInTheDocument();
   expect(screen.queryByLabelText("聊天输入")).not.toBeInTheDocument();
 });
 it("updates provider credentials without stopping the live session or discarding the draft", () => {

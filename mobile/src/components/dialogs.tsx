@@ -17,16 +17,20 @@ export function InputDialog({
   initialValue,
   confirmLabel = "确定",
   busy = false,
+  error,
   onConfirm,
   onCancel,
+  embedded = false,
 }: {
   visible: boolean;
   title: string;
   initialValue: string;
   confirmLabel?: string;
   busy?: boolean;
+  error?: string;
   onConfirm: (value: string) => void;
   onCancel: () => void;
+  embedded?: boolean;
 }) {
   const [value, setValue] = useState(initialValue);
   useEffect(() => {
@@ -37,13 +41,7 @@ export function InputDialog({
     if (invalid) return;
     onConfirm(value.trim());
   };
-  return (
-    <Modal
-      transparent
-      visible={visible}
-      animationType="fade"
-      onRequestClose={onCancel}
-    >
+  const content = (
       <Pressable style={styles.backdrop} onPress={onCancel}>
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -61,6 +59,7 @@ export function InputDialog({
               autoFocus
               style={styles.input}
             />
+            {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
             <View style={styles.actions}>
               <Pressable
                 accessibilityRole="button"
@@ -84,8 +83,9 @@ export function InputDialog({
           </Pressable>
         </KeyboardAvoidingView>
       </Pressable>
-    </Modal>
   );
+  if (embedded) return visible ? <View style={styles.overlay} accessibilityViewIsModal>{content}</View> : null;
+  return <Modal transparent visible={visible} animationType="fade" onRequestClose={onCancel}>{content}</Modal>;
 }
 
 /** 跨平台确认弹窗：用于删除等不可撤销操作。 */
@@ -95,29 +95,28 @@ export function ConfirmDialog({
   message,
   confirmLabel = "删除",
   busy = false,
+  error,
   onConfirm,
   onCancel,
+  embedded = false,
 }: {
   visible: boolean;
   title: string;
   message: string;
   confirmLabel?: string;
   busy?: boolean;
+  error?: string;
   onConfirm: () => void;
   onCancel: () => void;
+  embedded?: boolean;
 }) {
-  return (
-    <Modal
-      transparent
-      visible={visible}
-      animationType="fade"
-      onRequestClose={onCancel}
-    >
+  const content = (
       <Pressable style={styles.backdrop} onPress={onCancel}>
         <View style={styles.center} pointerEvents="box-none">
           <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
             <Text style={styles.title}>{title}</Text>
             <Text style={styles.message}>{message}</Text>
+            {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
             <View style={styles.actions}>
               <Pressable
                 accessibilityRole="button"
@@ -141,11 +140,13 @@ export function ConfirmDialog({
           </Pressable>
         </View>
       </Pressable>
-    </Modal>
   );
+  if (embedded) return visible ? <View style={styles.overlay} accessibilityViewIsModal>{content}</View> : null;
+  return <Modal transparent visible={visible} animationType="fade" onRequestClose={onCancel}>{content}</Modal>;
 }
 
 const styles = StyleSheet.create({
+  overlay: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   card: {
@@ -158,6 +159,7 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 16, fontWeight: "600", color: "#222" },
   message: { fontSize: 14, color: "#555" },
+  error: { fontSize: 14, color: "#b3261e" },
   input: {
     borderWidth: 1,
     borderColor: "#ddd",

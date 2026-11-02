@@ -31,6 +31,7 @@ import {
   type BoundCredential,
 } from "@antler/client-runtime";
 import type { NativeConfig } from "../../lib/native-config";
+import type { ChatMessage } from "@antler/chat-core";
 import { createNativePlatform } from "../../lib/native-platform";
 
 // The library’s class declaration targets older React Native types.
@@ -49,6 +50,8 @@ export function NativeChat({
   cancelAfter = 0,
   title = "",
   onOpenDrawer,
+  cachedMessages,
+  onCacheMessages,
 }: {
   config: NativeConfig;
   provider: ProviderConfigDraft;
@@ -61,6 +64,8 @@ export function NativeChat({
   cancelAfter?: number;
   title?: string;
   onOpenDrawer?: () => void;
+  cachedMessages?: ChatMessage[];
+  onCacheMessages?: (messages: ChatMessage[], hasMore: boolean) => void;
 }) {
   const providerRef = useRef(provider);
   providerRef.current = provider;
@@ -98,6 +103,11 @@ export function NativeChat({
   const [draft, setDraft] = useState("");
   const pendingDraft = useRef<string | null>(null);
   const [operationError, setOperationError] = useState("");
+  useEffect(() => {
+    if (!state.ready || state.running || state.sending || !onCacheMessages) return;
+    // Only persist messages that have a server sequence, never pending optimistic sends.
+    onCacheMessages(state.messages.filter((message) => typeof message.seq === "number"), state.hasMore);
+  }, [state.ready, state.running, state.sending, state.messages, state.hasMore, onCacheMessages]);
   useEffect(() => {
     session.start();
     const stopForeground = platform.onForeground(() => {
@@ -219,16 +229,16 @@ export function NativeChat({
           )}
         </View>
       </View>
-      {!state.ready ? (
+      {!state.ready && !cachedMessages?.length ? (
         <View style={styles.loading} accessibilityState={{ busy: true }}>
           <View style={styles.loadingLogo}>
             <Image source={require("../../../assets/antler-logo.png")} style={styles.logo} accessibilityIgnoresInvertColors />
           </View>
-          <View style={styles.loadingLabel} accessibilityRole="progressbar" accessibilityLabel="正在加载会话">
+          <View style={styles.loadingLabel} accessibilityRole="progressbar" accessibilityLabel={state.notice.includes("正在重连") ? state.notice : "正在加载会话"}>
             <ActivityIndicator size="small" color="#087d61" />
             <Text style={styles.loadingText}>正在加载会话…</Text>
           </View>
-          {!!state.notice && <Text accessibilityRole="alert" style={styles.loadingNotice}>{state.notice}</Text>}
+          {!!state.notice && !state.notice.includes("正在重连") && <Text accessibilityRole="alert" style={styles.loadingNotice}>{state.notice}</Text>}
         </View>
       ) : <View style={styles.chatContent}>
       <ChatScreen
@@ -243,12 +253,12 @@ export function NativeChat({
           </GradientMask>
         }
         composerBackground={<BlurView tint="light" intensity={65} style={StyleSheet.absoluteFill} />}
-        messages={state.messages}
+        messages={state.ready ? state.messages : cachedMessages ?? []}
         ready={state.ready}
         running={state.running}
         sending={state.sending}
         hasMore={state.hasMore}
-        notice={state.notice}
+        notice={state.ready ? state.notice : `显示本地缓存，${state.notice || "正在连接服务端…"}`}
         operationError={operationError}
         contextReason={state.contextReason}
         credentialProblem={problem}

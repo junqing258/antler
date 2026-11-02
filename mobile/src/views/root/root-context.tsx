@@ -25,6 +25,7 @@ export type RootContextValue = {
         backend: AuthBackendConfig;
         automationEnabled: boolean;
         generation: number;
+        cacheScope?: string;
       }
     | undefined;
   provider: ProviderConfigDraft;

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Keyboard, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Keyboard, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import type { ChatMessage } from "@antler/chat-core";
 import { Composer } from "./composer";
 import { MessageList } from "./message-list";
@@ -92,7 +92,11 @@ export function ChatScreen({
           <Text>加载更早消息</Text>
         </Pressable>
       )}
-      {!!notice && <Text accessibilityRole="alert">{notice}</Text>}
+      {!!notice && (notice.includes("正在重连") ? (
+        <View accessibilityRole="status" accessibilityLabel={notice} style={styles.connectionLoading}>
+          <ActivityIndicator size="small" color="#087d61" />
+        </View>
+      ) : <Text accessibilityRole="alert">{notice}</Text>)}
       {!!operationError && (
         <Text accessibilityRole="alert">{operationError}</Text>
       )}
@@ -165,6 +169,11 @@ const styles = StyleSheet.create({
   welcomeTitle: { fontSize: 24, fontWeight: "600", marginBottom: 24 },
   welcomeComposer: { width: "100%", maxWidth: 1024 },
   notices: { gap: 4, paddingHorizontal: 12, paddingTop: 4 },
+  connectionLoading: {
+    alignSelf: "center",
+    marginTop: 8,
+    padding: 8,
+  },
   loadEarlier: { alignSelf: "center", padding: 8 },
   warning: {
     flexDirection: "row",

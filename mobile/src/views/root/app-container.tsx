@@ -26,6 +26,7 @@ import { AuthForm, ProviderConfigForm } from "@antler/ui";
 import type { BoundCredential } from "@antler/client-runtime";
 import { Button } from "../../components/button";
 import { KnowledgeSettings } from "../settings/knowledge-settings";
+import { QueryProvider } from "./query-provider";
 import { readAppConfig } from "../../lib/app-config";
 import { createNativePlatform } from "../../lib/native-platform";
 import {
@@ -42,6 +43,7 @@ import {
 } from "../../lib/provider-storage";
 import {
   currentAccessToken,
+  currentAccountId,
   currentAccountEmail,
   loadAuthBackendConfig,
   createNativeAuthActions,
@@ -63,6 +65,7 @@ type Boot = {
   backend: AuthBackendConfig;
   automationEnabled: boolean;
   generation: number;
+  cacheScope?: string;
 };
 
 /**
@@ -141,6 +144,13 @@ export function AppContainer() {
         };
         const accessToken = await getToken();
         if (!alive || generation !== bootGeneration.current) return;
+        const accountId = backend.mode === "supabase" && backend.url && backend.publishableKey && accessToken
+          ? await currentAccountId(backend.url, backend.publishableKey)
+          : backend.mode === "local" ? `local:${token}` : "";
+        const cacheScope = accountId
+          ? await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, JSON.stringify([application.serverUrl, backend.mode, backend.url ?? "", accountId]))
+          : undefined;
+        if (!alive || generation !== bootGeneration.current) return;
         if (backend.mode === "local" || accessToken) {
           const platform = createNativePlatform(
             config,
@@ -173,6 +183,7 @@ export function AppContainer() {
                 backend,
                 automationEnabled: application.automationEnabled,
                 generation,
+                cacheScope,
               });
             }
             return;
@@ -190,6 +201,7 @@ export function AppContainer() {
             backend,
             automationEnabled: application.automationEnabled,
             generation,
+            cacheScope,
           });
           setAuthenticated(backend.mode === "local" || Boolean(accessToken));
         }
@@ -475,9 +487,8 @@ export function AppContainer() {
   );
   if (loading)
     return (
-      <SafeAreaView style={styles.center}>
-        <ActivityIndicator />
-        <Text>正在连接…</Text>
+      <SafeAreaView style={[styles.center, styles.connectionLoading]} accessibilityRole="status" accessibilityLabel="正在连接">
+        <ActivityIndicator size="small" color="#087d61" />
       </SafeAreaView>
     );
   if (!boot)
@@ -497,6 +508,7 @@ export function AppContainer() {
       />
     );
   return (
+    <QueryProvider key={boot.generation} scope={boot.cacheScope}>
     <RootContext.Provider value={contextValue}>
       <SafeAreaView style={styles.flex}>
         <Stack screenOptions={{ headerShown: false, animation: "none" }} />
@@ -577,6 +589,7 @@ export function AppContainer() {
         </Modal>}
       </SafeAreaView>
     </RootContext.Provider>
+    </QueryProvider>
   );
 }
 
@@ -625,6 +638,7 @@ function Login({
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: "#fff" },
   center: { flex: 1, justifyContent: "center", padding: 24, gap: 12 },
+  connectionLoading: { alignItems: "center", backgroundColor: "#fff" },
   loginContent: { flexGrow: 1, justifyContent: "center", padding: 24, gap: 12 },
   modalFrame: { flex: 1, backgroundColor: "rgba(0,0,0,0.38)", justifyContent: "center", padding: 16 },
   dialog: { width: "100%", maxWidth: 820, maxHeight: "92%", minHeight: 400, alignSelf: "center", borderRadius: 14, borderWidth: 1, borderColor: "#e4e4e4", backgroundColor: "white", overflow: "hidden" },

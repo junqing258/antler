@@ -96,6 +96,8 @@ vi.mock("../../mobile/node_modules/expo/fetch", () => ({ fetch: vi.fn() }));
 vi.mock("../../mobile/src/experiments/probe", () => ({ Probe: () => null }));
 vi.mock("../../mobile/node_modules/expo-crypto", () => ({
   randomUUID: () => "new-session",
+  CryptoDigestAlgorithm: { SHA256: "SHA-256" },
+  digestStringAsync: async (_algorithm: string, value: string) => value,
 }));
 vi.mock("../../mobile/src/lib/app-config", () => ({
   readAppConfig: () => {
@@ -112,6 +114,7 @@ vi.mock("../../mobile/src/lib/native-storage", () => ({
 vi.mock("../../mobile/src/lib/native-auth", () => ({
   loadAuthBackendConfig: async () => state.backend,
   currentAccessToken: async () => state.token,
+  currentAccountId: async () => "account-1",
   currentAccountEmail: async () => "user@example.com",
   disposeNativeAuth: () => {},
   onNativeSignedOut: (_url: string, _key: string, callback: () => void) => {

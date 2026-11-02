@@ -17,6 +17,8 @@ import {
   type ConversationSummary,
 } from "../../mobile/src/lib/conversation-service";
 import { ChatDrawer } from "../../mobile/src/views/chat/chat-drawer";
+import { CachedChatDrawer } from "../../mobile/src/views/chat/cached-chat-drawer";
+import { QueryProvider } from "../../mobile/src/views/root/query-provider";
 import {
   defaultNativeConfig,
   type NativeConfig,
@@ -34,6 +36,14 @@ const state = vi.hoisted(() => ({
       }) => void)
     | undefined,
   unsubscribe: undefined as (() => void) | undefined,
+}));
+const storage = vi.hoisted(() => new Map<string, string>());
+vi.mock("../../mobile/node_modules/@react-native-async-storage/async-storage", () => ({
+  default: {
+    getItem: async (key: string) => storage.get(key) ?? null,
+    setItem: async (key: string, value: string) => { storage.set(key, value); },
+    removeItem: async (key: string) => { storage.delete(key); },
+  },
 }));
 
 vi.mock("../../mobile/src/lib/conversation-service", () => ({
@@ -108,6 +118,7 @@ function DrawerHarness({
   onSelectConversation = () => {},
   onActiveTitle = () => {},
   onActiveDeleted = () => {},
+  onConversationDeleted = () => {},
 }: {
   activeId?: string;
   agentId?: string;
@@ -117,6 +128,7 @@ function DrawerHarness({
   onSelectConversation?: (id: string, agentId?: string, title?: string) => void;
   onActiveTitle?: (id: string, title: string) => void;
   onActiveDeleted?: () => void;
+  onConversationDeleted?: (id: string) => void;
 }) {
   const [visible, setVisible] = useState(true);
   return (
@@ -135,6 +147,7 @@ function DrawerHarness({
       onSelectConversation={onSelectConversation}
       onActiveTitle={onActiveTitle}
       onActiveDeleted={onActiveDeleted}
+      onConversationDeleted={onConversationDeleted}
       onOpenSettings={() => {}}
       onOpenProfile={onOpenProfile}
     />
@@ -158,6 +171,53 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  storage.clear();
+});
+
+it("restores the drawer's agent-scoped list while refreshing and after a request failure", async () => {
+  const drawer = (agentId: string) => <CachedChatDrawer visible activeId="a" agentId={agentId}
+    config={config} getToken={async () => "token"} onUnauthorized={() => {}} isCurrent={() => true}
+    onClose={() => {}} onBackHome={() => {}} onNewConversation={() => {}}
+    onSelectConversation={() => {}} onActiveTitle={() => {}} onActiveDeleted={() => {}}
+    onOpenSettings={() => {}} onOpenProfile={() => {}} />;
+  const first = render(<QueryProvider scope="drawer-test">{drawer("agent-1")}</QueryProvider>);
+  expect(await screen.findByText("会话乙")).toBeInTheDocument();
+  await waitFor(() => expect(storage.get("antler.mobile.query.v1.drawer-test") ?? "").toContain("会话乙"), { timeout: 3000 });
+  first.unmount();
+  let rejectRequest!: (error: Error) => void;
+  listMock.mockImplementation(() => new Promise((_resolve, reject) => { rejectRequest = reject; }));
+  const restored = render(<QueryProvider scope="drawer-test">{drawer("agent-1")}</QueryProvider>);
+  expect(await screen.findByText("会话乙")).toBeInTheDocument();
+  await waitFor(() => expect(rejectRequest).toBeDefined());
+  await act(async () => rejectRequest(new Error("网络不可用")));
+  expect(await screen.findByText("网络不可用")).toBeInTheDocument();
+  expect(screen.getByText("会话乙")).toBeInTheDocument();
+  restored.unmount();
+  render(<QueryProvider scope="drawer-test">{drawer("agent-2")}</QueryProvider>);
+  expect(await screen.findByText("正在加载会话…")).toBeInTheDocument();
+  expect(screen.queryByText("会话乙")).not.toBeInTheDocument();
+});
+
+it("replaces a cached drawer list with the authoritative server result", async () => {
+  const props = {
+    visible: true, activeId: "a", agentId: "agent-1", config,
+    getToken: async () => "token", onUnauthorized: () => {}, isCurrent: () => true,
+    onClose: () => {}, onBackHome: () => {}, onNewConversation: () => {},
+    onSelectConversation: () => {}, onActiveTitle: () => {}, onActiveDeleted: () => {},
+    onOpenSettings: () => {}, onOpenProfile: () => {},
+  };
+  const first = render(<QueryProvider scope="refresh-test"><CachedChatDrawer {...props} /></QueryProvider>);
+  expect(await screen.findByText("会话乙")).toBeInTheDocument();
+  await waitFor(() => expect(storage.get("antler.mobile.query.v1.refresh-test") ?? "").toContain("会话乙"), { timeout: 3000 });
+  first.unmount();
+  let resolveRequest!: (value: Awaited<ReturnType<typeof listConversations>>) => void;
+  listMock.mockImplementation(() => new Promise((resolve) => { resolveRequest = resolve; }));
+  render(<QueryProvider scope="refresh-test"><CachedChatDrawer {...props} /></QueryProvider>);
+  expect(await screen.findByText("会话乙")).toBeInTheDocument();
+  await waitFor(() => expect(resolveRequest).toBeDefined());
+  await act(async () => resolveRequest({ conversations: [row("c", "最新会话")], nextCursor: null, lastChangeId: 9 }));
+  expect(await screen.findByText("最新会话")).toBeInTheDocument();
+  expect(screen.queryByText("会话乙")).not.toBeInTheDocument();
 });
 
 it("uses the screen safe area when the iOS drawer first opens", () => {
@@ -255,9 +315,24 @@ it("keeps the row and reports an error when the rename fails", async () => {
   expect(screen.queryByText("冲突改名")).not.toBeInTheDocument();
 });
 
+it("shows delete and rename confirmations within the drawer modal", async () => {
+  render(<DrawerHarness />);
+  await screen.findByText("会话乙");
+  fireEvent.click(screen.getByRole("button", { name: "删除 会话乙" }));
+  const modal = screen.getByRole("dialog");
+  expect(within(modal).getByText("删除会话")).toBeInTheDocument();
+  expect(within(modal).getByRole("button", { name: "返回 Agent 首页" })).toBeInTheDocument();
+  expect(deleteMock).not.toHaveBeenCalled();
+  fireEvent.keyUp(document, { key: "Escape" });
+  expect(screen.queryByText("删除会话")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "重命名 会话乙" }));
+  expect(within(screen.getByRole("dialog")).getByLabelText("会话名称")).toBeInTheDocument();
+});
+
 it("deletes a non-active conversation after confirmation without switching", async () => {
   const onActiveDeleted = vi.fn();
-  render(<DrawerHarness onActiveDeleted={onActiveDeleted} />);
+  const onConversationDeleted = vi.fn();
+  render(<DrawerHarness onActiveDeleted={onActiveDeleted} onConversationDeleted={onConversationDeleted} />);
   await screen.findByText("会话乙");
   fireEvent.click(screen.getByRole("button", { name: "删除 会话乙" }));
   fireEvent.click(await screen.findByRole("button", { name: "删除" }));
@@ -268,6 +343,7 @@ it("deletes a non-active conversation after confirmation without switching", asy
     expect(screen.queryByText("会话乙")).not.toBeInTheDocument(),
   );
   expect(onActiveDeleted).not.toHaveBeenCalled();
+  expect(onConversationDeleted).toHaveBeenCalledWith("b");
 });
 
 it("keeps the conversation and reports an error when the delete fails", async () => {
@@ -312,7 +388,8 @@ it("merges later pages without duplicating rows", async () => {
 });
 
 it("applies server-side changes: updates titles and removes deleted rows", async () => {
-  render(<DrawerHarness />);
+  const onConversationDeleted = vi.fn();
+  render(<DrawerHarness onConversationDeleted={onConversationDeleted} />);
   await screen.findByText("会话甲");
   await waitFor(() => expect(state.changeHandler).toBeDefined());
   listMock.mockResolvedValueOnce({
@@ -343,6 +420,7 @@ it("applies server-side changes: updates titles and removes deleted rows", async
   await waitFor(() =>
     expect(screen.queryByText("服务端新标题")).not.toBeInTheDocument(),
   );
+  expect(onConversationDeleted).toHaveBeenCalledWith("b");
 });
 
 it("reports the active conversation title when it changes on the server", async () => {

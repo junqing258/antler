@@ -44,6 +44,9 @@ export function ChatDrawer({
   onSelectConversation,
   onActiveTitle,
   onActiveDeleted,
+  onConversationDeleted,
+  cachedConversations,
+  onCacheConversations,
   onOpenSettings,
   onOpenProfile,
 }: {
@@ -61,6 +64,9 @@ export function ChatDrawer({
   onSelectConversation: (id: string, agentId?: string, title?: string) => void;
   onActiveTitle: (id: string, title: string) => void;
   onActiveDeleted: () => void;
+  onConversationDeleted?: (id: string) => void;
+  cachedConversations?: ConversationSummary[];
+  onCacheConversations?: (rows: ConversationSummary[]) => void;
   onOpenSettings: () => void;
   onOpenProfile: () => void;
 }) {
@@ -71,8 +77,11 @@ export function ChatDrawer({
     [config, getToken, onUnauthorized, isCurrent],
   );
   const [summaries, setSummaries] = useState<Map<string, ConversationSummary>>(
-    () => new Map(),
+    () => new Map(cachedConversations?.map((row) => [row.id, row]) ?? []),
   );
+  const cachedRef = useRef(cachedConversations);
+  cachedRef.current = cachedConversations;
+  const [cacheReady, setCacheReady] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -142,6 +151,11 @@ export function ChatDrawer({
     let alive = true;
     tombstones.current = new Set();
     reportedTitle.current = "";
+    setCacheReady(false);
+    setChangeCursor(-1);
+    setNextCursor(null);
+    if (cachedRef.current)
+      setSummaries(new Map(cachedRef.current.map((row) => [row.id, row])));
     setLoading(true);
     setError("");
     void listConversations(platform, { agentId })
@@ -150,6 +164,7 @@ export function ChatDrawer({
         setSummaries(new Map(page.conversations.map((row) => [row.id, row])));
         setNextCursor(page.nextCursor);
         setChangeCursor(page.lastChangeId);
+        setCacheReady(true);
       })
       .catch((cause: unknown) => {
         if (alive)
@@ -178,6 +193,7 @@ export function ChatDrawer({
           return;
         }
         if (change.type === "deleted") {
+          onConversationDeleted?.(change.conversationId);
           tombstones.current.add(change.conversationId);
           setSummaries((current) => {
             const next = new Map(current);
@@ -205,7 +221,7 @@ export function ChatDrawer({
       },
       () => {},
     );
-  }, [visible, platform, agentId, changeCursor]);
+  }, [visible, platform, agentId, changeCursor, onConversationDeleted]);
 
   const rows = useMemo(
     () =>
@@ -216,6 +232,10 @@ export function ChatDrawer({
       ),
     [summaries],
   );
+
+  useEffect(() => {
+    if (cacheReady && !loading) onCacheConversations?.(rows);
+  }, [cacheReady, loading, rows, onCacheConversations]);
 
   // 当前会话标题变化（重命名、服务端生成）时通知宿主更新标题栏。
   const active = summaries.get(activeId);
@@ -284,6 +304,7 @@ export function ChatDrawer({
     setOperationError("");
     void deleteConversation(platform, target.id)
       .then(() => {
+        onConversationDeleted?.(target.id);
         tombstones.current.add(target.id);
         setSummaries((current) => {
           const next = new Map(current);
@@ -307,7 +328,12 @@ export function ChatDrawer({
         transparent
         visible={modalVisible}
         animationType="none"
-        onRequestClose={() => closeDrawer()}
+        onRequestClose={() => {
+          if (busy) return;
+          if (deleteTarget) { setDeleteTarget(undefined); setOperationError(""); }
+          else if (renameTarget) { setRenameTarget(undefined); setOperationError(""); }
+          else closeDrawer();
+        }}
       >
         <View style={styles.container}>
           <Animated.View
@@ -374,10 +400,10 @@ export function ChatDrawer({
                     </Pressable>
                   </View>
                 )}
-                {!error && loading && (
+                {loading && rows.length === 0 && (
                   <Text style={styles.hint}>正在加载会话…</Text>
                 )}
-                {!error && !loading && (
+                {(rows.length > 0 || (!error && !loading)) && (
                   <ScrollView keyboardShouldPersistTaps="handled">
                     <ConversationList
                       renameIcon={<Pencil size={17} color="#777" strokeWidth={1.8} />}
@@ -393,11 +419,11 @@ export function ChatDrawer({
                       }}
                       onRename={(item) => {
                         const row = summaries.get(item.id);
-                        if (row) setRenameTarget(row);
+                        if (row) { setOperationError(""); setRenameTarget(row); }
                       }}
                       onDelete={(item) => {
                         const row = summaries.get(item.id);
-                        if (row) setDeleteTarget(row);
+                        if (row) { setOperationError(""); setDeleteTarget(row); }
                       }}
                     />
                     {!!nextCursor && (
@@ -416,7 +442,7 @@ export function ChatDrawer({
                   </ScrollView>
                 )}
               </View>
-              {!!operationError && (
+              {!!operationError && !deleteTarget && !renameTarget && (
                 <Text
                   accessibilityRole="alert"
                   style={styles.operationError}
@@ -457,28 +483,32 @@ export function ChatDrawer({
             </SafeAreaColumn>
           </Animated.View>
         </View>
-      </Modal>
       <InputDialog
+        embedded
         visible={Boolean(renameTarget)}
         title="重命名会话"
         initialValue={renameTarget?.title ?? ""}
         confirmLabel="重命名"
         busy={busy}
+        error={operationError}
         onConfirm={submitRename}
         onCancel={() => {
-          if (!busy) setRenameTarget(undefined);
+          if (!busy) { setRenameTarget(undefined); setOperationError(""); }
         }}
       />
       <ConfirmDialog
+        embedded
         visible={Boolean(deleteTarget)}
         title="删除会话"
         message={`删除会话“${deleteTarget?.title || "新会话"}”？此操作无法撤销。`}
         busy={busy}
+        error={operationError}
         onConfirm={submitDelete}
         onCancel={() => {
-          if (!busy) setDeleteTarget(undefined);
+          if (!busy) { setDeleteTarget(undefined); setOperationError(""); }
         }}
       />
+      </Modal>
 
     </>
   );

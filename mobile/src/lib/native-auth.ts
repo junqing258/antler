@@ -192,6 +192,16 @@ export async function currentAccessToken(
   return data.session?.access_token ?? "";
 }
 
+/** Stable account identity for isolating local caches; never use a rotating token. */
+export async function currentAccountId(url: string, publishableKey: string): Promise<string> {
+  const current = ensureClient(url, publishableKey);
+  const generation = authGeneration;
+  const { data } = await current.auth.getSession();
+  if (generation !== authGeneration || current !== client)
+    throw new Error("认证配置已更改，请重试。");
+  return data.session?.user?.id ?? "";
+}
+
 /** 读取当前账号邮箱；不可得时返回空串，由界面显示中性占位。 */
 export async function currentAccountEmail(
   url: string,

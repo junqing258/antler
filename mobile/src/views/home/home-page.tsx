@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Bot, Settings } from "lucide-react-native";
 import { AgentList, type AgentCardItem } from "@antler/ui";
@@ -35,97 +35,47 @@ export function HomePage({
   onUnauthorized: () => void;
   isCurrent: () => boolean;
 }) {
-  const [conversations, setConversations] = useState<
-    { id: string; title?: string; agentId?: string }[]
-  >([]);
-  const [attempt, setAttempt] = useState(0);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [agents, setAgents] = useState<PlatformAgent[]>([]);
-  const [error, setError] = useState("");
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    setReady(false);
-    setError("");
-    void (async () => {
-      try {
-        const platform = createNativePlatform(
-          config,
-          getToken,
-          onUnauthorized,
-          isCurrent,
-        );
-        const connection = await platform.connection();
-        const response = await platform.request(
-          `${connection.baseUrl}/api/agents`,
-          { headers: connection.headers },
-        );
-        const historyResponse = await platform.request(
-          `${connection.baseUrl}/api/conversations?limit=50`,
-          { headers: connection.headers },
-        );
-        if (!historyResponse.ok) throw new Error("历史会话加载失败。");
-        const history = (await historyResponse.json()) as {
-          conversations?: { id: string; title?: string; agentId?: string }[];
-          nextCursor?: string | null;
-        };
-        if (!Array.isArray(history.conversations))
-          throw new Error("历史会话加载失败。");
-        if (alive) {
-          setConversations(history.conversations);
-          setNextCursor(history.nextCursor ?? null);
-        }
-        const data = (await response.json()) as { agents?: PlatformAgent[] };
-        if (alive && response.ok && Array.isArray(data.agents))
-          setAgents(data.agents);
-        else if (alive) setError("Agent 列表加载失败。");
-      } catch (cause) {
-        if (alive)
-          setError(
-            cause instanceof Error ? cause.message : "Agent 列表加载失败。",
-          );
-      } finally {
-        if (alive) setReady(true);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [config, getToken, onUnauthorized, isCurrent, attempt]);
-  const loadMore = async () => {
-    if (!nextCursor || loadingMore) return;
-    setLoadingMore(true);
-    try {
-      const platform = createNativePlatform(
-        config,
-        getToken,
-        onUnauthorized,
-        isCurrent,
-      );
+  const agentsQuery = useQuery({
+    queryKey: ["agents"],
+    queryFn: async ({ signal }) => {
+      const platform = createNativePlatform(config, getToken, onUnauthorized, isCurrent);
       const connection = await platform.connection();
+      const response = await platform.request(`${connection.baseUrl}/api/agents`, {
+        headers: connection.headers,
+        signal,
+      });
+      if (!response.ok) throw new Error("Agent 列表加载失败。");
+      const data = (await response.json()) as { agents?: PlatformAgent[] };
+      if (!Array.isArray(data.agents)) throw new Error("Agent 列表加载失败。");
+      return data.agents;
+    },
+  });
+  const agents = agentsQuery.data ?? [];
+  const historyQuery = useInfiniteQuery({
+    queryKey: ["home-conversations"],
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam, signal }) => {
+      const platform = createNativePlatform(config, getToken, onUnauthorized, isCurrent);
+      const connection = await platform.connection();
+      const cursor = pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : "";
       const response = await platform.request(
-        `${connection.baseUrl}/api/conversations?limit=50&cursor=${encodeURIComponent(nextCursor)}`,
-        { headers: connection.headers },
+        `${connection.baseUrl}/api/conversations?limit=50${cursor}`,
+        { headers: connection.headers, signal },
       );
-      if (!response.ok) throw new Error();
+      if (!response.ok) throw new Error("历史会话加载失败。");
       const page = (await response.json()) as {
-        conversations?: typeof conversations;
+        conversations?: { id: string; title?: string; agentId?: string }[];
         nextCursor?: string | null;
       };
-      if (!Array.isArray(page.conversations)) throw new Error();
-      setConversations((current) => [
-        ...new Map(
-          [...current, ...page.conversations!].map((row) => [row.id, row]),
-        ).values(),
-      ]);
-      setNextCursor(page.nextCursor ?? null);
-    } catch {
-      setError("历史会话加载失败，请重试。");
-    } finally {
-      setLoadingMore(false);
-    }
-  };
+      if (!Array.isArray(page.conversations)) throw new Error("历史会话加载失败。");
+      return { conversations: page.conversations, nextCursor: page.nextCursor ?? null };
+    },
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+  });
+  const conversations = [...new Map(
+    (historyQuery.data?.pages.flatMap((page) => page.conversations) ?? [])
+      .map((row) => [row.id, row]),
+  ).values()];
   const toCard = (agent: PlatformAgent): AgentCardItem => ({
     id: agent.id,
     name: agent.name,
@@ -163,16 +113,16 @@ export function HomePage({
           >
             <Text style={styles.primaryText}>直接开始对话</Text>
           </Pressable>
-          {!!error && (
+          {agentsQuery.isPending && <Text accessibilityRole="status">正在加载 Agent…</Text>}
+          {agentsQuery.isError && (
             <View style={styles.error}>
-              <Text accessibilityRole="alert">{error}</Text>
-              <Pressable accessibilityRole="button" onPress={() => setAttempt((n) => n + 1)}>
+              <Text accessibilityRole="alert">Agent 列表加载失败。</Text>
+              <Pressable accessibilityRole="button" onPress={() => void agentsQuery.refetch()}>
                 <Text style={styles.link}>重试</Text>
               </Pressable>
             </View>
           )}
-          {!ready && <Text accessibilityRole="status">正在加载 Agent 和历史会话…</Text>}
-          {ready && !error && (
+          {agentsQuery.data && (
             <AgentList
               groups={[
                 { name: "我的 Agent", items: agents.filter((a) => a.editable).map(toCard) },
@@ -187,7 +137,16 @@ export function HomePage({
             />
           )}
           <Text accessibilityRole="header" style={styles.section}>历史会话</Text>
-          {ready && !error && conversations.length === 0 && <Text style={styles.historyEmpty}>暂无历史会话</Text>}
+          {historyQuery.isPending && <Text accessibilityRole="status">正在加载历史会话…</Text>}
+          {historyQuery.isError && (
+            <View style={styles.error}>
+              <Text accessibilityRole="alert">历史会话加载失败，请重试。</Text>
+              <Pressable accessibilityRole="button" onPress={() => void (historyQuery.isFetchNextPageError ? historyQuery.fetchNextPage() : historyQuery.refetch())}>
+                <Text style={styles.link}>重试</Text>
+              </Pressable>
+            </View>
+          )}
+          {historyQuery.isSuccess && conversations.length === 0 && <Text style={styles.historyEmpty}>暂无历史会话</Text>}
           {conversations.map((item) => (
             <Pressable
               key={item.id}
@@ -198,9 +157,9 @@ export function HomePage({
               <Text numberOfLines={1}>{item.title || "新会话"}</Text>
             </Pressable>
           ))}
-          {!!nextCursor && (
-            <Pressable accessibilityRole="button" disabled={loadingMore} onPress={() => void loadMore()}>
-              <Text style={styles.link}>{loadingMore ? "加载中…" : "加载更多历史"}</Text>
+          {historyQuery.hasNextPage && (
+            <Pressable accessibilityRole="button" disabled={historyQuery.isFetching} onPress={() => void historyQuery.fetchNextPage()}>
+              <Text style={styles.link}>{historyQuery.isFetchingNextPage ? "加载中…" : "加载更多历史"}</Text>
             </Pressable>
           )}
         </ScrollView>
