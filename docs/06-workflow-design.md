@@ -467,7 +467,7 @@ backend/src/
 └── routes/
     └── workflows.ts
 
-app/src/
+web/src/
 ├── features/workflows/
 │   ├── api.ts
 │   ├── data-source.ts

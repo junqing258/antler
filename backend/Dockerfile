@@ -14,7 +14,7 @@ RUN sed -i "s|http://deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY backend/package.json backend/package.json
-COPY app/package.json app/package.json
+COPY web/package.json web/package.json
 COPY mobile/package.json mobile/package.json
 COPY packages/platform/package.json packages/platform/package.json
 COPY packages/chat-core/package.json packages/chat-core/package.json
@@ -23,7 +23,7 @@ COPY packages/ui/package.json packages/ui/package.json
 RUN pnpm install --frozen-lockfile --filter @antler/server... --filter @antler/app... --filter @antler/mobile...
 
 COPY backend backend
-COPY app app
+COPY web web
 COPY mobile mobile
 COPY packages/platform packages/platform
 COPY packages/chat-core packages/chat-core
@@ -80,7 +80,7 @@ COPY --from=build /app/backend/prisma.config.ts ./prisma.config.ts
 COPY --from=build /app/backend/src/config ./src/config
 COPY --from=build /app/backend/dist ./dist
 COPY --from=build /app/backend/skills ./skills
-COPY --from=build /app/app/dist /app/public
+COPY --from=build /app/web/dist /app/public
 
 EXPOSE 3210
 CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node dist/index.js"]

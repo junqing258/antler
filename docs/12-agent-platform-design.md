@@ -37,9 +37,9 @@
 | 会话内 Agent 实例只校验技能目录指纹 | `pi-agent-adapter.ts:209/332/417`（Anthropic / OpenAI / 另一路径三处）、`host-runtime.ts:84` | 提示词或 Agent 变了却复用旧上下文会串味 | 三处指纹比较与两处 `cached = { agent, fingerprint }` 赋值（358/446）同步改为 `contextFingerprint`；并独立比对 `agentId` |
 | 技能只来自文件系统三来源（workspace / user / bundled） | `skill-registry.ts:57`（`list()`）、`:58-62`（三来源定义） | 没有「平台技能」概念，无法上传 | 新增第四来源 `platform`，目录由 backend 管理 |
 | `skillContexts` 按会话记录 `{policy, catalogFingerprint}` | `host-runtime.ts:84` | 正好是「会话绑定 Agent」的落点 | 扩展为 `{agentId, agentFingerprint}` 并分别校验 |
-| `projects` 与 `conversations` 在浏览器 IndexedDB | `app/src/lib/conversation-store.ts` | 会话是纯客户端资产，且没有 Agent 归属 | `Conversation` 增加 `agentId`，列表按 Agent 过滤 |
+| `projects` 与 `conversations` 在浏览器 IndexedDB | `web/src/lib/conversation-store.ts` | 会话是纯客户端资产，且没有 Agent 归属 | `Conversation` 增加 `agentId`，列表按 Agent 过滤 |
 | `runs` 只记 `projectId` / `conversationId` | `prisma/schema.prisma` | 无法回答「这次运行用了哪个 Agent」 | `runs` 增加 `agentId`、`agentFingerprint` |
-| 前端只有一个 `ChatView` 路由 | `app/src/main.tsx` | 无列表页、无编辑器 | 增加路由与两个页面 |
+| 前端只有一个 `ChatView` 路由 | `web/src/main.tsx` | 无列表页、无编辑器 | 增加路由与两个页面 |
 | Fastify 未配置 `bodyLimit` | `backend/src/app.ts` | 默认 1 MiB，5 MiB 技能包会被 413 提前拒绝 | 上传路由单独设置上限 |
 | `workspacePath()` 只挡 `..` 与符号链接逃逸 | `workspace-tools.ts:37-49` | 平台目录若在 workspace 内会被 `write` 直接改写 | 平台根移出 workspace + 显式路径拒绝 |
 
@@ -686,7 +686,7 @@ UPDATE agents SET "ownerId" = '<supabase-user-id>' WHERE id = '<agent-id>';
 ### 第 6 步：前端会话归属与路由
 - `conversation-store.ts`：`Conversation.agentId`，IndexedDB 版本 2 → 3。
 - `main.tsx` 加 `Routes` 与 `/chat`；新增 `AgentListPage` 及普通聊天入口、旧 URL 重定向；`ChatView` 接受 `agentId` 并在页面切换时重置会话。
-- **验证**：`app/test` 覆盖「升级后可从首页进入历史会话、显示消息并继续发送且不带 agentId」「旧首页 URL 正确重定向」「/chat 恢复已绑定会话时跳转到对应 Agent 页面」「按 Agent 过滤」「从 Agent A 切到 B 时 conversationId 被重置」「URL 恢复的会话属于其他 Agent 时被丢弃」。
+- **验证**：`web/test` 覆盖「升级后可从首页进入历史会话、显示消息并继续发送且不带 agentId」「旧首页 URL 正确重定向」「/chat 恢复已绑定会话时跳转到对应 Agent 页面」「按 Agent 过滤」「从 Agent A 切到 B 时 conversationId 被重置」「URL 恢复的会话属于其他 Agent 时被丢弃」。
 
 ### 第 7 步：编辑页与技能库页
 - `AgentEditPage`、`SkillLibraryPage`。
@@ -713,7 +713,7 @@ UPDATE agents SET "ownerId" = '<supabase-user-id>' WHERE id = '<agent-id>';
 
 - 已加入 Agent / Skill 模型、RLS 与 `20261022000000_agent_platform` 迁移；迁移使用 schema diff 离线生成并在 PGlite 执行验证，未修改已有开发或部署数据库。启动已有环境前执行 `pnpm --filter @antler/server db:deploy`。
 - 平台文件存储、ZIP 校验与覆盖恢复、读写锁和 run 读租约位于 `backend/src/platform/`、`backend/src/skills/`；Agent 路由和平台技能路由均已接入。运行与定时任务共用 preflight，会话四项上下文随 run 持久化。
-- 前端首页、编辑器、技能库和 Agent 聊天路由已接入；普通聊天入口与历史 URL 迁移保留。新增测试集中在 `backend/test/platform/` 和 `app/test/`。
+- 前端首页、编辑器、技能库和 Agent 聊天路由已接入；普通聊天入口与历史 URL 迁移保留。新增测试集中在 `backend/test/platform/` 和 `web/test/`。
 - 已验证真实 `app.ts` 定时包装层透传。分别临时移除 Agent ID、关闭 `requireFrozenAgentFields`，对应回归测试均失败；随后恢复实现并重新验证。
 - 浏览器本地走通：ZIP 上传 → 新建 Agent → 绑定技能 → 保存 → 发布 → Agent 对话 → 新建会话 → 普通聊天入口。使用独立 PGlite、临时平台目录和本地替身模型；跨用户权限由集成测试验证，未使用真实账号或模型凭据。
 - 文件锁覆盖活跃实例互斥、崩溃后操作系统释放；独立 pg client 的 error / end / heartbeat 故障已做模拟验证。`ANTLER_TEST_POSTGRES_URL` 可开启专用测试数据库上的 Prisma 池重建锁验收，未配置时该项明确跳过，不代表 PostgreSQL 部署验收已完成。

@@ -402,7 +402,7 @@ backend/src/
 建议拆出：
 
 ```text
-app/src/
+web/src/
 ├── auth/
 │   ├── auth-provider.tsx
 │   ├── auth-api.ts

@@ -98,11 +98,11 @@ ANTLER_RAG_KEY=your-rag-api-key
 
 ```bash
 pnpm build        # 构建 Web、后端和移动端验证 bundle
-pnpm build:web    # 仅构建前端，输出 app/dist
+pnpm build:web    # 仅构建前端，输出 web/dist
 pnpm build:server # 仅构建后端，输出 backend/dist
 ```
 
-构建后可设置 `ANTLER_STATIC_DIR` 为 `app/dist` 的绝对路径，再运行 `pnpm --filter @antler/server start`，由后端同源提供前端页面、API 和 SSE。后端启动前仍需配置 `DATABASE_URL` 并应用数据库迁移。
+构建后可设置 `ANTLER_STATIC_DIR` 为 `web/dist` 的绝对路径，再运行 `pnpm --filter @antler/server start`，由后端同源提供前端页面、API 和 SSE。后端启动前仍需配置 `DATABASE_URL` 并应用数据库迁移。
 
 Docker 镜像会编译前端，并由 Fastify 在同一个端口提供网页、API 和 SSE；远端数据保存在部署目录的 `workspace/`。本地需要 Docker（含 buildx）、SSH 和 SCP，远端需要 Docker Compose。
 

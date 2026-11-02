@@ -63,24 +63,24 @@ SDK 基线：`expo ~58.0.21`、React Native 0.88.1、react 19.3.0、react-native
 
 | 职责 | Web | 移动端 | 评估 |
 | --- | --- | --- | --- |
-| 会话列表/重命名/删除/变更订阅 | app/src/lib/conversation-store.ts | mobile conversation-service.ts | 接口相近但平台请求层不同；client-runtime 已有 subscribeChangeStream 共享。仅在接口稳定时抽取 |
-| RAG 配置读写 | app/src/lib（platform 目录） | mobile rag-config-service.ts | 同上 |
+| 会话列表/重命名/删除/变更订阅 | web/src/lib/conversation-store.ts | mobile conversation-service.ts | 接口相近但平台请求层不同；client-runtime 已有 subscribeChangeStream 共享。仅在接口稳定时抽取 |
+| RAG 配置读写 | web/src/lib（platform 目录） | mobile rag-config-service.ts | 同上 |
 | 服务器地址校验 | 后端/app 各有 validate 类逻辑 | native-config.ts validateServerUrl | 保留平台层 |
-| 认证 | app/src/lib/auth.ts | native-auth.ts | Supabase 存储适配不同（AsyncStorage vs 浏览器）；保留平台层 |
+| 认证 | web/src/lib/auth.ts | native-auth.ts | Supabase 存储适配不同（AsyncStorage vs 浏览器）；保留平台层 |
 | UI | @antler/ui 已共享 AgentList、ChatScreen、AuthForm、ProviderConfigForm、ConversationList | 同左 | 已复用，无需新抽取 |
 
 结论：现有共享包已覆盖主要复用面；阶段 4 仅在有确证重复时小步抽取，不预设。
 
 ## 测试收集现状
 
-- mobile 相关测试 10 个位于 `app/test/native-*.test.ts(x)`、`app/test/mobile-*.test.ts`，以相对路径 `../../mobile/src/...` 直接引用 mobile 源码（含 .native.ts 平台文件；app 侧 vitest 解析按普通 ts）。
+- mobile 相关测试 10 个位于 `web/test/native-*.test.ts(x)`、`web/test/mobile-*.test.ts`，以相对路径 `../../mobile/src/...` 直接引用 mobile 源码（含 .native.ts 平台文件；app 侧 vitest 解析按普通 ts）。
 - `mobile` 包自身无 test 脚本；根 `pnpm test` 经 `@antler/app` 的 vitest 收集。目录移动需同步更新这些 import。
 - 根 `pnpm check` 已含 `check:mobile`；`build:mobile` 为 `expo export --platform all`。
 
 ### 别名约束（阶段 2 实测）
 
 - `mobile/tsconfig.json` 已配置 `paths: {"@/*": ["./src/*"]}`（TS 6 弃用 baseUrl，paths 相对 tsconfig 解析）。
-- 但 mobile 源码内部**保持相对导入**：app 包 vite/vitest 把 `@` 解析到 `app/src`，且 `app/test/native-*` 经组件树传递性导入全部 mobile 源码，mobile 内使用 `@/` 会在 app 测试中错解析到 app/src。别名仅供未来 app 测试不再传递导入 mobile 源码后启用。
+- 但 mobile 源码内部**保持相对导入**：app 包 vite/vitest 把 `@` 解析到 `web/src`，且 `web/test/native-*` 经组件树传递性导入全部 mobile 源码，mobile 内使用 `@/` 会在 app 测试中错解析到 web/src。别名仅供未来 app 测试不再传递导入 mobile 源码后启用。
 
 ## 阶段 4 试点记录：@expo/ui Switch（清除密钥）
 

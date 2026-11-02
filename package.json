@@ -17,7 +17,7 @@
     "build:server": "pnpm --filter @antler/server build",
     "check": "pnpm --filter @antler/platform check && pnpm --filter @antler/chat-core check && pnpm --filter @antler/client-runtime check && pnpm --filter @antler/ui check && pnpm --filter @antler/app check && pnpm --filter @antler/server check && pnpm check:mobile",
     "lint": "pnpm check",
-    "format": "prettier --write \"app/{src,test}/**/*.{ts,tsx,css,scss}\" \"backend/{src,test}/**/*.ts\" \"mobile/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\"",
+    "format": "prettier --write \"web/{src,test}/**/*.{ts,tsx,css,scss}\" \"backend/{src,test}/**/*.ts\" \"mobile/**/*.{ts,tsx}\" \"packages/**/*.{ts,tsx}\"",
     "test": "pnpm --filter @antler/platform test && pnpm --filter @antler/chat-core test && pnpm --filter @antler/client-runtime test && pnpm --filter @antler/app test && pnpm --filter @antler/server test",
     "test:watch": "pnpm --parallel --stream --filter @antler/platform --filter @antler/chat-core --filter @antler/client-runtime --filter @antler/app --filter @antler/server test:watch",
     "test:coverage": "pnpm --filter @antler/platform test:coverage && pnpm --filter @antler/chat-core test:coverage && pnpm --filter @antler/client-runtime test:coverage && pnpm --filter @antler/app test:coverage && pnpm --filter @antler/server test:coverage",

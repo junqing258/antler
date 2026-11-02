@@ -1,6 +1,6 @@
 # 移动端图标
 
-- `icon.png`：从 `app/public/antler-logo.svg` 导出的 1024×1024 白底 RGB 图标，用于 iOS 和 Android 旧版启动器。
+- `icon.png`：从 `web/public/antler-logo.svg` 导出的 1024×1024 白底 RGB 图标，用于 iOS 和 Android 旧版启动器。
 - `adaptive-icon.png`：同一 Logo 缩放至原画布的 60% 并居中，透明底，用于 Android 自适应图标前景；白色背景由 `app.json` 指定，留白避免鹿角被启动器遮罩裁切。
 - `antler-logo.png`：应用内 Logo，不用于打包图标。
 

@@ -60,12 +60,34 @@ export default defineConfig(({ mode }) => ({
     dedupe: ["react", "react-dom"],
     extensions: [".web.tsx", ".web.ts", ".web.jsx", ".web.js", ".mjs", ".js", ".ts", ".jsx", ".tsx", ".json"],
   },
-  ...(mode === "p0" ? {
-    build: {
-      outDir: "dist-p0",
-      rollupOptions: { input: path.resolve(import.meta.dirname, "rnw-probe.html") },
+  build: {
+    ...(mode === "p0" ? { outDir: "dist-p0" } : {}),
+    rollupOptions: {
+      ...(mode === "p0"
+        ? { input: path.resolve(import.meta.dirname, "rnw-probe.html") }
+        : {}),
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (
+            id.includes("/markdown-it/") ||
+            id.includes("/markdown-it-") ||
+            id.includes("/lowlight/") ||
+            id.includes("/highlight.js/")
+          )
+            return "markdown";
+          if (id.includes("/@supabase/")) return "supabase";
+          if (id.includes("/lucide-react/")) return "icons";
+          if (
+            id.includes("/react/") ||
+            id.includes("/react-dom/") ||
+            id.includes("/react-router/")
+          )
+            return "react";
+        },
+      },
     },
-  } : {}),
+  },
   server: { host: "127.0.0.1", port: 1420, strictPort: true },
   test: {
     include: ["test/**/*.test.{ts,tsx}"],

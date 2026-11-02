@@ -12,7 +12,7 @@ importers:
         specifier: ^3.6.2
         version: 3.9.6
 
-  app:
+  web:
     dependencies:
       '@antler/chat-core':
         specifier: workspace:*

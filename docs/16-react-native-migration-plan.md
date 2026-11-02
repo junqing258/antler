@@ -24,7 +24,7 @@ Tauri 清理已随 `cfc21a7`（`refactor： 移除 tauri`）合入，作为后�
 
 ### 已完成的前置清理
 
-- 已删除 `app/src-tauri/`，包括 Rust 工程、桌面配置、权限定义、生成 schema 和专用图标。
+- 已删除 `web/src-tauri/`，包括 Rust 工程、桌面配置、权限定义、生成 schema 和专用图标。
 - 已移除 `@tauri-apps/api`、`@tauri-apps/plugin-opener`、`@tauri-apps/cli` 及 lockfile 中对应依赖；根 `dev:app`、`build:app` 和 app 的 `tauri` script 已删除。
 - `server-info.ts` 已移除 invoke 分支，保留 Web 的后端地址、local 共享令牌和 Supabase 会话逻辑；知识库链接使用浏览器标准外链；PWA 已移除桌面壳排除判断，对应测试 mocks 已清理。
 - 已提供 `pnpm build`、`pnpm build:web`、`pnpm build:server`；开发仍使用 `pnpm dev`、`pnpm dev:web`、`pnpm dev:server`。README、开发约定、编辑器配置及架构图已同步，旧设计中的桌面方案已标注退役。
@@ -35,23 +35,23 @@ Tauri 清理已随 `cfc21a7`（`refactor： 移除 tauri`）合入，作为后�
 
 | 位置 | 当前耦合 | 迁移处理 |
 | --- | --- | --- |
-| `app/package.json` | React 18.3.1；依赖 `@assistant-ui/react`、`@assistant-ui/react-markdown` | 先核对目标 React/RN/RNW/Expo 版本矩阵，M1 删除两个依赖 |
-| `app/src/components/assistant-ui/use-antler-runtime.ts` | `useExternalStoreRuntime` 包含发送、停止、事件订阅、分页、模型绑定和上下文可用性判断；直接使用 document | 抽成独立 session/controller 与 React 订阅层；旧 runtime 只暂时做适配 |
-| `app/src/lib/run-events.ts` | 用 `ThreadMessageLike` 做增量归并、事件去重与快照水位比较；fetch reader 解析 SSE | 消息类型迁入领域层；事件归并与网络传输分离 |
-| `app/src/lib/conversation-store.ts` | 历史消息及 DTO 转换依赖 `ThreadMessageLike`；维护会话变更流、revision 和账号会话隔离 | 保留协议语义，输出自有消息模型，注入网络和认证能力 |
-| `app/src/components/assistant-ui/thread.tsx` | Thread/Message/Composer/ActionBar primitives、Markdown、Radix 菜单、DOM details、Tailwind 样式 | 替换为自有聊天组件、平台 Markdown/菜单/输入组件 |
-| `app/src/components/assistant-ui/slash-command-input.tsx` | composer store、textarea ref、DOM 键盘与 IME 事件 | 提取命令匹配/填充逻辑；输入交互按平台实现 |
-| `app/src/views/chat/{chat,index}.tsx` | Provider、消息类型和 runtime 接入 | 改接共享 session 和聊天组件 |
-| `app/src/lib/server-info.ts`、`provider-config.ts` | Vite 环境变量、Supabase 会话、localStorage/浏览器事件 | 将配置、认证和存储能力移入宿主平台适配层，统一异步配置初始化 |
-| `app/src/main.tsx`、`components/ui/`、其余 views | BrowserRouter、DOM、Radix/Base UI 和 Web 样式 | 保留 Web 壳，按页面逐步替换；不直接带入 native 依赖图 |
-| `app/test/` | runtime、run-events、slash commands、模型选择、会话归属等已有测试 | 迁移行为断言，逐步移除 assistant-ui mocks 与 fixture 类型 |
+| `web/package.json` | React 18.3.1；依赖 `@assistant-ui/react`、`@assistant-ui/react-markdown` | 先核对目标 React/RN/RNW/Expo 版本矩阵，M1 删除两个依赖 |
+| `web/src/components/assistant-ui/use-antler-runtime.ts` | `useExternalStoreRuntime` 包含发送、停止、事件订阅、分页、模型绑定和上下文可用性判断；直接使用 document | 抽成独立 session/controller 与 React 订阅层；旧 runtime 只暂时做适配 |
+| `web/src/lib/run-events.ts` | 用 `ThreadMessageLike` 做增量归并、事件去重与快照水位比较；fetch reader 解析 SSE | 消息类型迁入领域层；事件归并与网络传输分离 |
+| `web/src/lib/conversation-store.ts` | 历史消息及 DTO 转换依赖 `ThreadMessageLike`；维护会话变更流、revision 和账号会话隔离 | 保留协议语义，输出自有消息模型，注入网络和认证能力 |
+| `web/src/components/assistant-ui/thread.tsx` | Thread/Message/Composer/ActionBar primitives、Markdown、Radix 菜单、DOM details、Tailwind 样式 | 替换为自有聊天组件、平台 Markdown/菜单/输入组件 |
+| `web/src/components/assistant-ui/slash-command-input.tsx` | composer store、textarea ref、DOM 键盘与 IME 事件 | 提取命令匹配/填充逻辑；输入交互按平台实现 |
+| `web/src/views/chat/{chat,index}.tsx` | Provider、消息类型和 runtime 接入 | 改接共享 session 和聊天组件 |
+| `web/src/lib/server-info.ts`、`provider-config.ts` | Vite 环境变量、Supabase 会话、localStorage/浏览器事件 | 将配置、认证和存储能力移入宿主平台适配层，统一异步配置初始化 |
+| `web/src/main.tsx`、`components/ui/`、其余 views | BrowserRouter、DOM、Radix/Base UI 和 Web 样式 | 保留 Web 壳，按页面逐步替换；不直接带入 native 依赖图 |
+| `web/test/` | runtime、run-events、slash commands、模型选择、会话归属等已有测试 | 迁移行为断言，逐步移除 assistant-ui mocks 与 fixture 类型 |
 
 消息服务端存储与同步约束沿用 `docs/14-server-conversation-storage-plan.md` 的已实施能力，以当前代码为准，不将该文档的历史现状描述当成当前实现。
 
 ## 3. 推荐目标结构
 
 ```text
-app/                         现有 Web / PWA 宿主，继续使用 Vite
+web/                         现有 Web / PWA 宿主，继续使用 Vite
 mobile/                      后续 Expo / Metro 原生宿主
 packages/
   chat-core/                 纯 TypeScript：消息、事件 reducer、快照合并、命令逻辑
@@ -63,7 +63,7 @@ backend/                     保留现有后端
 
 `pnpm-workspace.yaml` 已包含 `packages/*`，实际提取时创建目录；新增原生入口时再把 `mobile` 加入 workspace。
 
-依赖方向为宿主 → UI / client-runtime → chat-core；client-runtime 使用平台接口；平台实现由宿主注入。chat-core 不依赖 React、DOM、RN 或 UI 库。共享包不能反向 import `app/src`。
+依赖方向为宿主 → UI / client-runtime → chat-core；client-runtime 使用平台接口；平台实现由宿主注入。chat-core 不依赖 React、DOM、RN 或 UI 库。共享包不能反向 import `web/src`。
 
 共享包的 React 使用 peer dependency，宿主锁定兼容版本，确保每个应用运行时只加载一份 React。Vite、Metro、TypeScript 和测试工具对包入口与平台扩展名采用一致规则；不得让 native 打包器解析到 Web 专属依赖。
 
@@ -87,7 +87,7 @@ Markdown 候选参考 Orca 的 `markdown-it`、中文友好/脚注插件、树�
 - 定义 `ChatMessage`、`MessagePart`、`MessageStatus`、`ConversationSnapshot`，覆盖 text、reasoning、tool-call、工具结果及错误，并显式保留 runId、seq、appliedEventId 等信息。
 - 服务端 DTO、领域模型、UI props 分层转换；本次不要求服务端内容存储格式随前端更名。领域类型不能只是 assistant-ui 类型的 re-export 或强制断言。
 - `ChatSession` 负责 messages、revision、activeRunId、发送确认、网络状态、分页和上下文可用性；按账号/服务端/会话隔离实例并提供明确销毁生命周期。
-- session 暴露 send/cancel/loadEarlier/refresh；输入草稿和命令浮层属于 UI 状态。默认用 `useSyncExternalStore` 订阅同一 session，单个会话只有一个业务状态源。`app/package.json` 已声明 `zustand`（`^5.0.15`），但当前 `app/src` 与 `backend/src` 均未使用；它仅是可选依赖，不代表现有状态管理实现。P1 记录订阅实现决策；若不采用 zustand，确认 workspace 无其他用途后移除该声明并更新 lockfile。
+- session 暴露 send/cancel/loadEarlier/refresh；输入草稿和命令浮层属于 UI 状态。默认用 `useSyncExternalStore` 订阅同一 session，单个会话只有一个业务状态源。`web/package.json` 已声明 `zustand`（`^5.0.15`），但当前 `web/src` 与 `backend/src` 均未使用；它仅是可选依赖，不代表现有状态管理实现。P1 记录订阅实现决策；若不采用 zustand，确认 workspace 无其他用途后移除该声明并更新 lockfile。
 - 过渡期旧 assistant-ui adapter 消费同一个 session，不再并行维护一套发送和 SSE 逻辑。新旧界面切换时不同时挂载两个 controller。
 
 ### 平台能力边界
@@ -131,7 +131,7 @@ Markdown 使用独立 props 边界，默认先验证上述 RN renderer 能否经
 2. 从 useAntlerRuntime 提取发送、幂等重试、停止、运行恢复、分页、模型绑定和上下文禁用逻辑。adapter 只在展示边界转换消息并桥接 assistant-ui。
 3. 迁移现有测试到领域/session 边界，保留模型选择、会话归属和账号隔离断言。
 4. 记录 session 订阅实现的选择及原因；若不采用 zustand，确认 workspace 无其他用途后移除未使用依赖并更新 lockfile。
-5. 首个共享包落地时同步调整 `backend/Dockerfile`：当前镜像只复制 app/backend，需在 `pnpm install --frozen-lockfile` 前复制所需共享包的 manifest，在构建前复制其源码，并按依赖顺序构建宿主需要的包。以仓库根目录为构建上下文，确保 `workspace:*` 依赖在镜像内可解析；若后端运行时依赖共享包，最终镜像也需包含对应产物及可解析的 workspace 链接。
+5. 首个共享包落地时同步调整 `backend/Dockerfile`：当前镜像只复制 web/backend，需在 `pnpm install --frozen-lockfile` 前复制所需共享包的 manifest，在构建前复制其源码，并按依赖顺序构建宿主需要的包。以仓库根目录为构建上下文，确保 `workspace:*` 依赖在镜像内可解析；若后端运行时依赖共享包，最终镜像也需包含对应产物及可解析的 workspace 链接。
 
 验收：chat-core/client-runtime 无 assistant-ui 类型泄漏；旧界面完整工作；重复事件不重复追加，低水位快照不擦除 live 内容；发送重试复用同一 clientRequestId 与请求体；Docker 镜像可从包含共享包的源码完成冻结安装与构建，启动后可提供 Web、API 和 SSE。
 
@@ -211,7 +211,7 @@ Tauri 退役时的验证记录（2026-10-31）：`pnpm check`、`pnpm build` 和
 
 每个可合并的实现阶段运行 `pnpm check` 和 `pnpm test`，并运行受影响的构建（完整构建使用 `pnpm build`，前端或后端分别使用 `pnpm build:web`、`pnpm build:server`）；P0/P2/P3/P4 触及界面时做实际页面与响应式视觉核查。P2 验证平台适配后的 Web/PWA 启动、生产构建与独立后端连接；原生入口建立后增加对应类型检查、组件行为测试和设备构建/冒烟。
 
-根目录已有 `lint` 与 `format` scripts：当前 `pnpm lint` 仅调用 `pnpm check`，没有独立静态规则检查，因此运行 check 后无需重复执行同一检查；`pnpm format` 是 Prettier 写入命令，当前只覆盖 app/backend 源码，不作为只读验收命令。首个共享包落地时同步扩展根 check/test/build、lint 和 format 的覆盖范围，确保 `packages/*` 不被现有 filter/glob 漏掉；新增 mobile 时同样接入。若引入独立 lint 规则，阶段验收增加 `pnpm lint`；格式验证使用 Prettier 的 `--check` 模式或对应只读 script，并明确源码及测试的覆盖范围。各阶段均检查依赖图，避免重新引入已退役的 Tauri 依赖。仅修改方案文档时检查 Markdown 结构、引用与 diff，不要求运行代码测试。
+根目录已有 `lint` 与 `format` scripts：当前 `pnpm lint` 仅调用 `pnpm check`，没有独立静态规则检查，因此运行 check 后无需重复执行同一检查；`pnpm format` 是 Prettier 写入命令，当前只覆盖 web/backend 源码，不作为只读验收命令。首个共享包落地时同步扩展根 check/test/build、lint 和 format 的覆盖范围，确保 `packages/*` 不被现有 filter/glob 漏掉；新增 mobile 时同样接入。若引入独立 lint 规则，阶段验收增加 `pnpm lint`；格式验证使用 Prettier 的 `--check` 模式或对应只读 script，并明确源码及测试的覆盖范围。各阶段均检查依赖图，避免重新引入已退役的 Tauri 依赖。仅修改方案文档时检查 Markdown 结构、引用与 diff，不要求运行代码测试。
 
 首个共享包落地及后续变更 workspace 依赖、包入口或构建产物时，增加 Docker 部署验证：从仓库根目录执行 `docker build -f backend/Dockerfile .` 或部署脚本使用的等价镜像构建，并在测试环境配置数据库后启动镜像，验证 Web 静态资源、API 与鉴权 SSE。根 `pnpm build` 不替代镜像构建验收。
 
@@ -253,8 +253,8 @@ Tauri 退役和独立 Web/后端构建已完成，以下只列剩余迁移任务
 
 | 方面 | 调研结论 | 源码位置 |
 | --- | --- | --- |
-| 应用与依赖 | Expo `^55.0.31`、React `19.2.8`、RN `^0.83.10`、RNW `^0.21.3`、Expo Router；移动端依赖及检查过的聊天代码未使用 assistant-ui | `mobile/package.json`、`mobile/app/_layout.tsx` |
-| 当前会话入口 | 原生路由挂载 MobileWebShellScreen；对应 `.web.tsx` 路由挂载 MobileSessionRouteScreen。RN 命名的聊天组件在该入口下实际经 RNW 运行于 WebView | `mobile/app/h/[hostId]/session/[worktreeId].tsx` 及 `.web.tsx`、`mobile/web-entry/index.tsx` |
+| 应用与依赖 | Expo `^55.0.31`、React `19.2.8`、RN `^0.83.10`、RNW `^0.21.3`、Expo Router；移动端依赖及检查过的聊天代码未使用 assistant-ui | `mobile/package.json`、`mobile/web/_layout.tsx` |
+| 当前会话入口 | 原生路由挂载 MobileWebShellScreen；对应 `.web.tsx` 路由挂载 MobileSessionRouteScreen。RN 命名的聊天组件在该入口下实际经 RNW 运行于 WebView | `mobile/web/h/[hostId]/session/[worktreeId].tsx` 及 `.web.tsx`、`mobile/web-entry/index.tsx` |
 | 页面构建与宿主 | esbuild 将 react-native 映射至 react-native-web；页面以 React DOM / ExpoRoot 挂载。自定义 Expo 原生模块分别使用 iOS WKWebView 和 Android WebView 承载 | `config/scripts/build-mobile-web-app-bundle.mjs`、`mobile/modules/orca-mobile-web-shell/` |
 | 页面资源更新 | 从主机读取 manifest，下载、验证、缓存并激活页面 bundle，包含页面与壳的协议兼容信息 | `mobile/src/mobile-web-shell/mobile-web-shell-session-effects.ts` |
 | 聊天模型与状态 | 自有 NativeChatMessage、controller/hooks、消息 merger 与订阅/分页逻辑；部分局部状态通过 useSyncExternalStore 订阅。未将移动端聊天状态交给第三方聊天 UI runtime | `src/shared/native-chat-types.ts`、`mobile/src/session/use-mobile-native-chat-controller.ts`、`mobile/src/session/use-mobile-native-chat-session.ts` |

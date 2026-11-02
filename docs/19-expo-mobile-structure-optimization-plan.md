@@ -5,7 +5,7 @@
 
 ## 目标与边界
 
-减少 Web 与移动端重复开发，让移动端页面、组件和服务的归属与 `app/src` 尽量一致；引入 Expo Router 和 `@expo/ui`，以现有 Expo SDK 为基础逐步使用官方能力。以现有功能不回退为前提，优先复用业务逻辑和已存在的共享组件，不以目录完全相同或所有控件共用为目标。
+减少 Web 与移动端重复开发，让移动端页面、组件和服务的归属与 `web/src` 尽量一致；引入 Expo Router 和 `@expo/ui`，以现有 Expo SDK 为基础逐步使用官方能力。以现有功能不回退为前提，优先复用业务逻辑和已存在的共享组件，不以目录完全相同或所有控件共用为目标。
 
 本计划覆盖移动端工程组织、导航和适合替换的基础控件。Web 继续使用现有 Vite 和 React Router；不在本次将 Web 迁入 Expo Router，也不重写后端。现有 [移动端 Web 对齐计划](18-mobile-app-web-alignment-plan.md) 的设备交互验收仍需完成，本计划不能把构建通过视为其替代。
 
@@ -14,13 +14,13 @@
 - `mobile` 已是 pnpm workspace 成员，使用 `expo ~58.0.21`、React Native 0.88.1，以及 SecureStore、Clipboard、Constants、Crypto 等 Expo 模块；无需重复引入 SDK。先通过 Expo 版本检查确定现有依赖一致性，升级 SDK 不是此计划的前置条件。
 - 移动端入口 `mobile/index.ts` 注册 `src/app.tsx`；后者同时管理启动、认证、首页、聊天、设置、抽屉及自动化深链，页面切换主要由状态控制。移动端源码目前大多平铺。
 - Web 使用 `views/`、`components/`、`lib/`、`styles/` 等目录；已有 `@antler/platform`、`@antler/chat-core`、`@antler/client-runtime` 和 `@antler/ui`，移动端和 Web 已共同使用其中部分能力。`@antler/ui` 已通过平台文件区分部分实现。
-- 移动端测试目前主要位于 `app/test/native-*.test.ts(x)`，根 `pnpm test` 通过 app 测试脚本运行；`mobile` 自身暂无线下独立 test 脚本。`pnpm check` 和 `pnpm build:mobile` 已覆盖移动端类型检查及 Expo 导出。
+- 移动端测试目前主要位于 `web/test/native-*.test.ts(x)`，根 `pnpm test` 通过 app 测试脚本运行；`mobile` 自身暂无线下独立 test 脚本。`pnpm check` 和 `pnpm build:mobile` 已覆盖移动端类型检查及 Expo 导出。
 
 ## 目标结构与职责
 
 ```text
 mobile/src/
-  app/                    # Expo Router 路由入口和布局，保持薄层
+  web/                    # Expo Router 路由入口和布局，保持薄层
     _layout.tsx
     index.tsx
     chat/[id].tsx
@@ -42,7 +42,7 @@ mobile/src/
 
 | 现有文件 | 目标归属 |
 | --- | --- |
-| `app.tsx` | 启动与认证容器拆到 `app/_layout.tsx` 和 `lib/`；首页、聊天、设置状态分别归对应 `views/` 或组件 |
+| `app.tsx` | 启动与认证容器拆到 `web/_layout.tsx` 和 `lib/`；首页、聊天、设置状态分别归对应 `views/` 或组件 |
 | `home-page.tsx`、`native-chat.tsx` | `views/home/`、`views/chat/` |
 | `chat-drawer.tsx`、`dialogs.tsx`、`knowledge-settings.tsx` | 按页面专属或跨页面复用分别归 `views/` 或 `components/` |
 | `native-auth.ts`、`native-platform.ts`、`*-service.ts`、`*-config.ts`、`*storage*` | `lib/`，平台实现保留 `.native.ts` / `.web.ts` 解析及现有存储键 |
@@ -80,7 +80,7 @@ mobile/src/
 
 ## 验证与验收
 
-- 每阶段执行相关测试与 `pnpm check`；Router 和共享代码变化执行 `pnpm test`、`pnpm build:mobile`，涉及共享 UI 时额外执行 `pnpm build:web`。补充回归测试：冷/热深链只处理一次、未登录后继续、非法参数、认证失效与快速切换账号、返回/切换会话、删除当前会话、运行中切换、持久化兼容及请求竞态。保证现有 `app/test/native-*` 继续运行；若迁至 mobile，先配置测试脚本和根命令并验证收集数量。
+- 每阶段执行相关测试与 `pnpm check`；Router 和共享代码变化执行 `pnpm test`、`pnpm build:mobile`，涉及共享 UI 时额外执行 `pnpm build:web`。补充回归测试：冷/热深链只处理一次、未登录后继续、非法参数、认证失效与快速切换账号、返回/切换会话、删除当前会话、运行中切换、持久化兼容及请求竞态。保证现有 `web/test/native-*` 继续运行；若迁至 mobile，先配置测试脚本和根命令并验证收集数量。
 - iOS 和 Android 模拟器分别验证启动、登录/退出、首页、会话、返回、抽屉、设置、键盘、安全区、深链和后台恢复；Expo UI 试点增加动态字体与 VoiceOver/TalkBack 检查。验证移动端 Web 导出、刷新和直达；共享改动验证既有 Web 页面。记录设备、命令、结果与无法执行的项。
 - 用真实 HTTPS 后端及适当测试账号进行独立构建的登录、流式消息和恢复验证；环境不可用明确标记未验证。现有自动化深链中的敏感参数仅使用测试凭据，不写入记录。
 - 验收标准：两端主要流程与旧行为一致；路由入口与页面实现分离；平台存储及旧数据可读；根测试命令未漏收；试点有明确的代码减少和平台验证结论，未达标则保留原实现并说明。
@@ -99,7 +99,7 @@ Router 接管链接可能造成重复分发、认证绕过或历史栈变化；�
 
 每阶段独立提交：阶段 1-2 `b665611`、阶段 3 `ca480c0`、阶段 4 `570303c`。
 
-- **阶段 1-2（目录整理）**：`mobile/src` 重组为 `app/`（阶段 3 起为路由）、`views/{home,chat,settings,root}`、`components/{,ui/}`、`lib/`、`experiments/`；平台存储文件（`.native.ts`/`.web.ts`）与存储键全部原样保留。`@/*` 别名已配置于 `mobile/tsconfig.json`，但 mobile 源码保持相对导入——app 侧 vite/vitest 把 `@` 解析到 `app/src`，且 app 测试传递性导入全部 mobile 源码（约束记录于基线文档）。基线与盘点见 [19-expo-mobile-structure-optimization-baseline.md](19-expo-mobile-structure-optimization-baseline.md)。
+- **阶段 1-2（目录整理）**：`mobile/src` 重组为 `web/`（阶段 3 起为路由）、`views/{home,chat,settings,root}`、`components/{,ui/}`、`lib/`、`experiments/`；平台存储文件（`.native.ts`/`.web.ts`）与存储键全部原样保留。`@/*` 别名已配置于 `mobile/tsconfig.json`，但 mobile 源码保持相对导入——app 侧 vite/vitest 把 `@` 解析到 `web/src`，且 app 测试传递性导入全部 mobile 源码（约束记录于基线文档）。基线与盘点见 [19-expo-mobile-structure-optimization-baseline.md](19-expo-mobile-structure-optimization-baseline.md)。
 - **阶段 3（Expo Router）**：入口 `expo-router/entry`（旧 `index.ts` 已删），`expo-router ~58.0.29` 及匹配依赖。根容器收敛到 `views/root/app-container.tsx`（启动、认证门禁、`antler://autostart` 唯一分发、全局设置模态）；路由文件仅解析参数并组装页面，参数与导航动作经 `RootContext` 提供，路由文件零 Router 依赖（也让 app 测试可用假 Router 驱动全部逻辑）。导航语义：主页→会话 `push`；抽屉切换/新建/删除当前会话/自动化 `replace`；认证失效与登出清 `pendingAuto` 并回 `/`。`[...unmatched]` 兜底页挂载即回主页。自动化 `message`/`cancelAfter` 只走内存上下文，不进路由参数（有回归测试）；旧实现中未登录时无凭据的 autostart 链接被丢弃的行为保持不变。
 - **阶段 4（@expo/ui 试点）**：见基线文档"阶段 4 试点记录"——知识库设置"清除密钥"换为 `Switch`（web 验证通过），无代码净减少，暂不推广。
 - **验证情况**：每阶段 `pnpm check`、`pnpm test`（app 209 用例、server 375 用例等全部通过）、`pnpm build:mobile`（web/android/ios 导出，web 已按路由分包）通过；根测试命令收集数量与基线一致（迁移的路径引用全部更新）。

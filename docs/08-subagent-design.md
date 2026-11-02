@@ -280,7 +280,7 @@ backend/src/
 └── routes/
     └── runs.ts
 
-app/src/
+web/src/
 ├── components/assistant-ui/
 │   ├── use-antler-runtime.ts
 │   └── subagent-card.tsx

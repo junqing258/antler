@@ -34,7 +34,7 @@ DISABLE_SIGNUP=false
 ENABLE_EMAIL_AUTOCONFIRM=false
 ```
 
-注册邮件模板源文件为 `app/public/auth-email-otp.html`，恢复密码模板为 `app/public/auth-email-recovery.html`。分别同步到内网主机的 `volumes/templates/confirmation.html` 和 `volumes/templates/recovery.html`；现有 `templates-server` 服务通过只读目录挂载提供它们。模板使用 `{{ .Token }}`，不包含确认链接。页面使用 confirmation 注册验证码和 recovery 重置密码验证码；magic_link 模板为历史配置，当前页面不调用验证码登录。GoTrue v2.197.0 通过 HTTP(S) 获取模板，不支持直接读取本地文件；先更新内网模板文件，确认 confirmation 和 recovery URL 返回模板 HTML，再重建认证容器：
+注册邮件模板源文件为 `web/public/auth-email-otp.html`，恢复密码模板为 `web/public/auth-email-recovery.html`。分别同步到内网主机的 `volumes/templates/confirmation.html` 和 `volumes/templates/recovery.html`；现有 `templates-server` 服务通过只读目录挂载提供它们。模板使用 `{{ .Token }}`，不包含确认链接。页面使用 confirmation 注册验证码和 recovery 重置密码验证码；magic_link 模板为历史配置，当前页面不调用验证码登录。GoTrue v2.197.0 通过 HTTP(S) 获取模板，不支持直接读取本地文件；先更新内网模板文件，确认 confirmation 和 recovery URL 返回模板 HTML，再重建认证容器：
 
 ```sh
 cd /home/junqing/opt/supabase

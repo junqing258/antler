@@ -64,7 +64,7 @@ LLM Providers (OpenAI / Anthropic / Ollama ...)
 ```
 antler/
 ├── docs/               # 规划与设计文档
-├── app/                # Tauri + React 前端
+├── web/                # Tauri + React 前端
 │   ├── src/            # React 源码
 │   ├── src-tauri/      # Rust 壳
 │   └── package.json
