@@ -57,6 +57,7 @@ export function ChatScreen({
   showDisclaimer = true,
 }: ChatScreenProps) {
   const [dockHeight, setDockHeight] = useState(0);
+  const [sendRequest, setSendRequest] = useState<{ id: number; knownUserIds: string[] }>();
   const floating = Platform.OS !== "web" && !!composerBackground;
   const sendDisabled =
     !ready || sending || Boolean(contextReason) || Boolean(credentialProblem);
@@ -65,9 +66,16 @@ export function ChatScreen({
       background={composerBackground}
       value={draft}
       onChange={onDraftChange}
-      onSend={onSend}
+      onSend={() => {
+        setSendRequest((previous) => ({
+          id: (previous?.id ?? 0) + 1,
+          knownUserIds: messages.filter((message) => message.role === "user").map((message) => message.id),
+        }));
+        onSend();
+      }}
       onStop={onStop}
       running={running}
+      sending={sending}
       disabled={sendDisabled}
       leading={
         models && onModelChange ? (
@@ -139,7 +147,7 @@ export function ChatScreen({
   return (
     <View style={styles.flex}>
       {notices}
-      <MessageList messages={messages} ready={ready} onCopy={onCopy} bottomInset={floating ? dockHeight : 0} />
+      <MessageList messages={messages} ready={ready} onCopy={onCopy} bottomInset={floating ? dockHeight : 0} sendRequest={sendRequest} />
       <View onLayout={(event) => setDockHeight(event.nativeEvent.layout.height)} style={[styles.composerDock, floating && styles.floatingDock]} pointerEvents="box-none">
         {floating && dockBackground}
         {composer}

@@ -79,6 +79,39 @@ function Harness({
 }
 
 describe("shared chat view on the web host", () => {
+  it("clears the draft immediately and restores it after a rejected send", async () => {
+    let resolvePost!: (result: { ok: boolean; data: { error: string } }) => void;
+    const { deps } = fixture({
+      prepareSend: vi.fn().mockResolvedValue(() => new Promise((resolve) => { resolvePost = resolve; })),
+    });
+    render(<Harness deps={deps} onModelChange={vi.fn()} />);
+    await vi.waitFor(() => expect(screen.getByRole("textbox", { name: "消息" })).toBeInTheDocument());
+    const input = screen.getByRole("textbox", { name: "消息" });
+    fireEvent.change(input, { target: { value: "待发送" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    expect(input).toHaveValue("");
+    await vi.waitFor(() => expect(resolvePost).toBeDefined());
+    resolvePost({ ok: false, data: { error: "发送失败" } });
+    await vi.waitFor(() => expect(input).toHaveValue("待发送"));
+  });
+
+  it("preserves new typing when the previous send fails", async () => {
+    let resolvePost!: (result: { ok: boolean; data: { error: string } }) => void;
+    const { deps } = fixture({
+      prepareSend: vi.fn().mockResolvedValue(() => new Promise((resolve) => { resolvePost = resolve; })),
+    });
+    render(<Harness deps={deps} onModelChange={vi.fn()} />);
+    await vi.waitFor(() => expect(screen.getByRole("textbox", { name: "消息" })).toBeInTheDocument());
+    const input = screen.getByRole("textbox", { name: "消息" });
+    fireEvent.change(input, { target: { value: "第一条" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    fireEvent.change(input, { target: { value: "下一条" } });
+    await vi.waitFor(() => expect(resolvePost).toBeDefined());
+    resolvePost({ ok: false, data: { error: "发送失败" } });
+    await vi.waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("发送失败"));
+    expect(input).toHaveValue("下一条");
+  });
+
   it("shows one loading state until the session is ready", async () => {
     let finishInitialization!: () => void;
     const { deps } = fixture({

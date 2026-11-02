@@ -101,7 +101,7 @@ export function NativeChat({
     session.getSnapshot,
   );
   const [draft, setDraft] = useState("");
-  const pendingDraft = useRef<string | null>(null);
+  const draftVersion = useRef(0);
   const [operationError, setOperationError] = useState("");
   useEffect(() => {
     if (!state.ready || state.running || state.sending || !onCacheMessages) return;
@@ -118,12 +118,6 @@ export function NativeChat({
       session.stop();
     };
   }, [session, platform]);
-  useEffect(() => {
-    if (!state.running || pendingDraft.current === null) return;
-    const submitted = pendingDraft.current;
-    pendingDraft.current = null;
-    setDraft((current) => (current === submitted ? "" : current));
-  }, [state.running]);
   useEffect(() => {
     session.providerChanged();
   }, [session, provider.apiKey, provider.baseUrl, provider.protocol]);
@@ -173,10 +167,15 @@ export function NativeChat({
       session.credentialProblem()
     )
       return;
-    pendingDraft.current = draft;
-    void session.send(text).finally(() => {
-      if (!session.getSnapshot().running) pendingDraft.current = null;
-    });
+    const submitted = draft;
+    const version = draftVersion.current;
+    setDraft("");
+    const restore = () => {
+      if (draftVersion.current === version) setDraft(submitted);
+    };
+    void session.send(text).then((accepted) => {
+      if (!accepted) restore();
+    }, restore);
   };
   // P0 自动化验证：深链携带 message 时，会话就绪后自动发送一次以验证流式 SSE。
   const autoSentRef = useRef(false);
@@ -185,10 +184,7 @@ export function NativeChat({
     const current = session.getSnapshot();
     if (!current.ready || current.running || current.sending) return;
     autoSentRef.current = true;
-    pendingDraft.current = autoMessage;
-    void session.send(autoMessage).finally(() => {
-      if (!session.getSnapshot().running) pendingDraft.current = null;
-    });
+    void session.send(autoMessage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoMessage, state.ready, state.running, state.sending]);
   // P0 自动化验证：cancelAfter>0 时在运行开始后定时请求停止，验证取消链路。
@@ -263,7 +259,7 @@ export function NativeChat({
         contextReason={state.contextReason}
         credentialProblem={problem}
         draft={draft}
-        onDraftChange={setDraft}
+        onDraftChange={(value) => { draftVersion.current++; setDraft(value); }}
         onSend={send}
         onStop={() => {
           setOperationError("");

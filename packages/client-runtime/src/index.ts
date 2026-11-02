@@ -314,7 +314,8 @@ export class ChatSession {
     const problem = this.credentialProblem();
     if (problem) return;
     const generation = this.generation;
-    this.update({ sending: true, notice: "发送中…" });
+    this.update({ sending: true, notice: "" });
+    let accepted = false;
     try {
       const post = await this.deps.prepareSend();
       if (!this.alive(generation)) return;
@@ -372,6 +373,7 @@ export class ChatSession {
             ? "该会话正在回复中"
             : (response?.data.error ?? "发送失败"),
         );
+      accepted = true;
       const runId = response.data.runId;
       if (typeof runId === "string") {
         const id = `${runId}:user`;
@@ -411,6 +413,7 @@ export class ChatSession {
     } finally {
       if (this.alive(generation)) this.update({ sending: false });
     }
+    return accepted;
   }
   async cancel() {
     const generation = this.generation;

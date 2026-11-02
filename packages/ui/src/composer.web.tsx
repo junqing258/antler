@@ -8,6 +8,7 @@ export function Composer({
   onSend,
   onStop,
   running,
+  sending,
   disabled,
   leading,
 }: ComposerProps) {
@@ -200,6 +201,7 @@ export function Composer({
           <button
             type="button"
             aria-label={running ? "停止" : "发送"}
+            aria-busy={!running && sending ? true : undefined}
             disabled={unavailable}
             onClick={running ? onStop : onSend}
             style={{
@@ -231,6 +233,10 @@ export function Composer({
                   rx="2"
                   fill="currentColor"
                 />
+              ) : sending ? (
+                <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeDasharray="38 13">
+                  <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite" />
+                </circle>
               ) : (
                 <path
                   d="M12 20V4m-7 7 7-7 7 7"

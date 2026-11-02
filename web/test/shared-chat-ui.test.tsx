@@ -124,7 +124,7 @@ describe("shared chat UI on RNW", () => {
     expect(stop).toHaveBeenCalledOnce();
   });
 
-  it("follows new content only at the bottom and keeps the visible row when history is prepended", () => {
+  it("keeps position during replies and when history is prepended", () => {
     const message = (id: string) => ({
       id,
       role: "user" as const,
@@ -152,7 +152,7 @@ describe("shared chat UI on RNW", () => {
         ready
       />,
     );
-    expect(list.scrollTop).toBe(400);
+    expect(list.scrollTop).toBe(200);
 
     list.scrollTop = 70;
     fireEvent.scroll(list);
@@ -397,6 +397,29 @@ describe("shared chat screen", () => {
     onStop: vi.fn(),
   };
 
+  it("positions the sent user message at the top and leaves replies in place", () => {
+    const onSend = vi.fn();
+    const messages = [{ id: "old", role: "user" as const, content: [{ type: "text" as const, text: "旧消息" }] }];
+    const { rerender } = render(<ChatScreen {...base} messages={messages} draft="你好" onSend={onSend} />);
+    const list = screen.getByLabelText("消息列表");
+    Object.defineProperty(list, "clientHeight", { configurable: true, value: 500 });
+    list.scrollTop = 50;
+    const bounds = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+      const top = (this as HTMLElement).dataset?.messageId === "new" ? 300 : 0;
+      return { top, bottom: top + 50, left: 0, right: 100, width: 100, height: 50, x: 0, y: top, toJSON: () => ({}) };
+    });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    expect(onSend).toHaveBeenCalledOnce();
+    expect(list.scrollTop).toBe(50);
+    const sent = [...messages, { id: "new", role: "user" as const, content: [{ type: "text" as const, text: "你好" }] }];
+    rerender(<ChatScreen {...base} messages={sent} draft="" onSend={onSend} />);
+    expect(list.scrollTop).toBe(350);
+    expect(list.querySelector('[aria-hidden="true"]')).toHaveStyle({ height: "512px" });
+    rerender(<ChatScreen {...base} messages={[...sent, { id: "reply", role: "assistant", content: [{ type: "text", text: "回复" }] }]} draft="" onSend={onSend} />);
+    expect(list.scrollTop).toBe(350);
+    bounds.mockRestore();
+  });
+
   it("dismisses the native keyboard when the welcome area is tapped", () => {
     const originalOS = Platform.OS;
     const dismiss = vi.spyOn(Keyboard, "dismiss").mockImplementation(() => {});
@@ -446,13 +469,14 @@ describe("shared chat screen", () => {
           },
         ]}
         hasMore
-        notice="发送中…"
+        notice="连接失败"
         credentialProblem="需要匹配的 API Key"
         onLoadEarlier={onLoadEarlier}
         onConfigureCredentials={onConfigureCredentials}
       />,
     );
     expect(screen.getByText("旧消息")).toBeInTheDocument();
+    expect(screen.getByText("连接失败")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "加载更早消息" }));
     expect(onLoadEarlier).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "配置凭据" }));
@@ -475,6 +499,9 @@ describe("shared chat screen", () => {
     );
     expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
     rerender(<ChatScreen {...base} messages={[]} sending />);
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "发送" })).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByText("发送中…")).not.toBeInTheDocument();
     rerender(
       <ChatScreen
         {...base}

@@ -1,5 +1,6 @@
 import { useRef, type ElementRef } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,6 +18,7 @@ export function Composer({
   onSend,
   onStop,
   running,
+  sending,
   disabled,
   leading,
   background,
@@ -72,12 +74,12 @@ export function Composer({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={running ? "停止" : "发送"}
-            accessibilityState={{ disabled: unavailable }}
+            accessibilityState={{ disabled: unavailable, busy: !running && sending }}
             disabled={unavailable}
             style={[styles.button, unavailable && styles.disabled]}
             onPress={running ? onStop : onSend}
           >
-            <Text style={styles.buttonText}>{running ? "■" : "↑"}</Text>
+            {!running && sending ? <ActivityIndicator size="small" color="white" /> : <Text style={styles.buttonText}>{running ? "■" : "↑"}</Text>}
           </Pressable>
         </View>
       </View>

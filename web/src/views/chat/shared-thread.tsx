@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ChatScreen } from "@antler/ui";
 import type { ChatSession, SessionState } from "@antler/client-runtime";
 import { SessionLoading } from "./session-loading";
@@ -24,13 +24,7 @@ export function SharedThread({
 }) {
   const [draft, setDraft] = useState("");
   const [operationError, setOperationError] = useState("");
-  const pendingDraft = useRef<string | null>(null);
-  useEffect(() => {
-    if (!state.running || pendingDraft.current === null) return;
-    const submitted = pendingDraft.current;
-    pendingDraft.current = null;
-    setDraft((current) => (current === submitted ? "" : current));
-  }, [state.running]);
+  const draftVersion = useRef(0);
   const problem = session.credentialProblem();
   const send = () => {
     const text = draft.trim();
@@ -43,10 +37,15 @@ export function SharedThread({
       session.credentialProblem()
     )
       return;
-    pendingDraft.current = draft;
-    void session.send(text).finally(() => {
-      if (!session.getSnapshot().running) pendingDraft.current = null;
-    });
+    const submitted = draft;
+    const version = draftVersion.current;
+    setDraft("");
+    const restore = () => {
+      if (draftVersion.current === version) setDraft(submitted);
+    };
+    void session.send(text).then((accepted) => {
+      if (!accepted) restore();
+    }, restore);
   };
   if (!state.ready) {
     return <SessionLoading notice={state.notice} />;
@@ -64,7 +63,7 @@ export function SharedThread({
         contextReason={state.contextReason}
         credentialProblem={problem}
         draft={draft}
-        onDraftChange={setDraft}
+        onDraftChange={(value) => { draftVersion.current++; setDraft(value); }}
         onSend={send}
         onStop={() => {
           setOperationError("");

@@ -6,6 +6,7 @@ export type ComposerProps = {
   onSend: () => void;
   onStop: () => void;
   running: boolean;
+  sending?: boolean;
   disabled: boolean;
   leading?: ReactNode;
   background?: ReactNode;
