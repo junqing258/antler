@@ -79,6 +79,22 @@ function Harness({
 }
 
 describe("shared chat view on the web host", () => {
+  it("shows one loading state until the session is ready", async () => {
+    let finishInitialization!: () => void;
+    const { deps } = fixture({
+      initialize: () => new Promise<void>((resolve) => { finishInitialization = resolve; }),
+    });
+    render(<Harness deps={deps} onModelChange={vi.fn()} />);
+
+    expect(screen.getByRole("status")).toHaveTextContent("正在加载会话…");
+    expect(screen.queryByText("正在加载会话配置…")).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "消息" })).not.toBeInTheDocument();
+
+    finishInitialization();
+    await vi.waitFor(() => expect(screen.getByText("今天我能帮你做什么？")).toBeInTheDocument());
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
   it("shows the welcome state and sends through the shared session", async () => {
     const onModelChange = vi.fn();
     const { deps, post } = fixture();

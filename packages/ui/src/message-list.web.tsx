@@ -6,6 +6,7 @@ type Props = {
   messages: ChatMessage[];
   ready: boolean;
   onCopy?: (text: string) => void;
+  bottomInset?: number;
 };
 type Anchor = { id: string; top: number } | null;
 type Snapshot = { anchor: Anchor; follow: boolean };

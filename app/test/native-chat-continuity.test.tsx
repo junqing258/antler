@@ -9,6 +9,9 @@ const capture = vi.hoisted(() => ({
   providerStatus: 200,
   running: false,
 }));
+vi.mock("../../mobile/node_modules/react-native-safe-area-context", () => ({
+  SafeAreaInsetsContext: React.createContext({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
 vi.mock("../../mobile/node_modules/expo-clipboard", () => ({
   setStringAsync: vi.fn(),
 }));
@@ -58,7 +61,7 @@ vi.mock("@antler/client-runtime", async (importOriginal) => ({
   },
 }));
 vi.mock("@antler/ui", () => ({
-  ChatScreen: ({ draft, onDraftChange, model, models, onModelChange }: any) => (
+  ChatScreen: ({ draft, onDraftChange, model, models, onModelChange, onConfigureCredentials }: any) => (
     <>
       <input
         aria-label="聊天输入"
@@ -68,6 +71,7 @@ vi.mock("@antler/ui", () => ({
       <span data-testid="model">{model || "服务端默认模型"}</span>
       <span data-testid="models">{models.join(",")}</span>
       <button onClick={() => onModelChange("other-model")}>选择其他模型</button>
+      <button onClick={onConfigureCredentials}>配置凭据</button>
     </>
   ),
 }));
@@ -150,7 +154,8 @@ it("displays a bound model and starts a new conversation when another model is c
       onModelSelected={selected}
     />,
   );
-  fireEvent.click(screen.getByText("配置"));
+  expect(screen.queryByText("配置")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByText("配置凭据"));
   expect(configure).toHaveBeenCalledWith({
     protocol: "openai-responses",
     baseUrl: "https://model.example",

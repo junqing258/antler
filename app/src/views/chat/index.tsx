@@ -24,8 +24,9 @@ import { createUuid } from "@/lib/utils";
 import { Chat } from "@/views/chat/chat";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircleIcon, RotateCwIcon } from "lucide-react";
+import { SessionLoading } from "@/views/chat/session-loading";
 
-function ChatLoading({ error, onRetry }: { error: string; onRetry: () => void }) {
+export function ChatLoading({ error, onRetry }: { error: string; onRetry: () => void }) {
   return (
     <main className="flex h-dvh min-h-0 overflow-hidden bg-white">
       <aside aria-hidden="true" className="hidden w-[250px] shrink-0 flex-col gap-6 bg-[#fbfbfb] px-4 py-6 min-[621px]:flex max-[800px]:w-[190px]">
@@ -42,12 +43,12 @@ function ChatLoading({ error, onRetry }: { error: string; onRetry: () => void })
         <Skeleton className="mt-auto size-8 rounded-full motion-reduce:animate-none" />
       </aside>
       <section aria-busy={!error} aria-label="会话" className="flex min-w-0 flex-1 flex-col">
-        <div aria-hidden="true" className="flex h-[68px] shrink-0 items-center border-b border-[#f1f5f9] px-6">
+        <div aria-hidden="true" className="flex h-[47px] shrink-0 items-center px-6">
           <Skeleton className="h-4 w-28 motion-reduce:animate-none" />
         </div>
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
+        <div className="min-h-0 flex-1">
           {error ? (
-            <div role="alert" className="flex flex-col items-center gap-3 text-center">
+            <div role="alert" className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
               <AlertCircleIcon aria-hidden="true" className="size-7 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">{error}</p>
               <button type="button" onClick={onRetry} className="inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm hover:bg-muted focus-visible:outline-2 focus-visible:outline-primary">
@@ -56,14 +57,8 @@ function ChatLoading({ error, onRetry }: { error: string; onRetry: () => void })
               </button>
             </div>
           ) : (
-            <>
-              <img src="/antler-logo.svg" alt="" className="size-12 motion-safe:animate-pulse" />
-              <p role="status" className="text-sm text-muted-foreground">正在加载会话…</p>
-            </>
+            <SessionLoading />
           )}
-        </div>
-        <div aria-hidden="true" className="mx-auto mb-6 w-full max-w-3xl px-6">
-          <Skeleton className="h-28 w-full rounded-2xl motion-reduce:animate-none" />
         </div>
       </section>
     </main>

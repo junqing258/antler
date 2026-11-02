@@ -19,6 +19,7 @@ export function Composer({
   running,
   disabled,
   leading,
+  background,
 }: ComposerProps) {
   const input = useRef<ElementRef<typeof TextInput>>(null);
   const commands = useSlashCommands(value, onChange);
@@ -52,7 +53,8 @@ export function Composer({
           )}
         </ScrollView>
       )}
-      <View style={styles.card}>
+      <View style={[styles.card, !background && styles.opaqueCard]}>
+        {background && <View pointerEvents="none" style={styles.background}>{background}</View>}
         <TextInput
           ref={input}
           accessibilityLabel="消息"
@@ -88,12 +90,12 @@ const styles = StyleSheet.create({
   card: {
     borderWidth: 1,
     borderColor: "#e3e3e3",
-    borderRadius: 24,
-    padding: 12,
-    paddingTop: 12,
-    gap: 4,
-    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 10,
+    gap: 2,
   },
+  opaqueCard: { backgroundColor: "#fff" },
+  background: { position: "absolute", top: 0, bottom: 0, left: 0, right: 0, borderRadius: 20, overflow: "hidden" },
   menu: {
     position: "absolute",
     bottom: "100%",
@@ -111,7 +113,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 8, zIndex: 10 },
   input: {
     maxHeight: 120,
-    minHeight: 36,
+    minHeight: 32,
     paddingHorizontal: 4,
     paddingVertical: 2,
     fontSize: 15,
@@ -120,9 +122,9 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
   button: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: "#292929",
     alignItems: "center",
     justifyContent: "center",

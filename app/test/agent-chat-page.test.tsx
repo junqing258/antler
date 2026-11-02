@@ -5,7 +5,10 @@ import { AgentChatPage } from "@/views/platform/agent-chat";
 import { platformApi } from "@/lib/platform-api";
 
 vi.mock("@/lib/platform-api", () => ({ platformApi: vi.fn() }));
-vi.mock("@/views/chat", () => ({ ChatView: () => <p>Agent conversation</p> }));
+vi.mock("@/views/chat", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/views/chat")>(),
+  ChatView: () => <p>Agent conversation</p>,
+}));
 afterEach(cleanup);
 
 function mount() {
@@ -22,7 +25,7 @@ it("does not show home navigation while loading a directly opened Agent", async 
   let resolveAgent!: (agent: unknown) => void;
   vi.mocked(platformApi).mockReturnValue(new Promise((resolve) => { resolveAgent = resolve; }));
   mount();
-  expect(screen.getByRole("status")).toHaveTextContent("正在加载");
+  expect(screen.getByRole("status")).toHaveTextContent("正在加载会话…");
   expect(screen.queryByRole("navigation", { name: "平台导航" })).not.toBeInTheDocument();
   resolveAgent({ id: "example", name: "Example" });
   expect(await screen.findByText("Agent conversation")).toBeInTheDocument();

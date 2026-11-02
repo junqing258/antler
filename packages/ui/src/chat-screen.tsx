@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useState, type ReactNode } from "react";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import type { ChatMessage } from "@antler/chat-core";
 import { Composer } from "./composer";
 import { MessageList } from "./message-list";
@@ -25,6 +26,7 @@ export type ChatScreenProps = {
   models?: string[];
   onModelChange?: (model: string) => void;
   welcomeTitle?: string;
+  composerBackground?: ReactNode;
 };
 
 export function ChatScreen({
@@ -48,11 +50,15 @@ export function ChatScreen({
   models,
   onModelChange,
   welcomeTitle = "今天我能帮你做什么？",
+  composerBackground,
 }: ChatScreenProps) {
+  const [dockHeight, setDockHeight] = useState(0);
+  const floating = Platform.OS !== "web" && !!composerBackground;
   const sendDisabled =
     !ready || sending || Boolean(contextReason) || Boolean(credentialProblem);
   const composer = (
     <Composer
+      background={composerBackground}
       value={draft}
       onChange={onDraftChange}
       onSend={onSend}
@@ -118,8 +124,8 @@ export function ChatScreen({
   return (
     <View style={styles.flex}>
       {notices}
-      <MessageList messages={messages} ready={ready} onCopy={onCopy} />
-      <View style={styles.composerDock}>
+      <MessageList messages={messages} ready={ready} onCopy={onCopy} bottomInset={floating ? dockHeight : 0} />
+      <View onLayout={(event) => setDockHeight(event.nativeEvent.layout.height)} style={[styles.composerDock, floating && styles.floatingDock]} pointerEvents="box-none">
         {composer}
         <Text style={styles.disclaimer}>Antler 可能出错，请核查重要结果。</Text>
       </View>
@@ -137,6 +143,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 4,
   },
+  floatingDock: { position: "absolute", bottom: 0, left: 0, right: 0 },
   welcome: {
     flex: 1,
     alignItems: "center",

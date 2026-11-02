@@ -1,4 +1,5 @@
 import {
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -14,6 +15,8 @@ import {
   View,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
+import { BlurView } from "expo-blur";
+import { SafeAreaInsetsContext } from "react-native-safe-area-context";
 import { ChatScreen, type ProviderConfigDraft } from "@antler/ui";
 import {
   ChatSession,
@@ -25,17 +28,6 @@ import {
 import type { NativeConfig } from "../../lib/native-config";
 import { createNativePlatform } from "../../lib/native-platform";
 
-function Action({ label, onPress }: { label: string; onPress: () => void }) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      style={styles.button}
-      onPress={onPress}
-    >
-      <Text style={styles.buttonText}>{label}</Text>
-    </Pressable>
-  );
-}
 export function NativeChat({
   config,
   provider,
@@ -61,6 +53,7 @@ export function NativeChat({
   title?: string;
   onOpenDrawer?: () => void;
 }) {
+  const insets = useContext(SafeAreaInsetsContext);
   const providerRef = useRef(provider);
   providerRef.current = provider;
   const platform = useMemo(
@@ -196,6 +189,7 @@ export function NativeChat({
     <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? (insets?.top ?? 0) : 0}
     >
       <View style={styles.row}>
         {onOpenDrawer && (
@@ -219,12 +213,9 @@ export function NativeChat({
             </Text>
           )}
         </View>
-        <Action
-          label="配置"
-          onPress={() => onConfigure(getBoundCredential(state.executionConfig))}
-        />
       </View>
       <ChatScreen
+        composerBackground={<BlurView tint="light" intensity={65} style={StyleSheet.absoluteFill} />}
         messages={state.messages}
         ready={state.ready}
         running={state.running}
@@ -278,12 +269,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   menuIcon: { fontSize: 22, color: "#333" },
-  button: { borderRadius: 8, backgroundColor: "#087d61", padding: 10 },
-  buttonText: { color: "white", fontWeight: "600" },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginVertical: 8,
+    paddingVertical: 8,
+    paddingRight: 16,
+    backgroundColor: "#fff",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#e8e8e8",
   },
 });

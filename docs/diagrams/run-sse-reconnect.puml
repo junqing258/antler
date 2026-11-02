@@ -1,0 +1,64 @@
+@startuml
+title Run SSE：实时推送、断线重连和事件回放
+
+actor 用户
+participant "客户端\nsubscribeRunStream" as Client
+participant "SSE 路由\n/api/runs/:id/events" as Route
+participant "SSE 服务\nstreamRun" as SSE
+participant "Host Runtime" as Runtime
+database "事件存储" as Store
+
+用户 -> Client: 订阅 Run
+Client -> Route: GET events?afterEventId=0
+Route -> SSE: streamRun(runId, afterEventId)
+
+SSE -> Runtime: subscribe(runId)
+Runtime --> SSE: 注册实时事件监听
+SSE -> Runtime: getEvents(runId, cursor)
+
+alt Run 仍在内存中
+  Runtime --> SSE: 返回内存中的历史事件
+else 从持久化存储读取
+  Runtime -> Store: 查询 ID > cursor 的事件
+  Store --> Runtime: 按 ID 排序的事件
+  Runtime --> SSE: 返回历史事件
+end
+
+note over SSE
+先订阅实时事件，再读取历史事件。
+回放期间的新事件进入 pending，
+与历史事件合并、排序和去重后发送。
+end note
+
+SSE --> Client: SSE 事件（id、event、data）
+Client -> Client: 应用事件并更新 cursor
+
+loop Run 执行期间
+  Runtime -> Runtime: 串行生成递增事件 ID
+  Runtime -> Runtime: 放入批量持久化缓冲
+  Runtime --> SSE: 通知实时事件
+  SSE --> Client: 推送 SSE 事件
+  Client -> Client: 跳过旧 ID，应用新事件
+  opt 定时批量写入
+    Runtime -> Store: 写入事件批次
+  end
+end
+
+... 网络中断 ...
+
+Client -> Client: 指数退避后重连\n500 ms 起，最长 15 s
+Client -> Route: GET events?afterEventId=最后处理的 ID
+Route -> SSE: streamRun(runId, cursor)
+SSE -> Runtime: 先订阅实时事件
+SSE -> Runtime: 获取 cursor 之后的事件
+Runtime --> SSE: 返回可回放事件
+SSE --> Client: 按 ID 排序补发
+Client -> Client: 去重并继续处理
+
+note over Runtime, Store
+普通事件异步批量持久化。
+缓冲溢出或写入失败时事件可能丢失；
+进程崩溃后，未持久化的事件无法回放。
+end note
+
+@enduml

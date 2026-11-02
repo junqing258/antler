@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChatScreen } from "@antler/ui";
 import type { ChatSession, SessionState } from "@antler/client-runtime";
+import { SessionLoading } from "./session-loading";
 
 /**
  * Web 主聊天视图：消费 useChatSession 的同一 ChatSession，
@@ -47,6 +48,9 @@ export function SharedThread({
       if (!session.getSnapshot().running) pendingDraft.current = null;
     });
   };
+  if (!state.ready) {
+    return <SessionLoading notice={state.notice} />;
+  }
   return (
     <div className="flex h-full min-h-0 flex-col">
       <ChatScreen
@@ -55,9 +59,7 @@ export function SharedThread({
         running={state.running}
         sending={state.sending}
         hasMore={state.hasMore}
-        notice={
-          state.notice || (!state.ready ? "正在加载会话配置…" : "")
-        }
+        notice={state.notice}
         operationError={operationError}
         contextReason={state.contextReason}
         credentialProblem={problem}

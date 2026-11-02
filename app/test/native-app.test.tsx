@@ -230,6 +230,23 @@ it("keeps the chat and draft mounted while saving settings", async () => {
   expect(screen.getByLabelText("草稿")).toHaveValue("尚未发送");
 });
 
+it("opens settings as a dialog and switches profile and about tabs", async () => {
+  state.backend = { mode: "local", requiresAccessToken: false };
+  render(<AppContainer />);
+  fireEvent.click(await screen.findByText("开始对话"));
+  fireEvent.click(screen.getByText("设置"));
+  fireEvent.click(screen.getByRole("tab", { name: /个人资料/ }));
+  const name = screen.getByLabelText("显示名称");
+  fireEvent.change(name, { target: { value: "小安" } });
+  expect(name).toHaveValue("小安");
+  expect(screen.getByText("小")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: /关于/ }));
+  expect(screen.getByText("应用信息与版本")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "关闭设置" }));
+  expect(screen.queryByText("应用信息与版本")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("草稿")).toBeInTheDocument();
+});
+
 it("ignores automation in release and never accepts an endpoint override in test builds", async () => {
   state.backend = { mode: "local", requiresAccessToken: false };
   const initialUrl = vi

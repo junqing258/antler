@@ -8,4 +8,5 @@ export type ComposerProps = {
   running: boolean;
   disabled: boolean;
   leading?: ReactNode;
+  background?: ReactNode;
 };

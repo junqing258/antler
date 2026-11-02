@@ -9,11 +9,14 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Linking,
+  Modal,
   Platform,
+  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import * as Crypto from "expo-crypto";
@@ -79,9 +82,10 @@ export function AppContainer() {
   const [draftProvider, setDraftProvider] = useState(defaultProvider);
   const [settings, setSettings] = useState(false);
   const [settingsError, setSettingsError] = useState("");
-  const [settingsTab, setSettingsTab] = useState<"provider" | "knowledge">(
+  const [settingsTab, setSettingsTab] = useState<"provider" | "profile" | "about" | "knowledge">(
     "provider",
   );
+  const [displayName, setDisplayName] = useState("用户");
   const [binding, setBinding] = useState<BoundCredential>();
   const [pendingAuto, setPendingAuto] = useState<PendingAuto>();
   const autoLoginStarted = useRef(false);
@@ -383,6 +387,7 @@ export function AppContainer() {
     setDraftProvider(provider);
     setSettingsError("");
     setSettingsTab("provider");
+    setDisplayName("用户");
     setSettings(true);
   };
   const saveProviderModel = async (model: string) => {
@@ -495,40 +500,79 @@ export function AppContainer() {
       <SafeAreaView style={styles.flex}>
         <Stack screenOptions={{ headerShown: false, animation: "none" }} />
         {!!error && <Text accessibilityRole="alert">{error}</Text>}
-        {settings && (
-          <View style={styles.overlay}>
-            <Button label="关闭设置" onPress={() => setSettings(false)} />
-            <View style={styles.tabRow}>
-              <Button
-                label={settingsTab === "provider" ? "模型供应商 ●" : "模型供应商"}
-                onPress={() => setSettingsTab("provider")}
-              />
-              <Button
-                label={settingsTab === "knowledge" ? "知识库 ●" : "知识库"}
-                onPress={() => setSettingsTab("knowledge")}
-              />
+        {settings && <Modal visible transparent animationType="fade" onRequestClose={() => setSettings(false)}>
+          <KeyboardAvoidingView style={styles.modalFrame} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+            <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="关闭设置" onPress={() => setSettings(false)} />
+            <View style={styles.dialog} accessibilityViewIsModal>
+              <View style={styles.dialogHeader}>
+                <View style={styles.headingRow}>
+                  <Text accessibilityRole="header" style={styles.dialogTitle}>设置</Text>
+                  <Pressable accessibilityRole="button" accessibilityLabel="关闭设置" onPress={() => setSettings(false)} style={styles.closeButton}>
+                    <Text style={styles.closeText}>×</Text>
+                  </Pressable>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow}>
+                  {([
+                    ["provider", "⚙", "供应商配置"],
+                    ["profile", "◉", "个人资料"],
+                    ["about", "ⓘ", "关于"],
+                    ["knowledge", "▤", "知识库"],
+                  ] as const).map(([tab, icon, label]) => (
+                    <Pressable key={tab} accessibilityRole="tab" accessibilityState={{ selected: settingsTab === tab }} onPress={() => setSettingsTab(tab)} style={[styles.tab, settingsTab === tab && styles.activeTab]}>
+                      <Text style={[styles.tabText, settingsTab === tab && styles.activeTabText]}>{icon}  {label}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+              <View style={styles.dialogContent}>
+                {settingsTab === "provider" ? (
+                  <ProviderConfigForm
+                    value={draftProvider}
+                    onChange={setDraftProvider}
+                    onSubmit={(value) => void save(value)}
+                    submitLabel="保存配置"
+                    busy={busy}
+                    error={settingsError}
+                    credentialBinding={binding}
+                    onReset={() => setDraftProvider(defaultProvider)}
+                    description="配置只保存在当前设备，账号不会同步 API Key。"
+                  />
+                ) : settingsTab === "knowledge" ? (
+                  <KnowledgeSettings config={boot.config} getToken={getToken} onUnauthorized={onUnauthorized} isCurrent={isCurrent} />
+                ) : settingsTab === "profile" ? (
+                  <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.detailContent}>
+                    <View style={styles.detailHeading}>
+                      <Text accessibilityRole="header" style={styles.detailTitle}>个人资料</Text>
+                      <Text style={styles.hint}>管理此设备上的个人信息。</Text>
+                    </View>
+                    <View style={styles.avatar}><Text style={styles.avatarText}>{displayName.slice(0, 1).toUpperCase() || "U"}</Text></View>
+                    <View style={styles.field}>
+                      <Text style={styles.label}>显示名称</Text>
+                      <TextInput accessibilityLabel="显示名称" value={displayName} onChangeText={setDisplayName} placeholder="输入你的名称" style={styles.input} />
+                    </View>
+                    {!!accountEmail && <View style={styles.infoCard}>
+                      <Text style={styles.label}>登录账号</Text>
+                      <Text style={styles.account}>{accountEmail}</Text>
+                      <Pressable accessibilityRole="button" onPress={() => { setSettings(false); handleSignOut(); }} style={styles.signOut}>
+                        <Text style={styles.signOutText}>退出登录</Text>
+                      </Pressable>
+                    </View>}
+                    <Text style={styles.hint}>个人资料当前仅保存在本次应用会话中。</Text>
+                  </ScrollView>
+                ) : (
+                  <ScrollView contentContainerStyle={styles.detailContent}>
+                    <View style={styles.detailHeading}>
+                      <Text accessibilityRole="header" style={styles.detailTitle}>关于</Text>
+                      <Text style={styles.hint}>应用信息与版本</Text>
+                    </View>
+                    <View style={styles.infoCard}><Text style={styles.detailTitle}>Antler</Text><Text style={styles.hint}>移动助手</Text></View>
+                    <View style={styles.infoCard}><Text style={styles.account}>应用名称　 Antler</Text><Text style={styles.account}>当前版本　 v0.1.0</Text><Text style={styles.account}>运行环境　移动应用</Text></View>
+                  </ScrollView>
+                )}
+              </View>
             </View>
-            {settingsTab === "provider" ? (
-              <ProviderConfigForm
-                value={draftProvider}
-                onChange={setDraftProvider}
-                onSubmit={(value) => void save(value)}
-                busy={busy}
-                error={settingsError}
-                credentialBinding={binding}
-                onReset={() => setDraftProvider(defaultProvider)}
-                description="配置只保存在当前设备，账号不会同步 API Key。"
-              />
-            ) : (
-              <KnowledgeSettings
-                config={boot.config}
-                getToken={getToken}
-                onUnauthorized={onUnauthorized}
-                isCurrent={isCurrent}
-              />
-            )}
-          </View>
-        )}
+          </KeyboardAvoidingView>
+        </Modal>}
       </SafeAreaView>
     </RootContext.Provider>
   );
@@ -580,19 +624,30 @@ const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: "#fff" },
   center: { flex: 1, justifyContent: "center", padding: 24, gap: 12 },
   loginContent: { flexGrow: 1, justifyContent: "center", padding: 24, gap: 12 },
-  overlay: {
-    position: "absolute",
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "white",
-    padding: 16,
-    paddingTop: 48,
-  },
-  tabRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 8,
-  },
+  modalFrame: { flex: 1, backgroundColor: "rgba(0,0,0,0.38)", justifyContent: "center", padding: 16 },
+  dialog: { width: "100%", maxWidth: 820, maxHeight: "92%", minHeight: 400, alignSelf: "center", borderRadius: 14, borderWidth: 1, borderColor: "#e4e4e4", backgroundColor: "white", overflow: "hidden" },
+  dialogHeader: { padding: 16, paddingBottom: 12, backgroundColor: "#fafafa", borderBottomWidth: 1, borderBottomColor: "#eee" },
+  headingRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  dialogTitle: { fontSize: 16, fontWeight: "600", color: "#252525" },
+  closeButton: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
+  closeText: { fontSize: 28, lineHeight: 30, color: "#777" },
+  tabRow: { flexDirection: "row", gap: 4, marginTop: 12 },
+  tab: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10 },
+  activeTab: { backgroundColor: "#e8f3ef" },
+  tabText: { color: "#555", fontSize: 12 },
+  activeTabText: { color: "#087d61", fontWeight: "600" },
+  dialogContent: { flexShrink: 1, minHeight: 0, padding: 20 },
+  detailContent: { gap: 20 },
+  detailHeading: { borderBottomWidth: 1, borderBottomColor: "#eee", paddingBottom: 16, gap: 4 },
+  detailTitle: { fontSize: 18, fontWeight: "600", color: "#222" },
+  hint: { fontSize: 12, lineHeight: 18, color: "#777" },
+  avatar: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", backgroundColor: "#e8f3ef" },
+  avatarText: { fontSize: 20, fontWeight: "600", color: "#087d61" },
+  field: { gap: 6 },
+  label: { color: "#4b4b4b", fontWeight: "600", fontSize: 12 },
+  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 8, minHeight: 40, paddingHorizontal: 11, fontSize: 14, color: "#222" },
+  infoCard: { backgroundColor: "#f6faf8", borderWidth: 1, borderColor: "#e7eeeb", borderRadius: 12, padding: 16, gap: 8 },
+  account: { color: "#222", fontSize: 13 },
+  signOut: { alignSelf: "flex-start", borderWidth: 1, borderColor: "#ddd", borderRadius: 8, backgroundColor: "white", paddingHorizontal: 12, paddingVertical: 8, marginTop: 4 },
+  signOutText: { color: "#4b4b4b", fontSize: 12 },
 });

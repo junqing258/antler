@@ -11,7 +11,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:web": "pnpm --filter @antler/app dev",
-    "dev:server": "pnpm --filter @antler/server dev",
+    "dev:server": "ANTLER_HOST=0.0.0.0 pnpm --filter @antler/server dev",
     "build": "pnpm --filter @antler/platform build && pnpm --filter @antler/chat-core build && pnpm --filter @antler/client-runtime build && pnpm --filter @antler/ui build && pnpm build:web && pnpm build:server && pnpm build:mobile",
     "build:web": "pnpm --filter @antler/app build",
     "build:server": "pnpm --filter @antler/server build",

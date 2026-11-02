@@ -40,9 +40,6 @@ export function HomeRoute() {
           }
         />
       )}
-      {boot.backend.mode === "supabase" && (
-        <Button label="退出登录" onPress={root.signOut} />
-      )}
     </>
   );
 }

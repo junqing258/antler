@@ -7,10 +7,12 @@ export function MessageList({
   messages,
   ready,
   onCopy,
+  bottomInset = 0,
 }: {
   messages: ChatMessage[];
   ready: boolean;
   onCopy?: (text: string) => void;
+  bottomInset?: number;
 }) {
   const list = useRef<FlatList<ChatMessage>>(null);
   const following = useRef(true);
@@ -40,7 +42,7 @@ export function MessageList({
     <FlatList
       ref={list}
       style={{ flex: 1 }}
-      contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20 }}
+      contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 20, paddingBottom: bottomInset }}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
       data={messages}
