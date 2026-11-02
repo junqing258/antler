@@ -250,7 +250,7 @@ export function AuthForm({
         </Text>
       )}
       {!!notice && (
-        <Text accessibilityRole="status" style={styles.notice}>
+        <Text style={styles.notice}>
           {notice}
         </Text>
       )}

@@ -73,21 +73,6 @@ export function ModelPicker({
             accessibilityViewIsModal
             style={[styles.sheet, { height: sheetHeight }]}
           >
-            <View style={styles.header}>
-              <View style={styles.headerSide} />
-              <Text accessibilityRole="header" style={styles.title}>
-                模型
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="完成"
-                hitSlop={10}
-                onPress={close}
-                style={styles.doneButton}
-              >
-                <Text style={styles.done}>完成</Text>
-              </Pressable>
-            </View>
             <Text style={styles.sectionTitle}>模型</Text>
             {!available && (
               <View style={styles.empty}>
@@ -141,6 +126,19 @@ export function ModelPicker({
                 })}
               </ScrollView>
             </View>
+            <View style={styles.doneWrap}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="完成"
+                onPress={close}
+                style={({ pressed }) => [
+                  styles.doneButton,
+                  pressed && styles.donePressed,
+                ]}
+              >
+                <Text style={styles.done}>完成</Text>
+              </Pressable>
+            </View>
           </View>
         </RNHostView>
       </BottomSheet>
@@ -168,28 +166,12 @@ const styles = StyleSheet.create({
     width: "100%",
     paddingTop: 16,
     paddingHorizontal: 20,
-    paddingBottom: 24,
+    paddingBottom: 8,
     backgroundColor: "#f7f7f7",
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    minHeight: 44,
-    marginTop: 8,
-    marginBottom: 24,
-  },
-  title: { fontSize: 20, lineHeight: 28, fontWeight: "700", color: "#111" },
-  headerSide: { width: 56 },
-  doneButton: {
-    width: 56,
-    minHeight: 44,
-    justifyContent: "center",
-    alignItems: "flex-end",
-  },
-  done: { fontSize: 17, lineHeight: 24, fontWeight: "600", color: "#111" },
   sectionTitle: {
     marginLeft: 12,
+    marginTop: 4,
     marginBottom: 8,
     fontSize: 14,
     lineHeight: 20,
@@ -231,4 +213,14 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: "#111",
   },
+  doneWrap: { marginTop: "auto", paddingTop: 16 },
+  doneButton: {
+    minHeight: 50,
+    borderRadius: 25,
+    backgroundColor: "#087d61",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  donePressed: { opacity: 0.8 },
+  done: { fontSize: 17, lineHeight: 24, fontWeight: "600", color: "#fff" },
 });

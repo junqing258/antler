@@ -102,7 +102,7 @@ export function ChatScreen({
         </Pressable>
       )}
       {!!notice && (notice.includes("正在重连") ? (
-        <View accessibilityRole="status" accessibilityLabel={notice} style={styles.connectionLoading}>
+        <View accessibilityLabel={notice} style={styles.connectionLoading}>
           <ActivityIndicator size="small" color="#087d61" />
         </View>
       ) : <Text accessibilityRole="alert">{notice}</Text>)}

@@ -41,6 +41,7 @@ export function ProviderConfigForm({
   title = "供应商配置",
   description = "配置仅保存在当前设备的本地存储中。",
   onReset,
+  contentPaddingHorizontal = 0,
 }: {
   value: ProviderConfigDraft;
   onChange: (next: ProviderConfigDraft) => void;
@@ -53,6 +54,8 @@ export function ProviderConfigForm({
   title?: string;
   description?: string;
   onReset?: () => void;
+  /** 滚动内容的水平内边距；宿主容器不再提供水平 padding 时用它，避免滚动条被挤离屏幕边缘。 */
+  contentPaddingHorizontal?: number;
 }) {
   const [newModel, setNewModel] = useState("");
   const update = (key: keyof ProviderConfigDraft, fieldValue: string) =>
@@ -93,7 +96,7 @@ export function ProviderConfigForm({
     });
   };
   return (
-    <ScrollView style={styles.form} contentContainerStyle={styles.formContent} nestedScrollEnabled keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
+    <ScrollView style={styles.form} contentContainerStyle={[styles.formContent, contentPaddingHorizontal > 0 && { paddingHorizontal: contentPaddingHorizontal }]} nestedScrollEnabled keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.description}>{description}</Text>
       {credentialBinding && (
@@ -229,7 +232,7 @@ export function ProviderConfigForm({
         </Text>
       )}
       {!!notice && (
-        <Text accessibilityRole="status" style={styles.notice}>
+        <Text style={styles.notice}>
           {notice}
         </Text>
       )}

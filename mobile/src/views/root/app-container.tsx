@@ -21,7 +21,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BottomSheet, RNHostView } from "@expo/ui";
 import * as Crypto from "expo-crypto";
-import { BookOpen, CircleHelp, Settings, UserRound, X } from "lucide-react-native";
+import { BookOpen, CircleHelp, Settings, UserRound } from "lucide-react-native";
 import { useRouter, useGlobalSearchParams, Stack } from "expo-router";
 import { AuthForm, ProviderConfigForm } from "@antler/ui";
 import type { BoundCredential } from "@antler/client-runtime";
@@ -490,7 +490,7 @@ export function AppContainer() {
   );
   if (loading)
     return (
-      <SafeAreaView style={[styles.center, styles.connectionLoading]} accessibilityRole="status" accessibilityLabel="正在连接">
+      <SafeAreaView style={[styles.center, styles.connectionLoading]} accessibilityLabel="正在连接">
         <ActivityIndicator size="small" color="#087d61" />
       </SafeAreaView>
     );
@@ -516,17 +516,12 @@ export function AppContainer() {
       <View style={styles.flex}>
         <Stack screenOptions={{ headerShown: false, animation: "default" }} />
         {!!error && <Text accessibilityRole="alert">{error}</Text>}
-        {settings && <BottomSheet isPresented={settings} onDismiss={() => setSettings(false)} contentPadding={0} containerColor="#fff">
+        {settings && <BottomSheet isPresented={settings} onDismiss={() => setSettings(false)} contentPadding={0} containerColor="#fff" showDragIndicator={false}>
           <RNHostView matchContents={{ vertical: true }}>
           <KeyboardAvoidingView style={[styles.modalFrame, { maxHeight: windowHeight * 0.85 }]} behavior={Platform.OS === "ios" ? "padding" : undefined}>
             <View style={styles.dialog} accessibilityViewIsModal>
+              <View style={styles.grabber} />
               <View style={styles.dialogHeader}>
-                <View style={styles.headingRow}>
-                  <Text accessibilityRole="header" style={styles.dialogTitle}>设置</Text>
-                  <Pressable accessibilityRole="button" accessibilityLabel="关闭设置" onPress={() => setSettings(false)} style={styles.closeButton}>
-                    <X size={20} color="#777" />
-                  </Pressable>
-                </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow}>
                   {([
                     ["provider", Settings, "供应商配置"],
@@ -553,6 +548,7 @@ export function AppContainer() {
                     credentialBinding={binding}
                     onReset={() => setDraftProvider(defaultProvider)}
                     description="配置只保存在当前设备，账号不会同步 API Key。"
+                    contentPaddingHorizontal={20}
                   />
                 ) : settingsTab === "knowledge" ? (
                   <KnowledgeSettings config={boot.config} getToken={getToken} onUnauthorized={onUnauthorized} isCurrent={isCurrent} />
@@ -646,17 +642,15 @@ const styles = StyleSheet.create({
   loginContent: { flexGrow: 1, justifyContent: "center", padding: 24, gap: 12 },
   modalFrame: { width: "100%", flexShrink: 1, backgroundColor: "white" },
   dialog: { flexShrink: 1, width: "100%", maxWidth: 820, alignSelf: "center", backgroundColor: "white" },
-  dialogHeader: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, backgroundColor: "white", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#e5e5e5" },
-  headingRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  dialogTitle: { fontSize: 16, fontWeight: "600", color: "#252525" },
-  closeButton: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
+  dialogHeader: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, backgroundColor: "white", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#e5e5e5" },
+  grabber: { alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: "#d9d9d9", marginTop: 10, marginBottom: 8 },
   tabRow: { flexDirection: "row", gap: 4, marginTop: 12 },
   tab: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10 },
   activeTab: { backgroundColor: "#e8f3ef" },
   tabText: { color: "#555", fontSize: 12 },
   activeTabText: { color: "#087d61", fontWeight: "600" },
-  dialogContent: { flexShrink: 1, minHeight: 0, paddingHorizontal: 20, paddingTop: 20 },
-  detailContent: { gap: 20, paddingBottom: 32 },
+  dialogContent: { flexShrink: 1, minHeight: 0, paddingTop: 20 },
+  detailContent: { gap: 20, paddingHorizontal: 20, paddingBottom: 32 },
   detailHeading: { borderBottomWidth: 1, borderBottomColor: "#eee", paddingBottom: 16, gap: 4 },
   detailTitle: { fontSize: 18, fontWeight: "600", color: "#222" },
   hint: { fontSize: 12, lineHeight: 18, color: "#777" },

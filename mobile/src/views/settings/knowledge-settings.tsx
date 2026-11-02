@@ -107,9 +107,9 @@ export function KnowledgeSettings({
   };
 
   return (
-    <ScrollView style={styles.page} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.page} contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.sectionTitle}>知识库配置</Text>
-      {loading && <Text role="status">正在读取配置…</Text>}
+      {loading && <Text>正在读取配置…</Text>}
       <View
         pointerEvents={loading || saving || !config_ ? "none" : "auto"}
         style={styles.form}
@@ -198,7 +198,7 @@ export function KnowledgeSettings({
           <Text style={styles.secondaryText}>重试</Text>
         </Pressable>
       )}
-      {!!status && <Text role="status" style={styles.status}>{status}</Text>}
+      {!!status && <Text style={styles.status}>{status}</Text>}
       {canOpenRagUrl && (
         <Pressable
           accessibilityRole="link"
@@ -214,6 +214,7 @@ export function KnowledgeSettings({
 
 const styles = StyleSheet.create({
   page: { flex: 1, gap: 8 },
+  pageContent: { paddingHorizontal: 20, paddingBottom: 32 },
   sectionTitle: { fontSize: 16, fontWeight: "600", color: "#222" },
   form: { gap: 6 },
   label: { fontSize: 13, fontWeight: "600", color: "#4b4b4b", marginTop: 8 },

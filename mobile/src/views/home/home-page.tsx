@@ -117,7 +117,7 @@ export function HomePage({
           >
             <Text style={styles.primaryText}>直接开始对话</Text>
           </Pressable>
-          {agentsQuery.isPending && <Text accessibilityRole="status">正在加载 Agent…</Text>}
+          {agentsQuery.isPending && <Text>正在加载 Agent…</Text>}
           {agentsQuery.isError && (
             <View style={styles.error}>
               <Text accessibilityRole="alert">Agent 列表加载失败。</Text>
@@ -141,7 +141,7 @@ export function HomePage({
             />
           )}
           <Text accessibilityRole="header" style={styles.section}>历史会话</Text>
-          {historyQuery.isPending && <Text accessibilityRole="status">正在加载历史会话…</Text>}
+          {historyQuery.isPending && <Text>正在加载历史会话…</Text>}
           {historyQuery.isError && (
             <View style={styles.error}>
               <Text accessibilityRole="alert">历史会话加载失败，请重试。</Text>
