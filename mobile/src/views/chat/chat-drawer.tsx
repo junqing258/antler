@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
+  Easing,
+  Image,
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { ConversationList } from "@antler/ui";
+import { Plus, Settings } from "lucide-react-native";
 import type { NativeConfig } from "../../lib/native-config";
 import { createNativePlatform } from "../../lib/native-platform";
 import {
@@ -42,7 +45,7 @@ export function ChatDrawer({
   onActiveTitle,
   onActiveDeleted,
   onOpenSettings,
-  onSignOut,
+  onOpenProfile,
 }: {
   visible: boolean;
   activeId: string;
@@ -59,7 +62,7 @@ export function ChatDrawer({
   onActiveTitle: (id: string, title: string) => void;
   onActiveDeleted: () => void;
   onOpenSettings: () => void;
-  onSignOut?: () => void;
+  onOpenProfile: () => void;
 }) {
   const platform = useMemo(
     () => createNativePlatform(config, getToken, onUnauthorized, isCurrent),
@@ -77,7 +80,6 @@ export function ChatDrawer({
   const [renameTarget, setRenameTarget] = useState<ConversationSummary>();
   const [deleteTarget, setDeleteTarget] = useState<ConversationSummary>();
   const [busy, setBusy] = useState(false);
-  const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [changeCursor, setChangeCursor] = useState(-1);
   const tombstones = useRef(new Set<string>());
   const reportedTitle = useRef("");
@@ -85,17 +87,48 @@ export function ChatDrawer({
   const drawerWidth = Math.min(width * 0.78, 320);
   const animation = useRef(new Animated.Value(0)).current;
 
+  const [modalVisible, setModalVisible] = useState(visible);
+  const pendingAction = useRef<(() => void) | undefined>(undefined);
+  const closing = useRef(false);
+
   useEffect(() => {
-    if (!visible) {
-      animation.setValue(0);
-      return;
+    if (visible) {
+      closing.current = false;
+      pendingAction.current = undefined;
+      setModalVisible(true);
+      const transition = Animated.timing(animation, {
+        toValue: 1,
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: Platform.OS !== "web",
+      });
+      transition.start();
+      return () => transition.stop();
     }
-    Animated.timing(animation, {
-      toValue: 1,
+    if (!modalVisible) return;
+    const transition = Animated.timing(animation, {
+      toValue: 0,
       duration: 220,
+      easing: Easing.in(Easing.cubic),
       useNativeDriver: Platform.OS !== "web",
-    }).start();
-  }, [visible, animation]);
+    });
+    transition.start(({ finished }) => {
+      if (!finished) return;
+      setModalVisible(false);
+      closing.current = false;
+      const action = pendingAction.current;
+      pendingAction.current = undefined;
+      action?.();
+    });
+    return () => transition.stop();
+  }, [visible, modalVisible, animation]);
+
+  const closeDrawer = (action?: () => void) => {
+    if (closing.current) return;
+    closing.current = true;
+    pendingAction.current = action;
+    onClose();
+  };
 
   // 打开时重新拉取首页，保证看到服务端最新状态（含其他端的改动）。
   useEffect(() => {
@@ -270,9 +303,9 @@ export function ChatDrawer({
     <>
       <Modal
         transparent
-        visible={visible}
+        visible={modalVisible}
         animationType="none"
-        onRequestClose={onClose}
+        onRequestClose={() => closeDrawer()}
       >
         <View style={styles.container}>
           <Animated.View
@@ -283,7 +316,7 @@ export function ChatDrawer({
               accessibilityLabel="关闭会话菜单"
               accessibilityRole="button"
               style={styles.backdropPress}
-              onPress={onClose}
+              onPress={() => closeDrawer()}
             />
           </Animated.View>
           <Animated.View
@@ -307,19 +340,24 @@ export function ChatDrawer({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="返回 Agent 首页"
-                onPress={onBackHome}
+                onPress={() => closeDrawer(onBackHome)}
                 style={styles.brandButton}
               >
-                <Text style={styles.brand}>Antler</Text>
+                <Image source={require("../../../assets/antler-logo.png")} style={styles.logo} />
+                <View style={styles.brandText}>
+                  <Text style={styles.brand}>Antler Agent</Text>
+                  <Text style={styles.version}>V0.1.0</Text>
+                </View>
               </Pressable>
               <View style={styles.divider} />
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="新建会话"
-                onPress={onNewConversation}
+                onPress={() => closeDrawer(onNewConversation)}
                 style={styles.newButton}
               >
-                <Text style={styles.newText}>＋ 新建会话</Text>
+                <Plus size={16} color="#222" />
+                <Text style={styles.newText}>新建会话</Text>
               </Pressable>
               <View style={styles.divider} />
               <View style={styles.listArea}>
@@ -348,7 +386,7 @@ export function ChatDrawer({
                       onSelect={(id) => {
                         const row = summaries.get(id);
                         if (!row) return;
-                        onSelectConversation(id, row.agentId, row.title);
+                        closeDrawer(() => onSelectConversation(id, row.agentId, row.title));
                       }}
                       onRename={(item) => {
                         const row = summaries.get(item.id);
@@ -386,39 +424,32 @@ export function ChatDrawer({
               )}
               <View style={styles.divider} />
               <View style={styles.account}>
-                <View
-                  accessibilityLabel={email ? `账号 ${email}` : "账号信息"}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="个人资料"
+                  onPress={() => closeDrawer(onOpenProfile)}
                   style={styles.accountRow}
                 >
                   <View style={styles.avatar}>
                     <Text style={styles.avatarText}>
-                      {email ? email.slice(0, 1).toUpperCase() : "·"}
+                      {email ? email.slice(0, 1).toUpperCase() : "U"}
                     </Text>
                   </View>
-                  <Text numberOfLines={1} style={styles.email}>
-                    {email || "本地模式"}
-                  </Text>
-                </View>
+                  <View style={styles.accountDetails}>
+                    <Text numberOfLines={1} style={styles.accountName}>
+                      {email ? email.split("@")[0] : "本地模式"}
+                    </Text>
+                    {!!email && <Text numberOfLines={1} style={styles.email}>{email}</Text>}
+                  </View>
+                </Pressable>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="打开设置"
-                  onPress={onOpenSettings}
+                  onPress={() => closeDrawer(onOpenSettings)}
                   style={styles.accountAction}
                 >
-                  <Text style={styles.accountIcon}>⚙</Text>
-                  <Text style={styles.accountText}>设置</Text>
+                  <Settings size={18} color="#777" />
                 </Pressable>
-                {onSignOut && (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="退出登录"
-                    onPress={() => setConfirmSignOut(true)}
-                    style={styles.accountAction}
-                  >
-                    <Text style={styles.accountIcon}>↩</Text>
-                    <Text style={styles.signOutText}>退出登录</Text>
-                  </Pressable>
-                )}
               </View>
             </SafeAreaColumn>
           </Animated.View>
@@ -445,17 +476,7 @@ export function ChatDrawer({
           if (!busy) setDeleteTarget(undefined);
         }}
       />
-      <ConfirmDialog
-        visible={confirmSignOut}
-        title="退出登录"
-        message="确定退出当前账号？"
-        confirmLabel="退出"
-        onConfirm={() => {
-          setConfirmSignOut(false);
-          onSignOut?.();
-        }}
-        onCancel={() => setConfirmSignOut(false)}
-      />
+
     </>
   );
 }
@@ -487,8 +508,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 4, height: 0 },
   },
   safe: { flex: 1 },
-  brandButton: { paddingHorizontal: 16, paddingVertical: 14, minHeight: 48 },
-  brand: { fontSize: 20, fontWeight: "700", color: BRAND_COLOR },
+  brandButton: { paddingHorizontal: 16, minHeight: 76, flexDirection: "row", alignItems: "center", gap: 12 },
+  logo: { width: 40, height: 40 },
+  brandText: { gap: 2 },
+  brand: { fontSize: 15, fontWeight: "700", color: BRAND_COLOR },
+  version: { fontSize: 10, letterSpacing: 0.8, color: BRAND_COLOR },
   divider: { height: 1, backgroundColor: "#e7e5e0" },
   newButton: {
     marginHorizontal: 12,
@@ -496,42 +520,24 @@ const styles = StyleSheet.create({
     minHeight: 44,
     borderRadius: 10,
     backgroundColor: "#efedea",
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    gap: 8,
+    paddingHorizontal: 12,
   },
-  newText: { fontSize: 15, fontWeight: "600", color: "#333" },
+  newText: { fontSize: 13, color: "#222" },
   listArea: { flex: 1, minHeight: 0 },
   status: { padding: 12, gap: 8 },
   hint: { padding: 12, color: "#888" },
   loadMore: { minHeight: 44, alignItems: "center", justifyContent: "center" },
   link: { color: BRAND_COLOR, fontSize: 14 },
   operationError: { paddingHorizontal: 12, paddingVertical: 6, color: "#b3261e" },
-  account: { paddingVertical: 8, gap: 2 },
-  accountRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#e2f0ec",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: { color: BRAND_COLOR, fontWeight: "700" },
-  email: { flex: 1, fontSize: 13, color: "#555" },
-  accountAction: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    minHeight: 44,
-    paddingHorizontal: 16,
-  },
-  accountIcon: { fontSize: 16, color: "#666", width: 20, textAlign: "center" },
-  accountText: { fontSize: 14, color: "#333" },
-  signOutText: { fontSize: 14, color: "#b3261e" },
+  account: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 10 },
+  accountRow: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44 },
+  avatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#e8f3ef", alignItems: "center", justifyContent: "center" },
+  avatarText: { color: BRAND_COLOR, fontWeight: "600", fontSize: 12 },
+  accountDetails: { flex: 1, minWidth: 0 },
+  accountName: { fontSize: 13, fontWeight: "600", color: "#252525" },
+  email: { fontSize: 10, color: "#777" },
+  accountAction: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
 });

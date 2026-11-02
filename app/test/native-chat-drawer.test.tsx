@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   act,
   cleanup,
@@ -99,7 +100,7 @@ function DrawerHarness({
   activeId = "a",
   agentId = "agent-1",
   email,
-  onSignOut,
+  onOpenProfile = () => {},
   onNewConversation = () => {},
   onSelectConversation = () => {},
   onActiveTitle = () => {},
@@ -108,15 +109,16 @@ function DrawerHarness({
   activeId?: string;
   agentId?: string;
   email?: string;
-  onSignOut?: () => void;
+  onOpenProfile?: () => void;
   onNewConversation?: () => void;
   onSelectConversation?: (id: string, agentId?: string, title?: string) => void;
   onActiveTitle?: (id: string, title: string) => void;
   onActiveDeleted?: () => void;
 }) {
+  const [visible, setVisible] = useState(true);
   return (
     <ChatDrawer
-      visible
+      visible={visible}
       activeId={activeId}
       agentId={agentId}
       config={config}
@@ -124,14 +126,14 @@ function DrawerHarness({
       onUnauthorized={() => {}}
       isCurrent={() => true}
       email={email}
-      onClose={() => {}}
+      onClose={() => setVisible(false)}
       onBackHome={() => {}}
       onNewConversation={onNewConversation}
       onSelectConversation={onSelectConversation}
       onActiveTitle={onActiveTitle}
       onActiveDeleted={onActiveDeleted}
       onOpenSettings={() => {}}
-      onSignOut={onSignOut}
+      onOpenProfile={onOpenProfile}
     />
   );
 }
@@ -171,7 +173,7 @@ it("loads the current agent's conversations and marks the active one", async () 
 it("creates a conversation and reports selection with the row title", async () => {
   const onNewConversation = vi.fn();
   const onSelectConversation = vi.fn();
-  render(
+  const first = render(
     <DrawerHarness
       onNewConversation={onNewConversation}
       onSelectConversation={onSelectConversation}
@@ -179,9 +181,19 @@ it("creates a conversation and reports selection with the row title", async () =
   );
   await screen.findByText("会话甲");
   fireEvent.click(screen.getByRole("button", { name: "新建会话" }));
-  expect(onNewConversation).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(onNewConversation).toHaveBeenCalledTimes(1));
+  first.unmount();
+  render(<DrawerHarness onSelectConversation={onSelectConversation} />);
+  await screen.findByText("会话乙");
   fireEvent.click(screen.getByRole("button", { name: "会话乙" }));
-  expect(onSelectConversation).toHaveBeenCalledWith("b", "agent-1", "会话乙");
+  await waitFor(() => expect(onSelectConversation).toHaveBeenCalledWith("b", "agent-1", "会话乙"));
+});
+
+it("dismisses the drawer when its backdrop is pressed", async () => {
+  render(<DrawerHarness />);
+  await screen.findByText("会话甲");
+  fireEvent.click(screen.getByRole("button", { name: "关闭会话菜单" }));
+  await waitFor(() => expect(screen.queryByText("会话甲")).not.toBeInTheDocument());
 });
 
 it("renames through the dialog, rejects empty input and updates the row", async () => {
@@ -355,6 +367,7 @@ it("unsubscribes the change stream when the drawer closes", async () => {
     onActiveTitle: () => {},
     onActiveDeleted: () => {},
     onOpenSettings: () => {},
+    onOpenProfile: () => {},
   };
   const { rerender } = render(<ChatDrawer visible {...props} />);
   await screen.findByText("会话甲");
@@ -363,8 +376,18 @@ it("unsubscribes the change stream when the drawer closes", async () => {
   expect(state.unsubscribe).toHaveBeenCalled();
 });
 
+it("shows the account details and opens the profile from the footer", async () => {
+  const onOpenProfile = vi.fn();
+  render(<DrawerHarness email="junqing258@126.com" onOpenProfile={onOpenProfile} />);
+  await screen.findByText("会话甲");
+  expect(screen.getByText("junqing258")).toBeInTheDocument();
+  expect(screen.getByText("junqing258@126.com")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "个人资料" }));
+  await waitFor(() => expect(onOpenProfile).toHaveBeenCalledTimes(1));
+});
+
 it("shows a neutral placeholder and hides sign-out when no account or email exists", async () => {
-  render(<DrawerHarness email={undefined} onSignOut={undefined} />);
+  render(<DrawerHarness email={undefined} />);
   await screen.findByText("会话甲");
   expect(screen.getByText("本地模式")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "打开设置" })).toBeInTheDocument();

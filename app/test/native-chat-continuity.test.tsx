@@ -8,6 +8,8 @@ const capture = vi.hoisted(() => ({
   executionConfig: undefined as Record<string, unknown> | undefined,
   providerStatus: 200,
   running: false,
+  ready: true,
+  notice: "",
 }));
 vi.mock("../../mobile/node_modules/react-native-safe-area-context", () => ({
   SafeAreaInsetsContext: React.createContext({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -46,12 +48,12 @@ vi.mock("@antler/client-runtime", async (importOriginal) => ({
     subscribe = () => () => {};
     getSnapshot = () => this.state;
     state = {
-      ready: true,
+      ready: capture.ready,
       running: capture.running,
       sending: false,
       messages: [],
       hasMore: false,
-      notice: "",
+      notice: capture.notice,
       contextReason: "",
       executionConfig: capture.executionConfig,
     };
@@ -85,6 +87,25 @@ afterEach(() => {
   capture.executionConfig = undefined;
   capture.providerStatus = 200;
   capture.running = false;
+  capture.ready = true;
+  capture.notice = "";
+});
+it("shows one centered loading state and connection notice while the session initializes", () => {
+  capture.ready = false;
+  capture.notice = "连接中断，正在重连";
+  render(
+    <NativeChat
+      config={{ ...defaultNativeConfig, conversationId: "c" }}
+      provider={{ name: "x", protocol: "openai-responses", baseUrl: "", apiKey: "", model: "", models: [] }}
+      getToken={async () => ""}
+      onUnauthorized={() => {}}
+      onConfigure={() => {}}
+      onModelSelected={() => {}}
+    />,
+  );
+  expect(screen.getAllByText("正在加载会话…")).toHaveLength(1);
+  expect(screen.getByText("连接中断，正在重连")).toBeInTheDocument();
+  expect(screen.queryByLabelText("聊天输入")).not.toBeInTheDocument();
 });
 it("updates provider credentials without stopping the live session or discarding the draft", () => {
   const provider = {

@@ -34,7 +34,7 @@ export type RootContextValue = {
   getToken: () => Promise<string>;
   isCurrent: () => boolean;
   onUnauthorized: () => void;
-  openSettings: (binding?: BoundCredential) => void;
+  openSettings: (binding?: BoundCredential, tab?: "provider" | "profile") => void;
   /** 保存模型选择；失败时打开设置并显示错误，返回是否成功。 */
   saveProviderModel: (model: string) => Promise<boolean>;
   signOut: () => void;

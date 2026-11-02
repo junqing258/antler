@@ -12,14 +12,15 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as Crypto from "expo-crypto";
+import { BookOpen, CircleHelp, Settings, UserRound, X } from "lucide-react-native";
 import { useRouter, useGlobalSearchParams, Stack } from "expo-router";
 import { AuthForm, ProviderConfigForm } from "@antler/ui";
 import type { BoundCredential } from "@antler/client-runtime";
@@ -382,11 +383,11 @@ export function AppContainer() {
       setBoot(undefined);
     }
   }, [boot, dropSession, invalidateBoot]);
-  const openSettings = (value?: BoundCredential) => {
+  const openSettings = (value?: BoundCredential, tab: "provider" | "profile" = "provider") => {
     setBinding(value);
     setDraftProvider(provider);
     setSettingsError("");
-    setSettingsTab("provider");
+    setSettingsTab(tab);
     setDisplayName("用户");
     setSettings(true);
   };
@@ -508,18 +509,19 @@ export function AppContainer() {
                 <View style={styles.headingRow}>
                   <Text accessibilityRole="header" style={styles.dialogTitle}>设置</Text>
                   <Pressable accessibilityRole="button" accessibilityLabel="关闭设置" onPress={() => setSettings(false)} style={styles.closeButton}>
-                    <Text style={styles.closeText}>×</Text>
+                    <X size={20} color="#777" />
                   </Pressable>
                 </View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow}>
                   {([
-                    ["provider", "⚙", "供应商配置"],
-                    ["profile", "◉", "个人资料"],
-                    ["about", "ⓘ", "关于"],
-                    ["knowledge", "▤", "知识库"],
-                  ] as const).map(([tab, icon, label]) => (
+                    ["provider", Settings, "供应商配置"],
+                    ["profile", UserRound, "个人资料"],
+                    ["about", CircleHelp, "关于"],
+                    ["knowledge", BookOpen, "知识库"],
+                  ] as const).map(([tab, Icon, label]) => (
                     <Pressable key={tab} accessibilityRole="tab" accessibilityState={{ selected: settingsTab === tab }} onPress={() => setSettingsTab(tab)} style={[styles.tab, settingsTab === tab && styles.activeTab]}>
-                      <Text style={[styles.tabText, settingsTab === tab && styles.activeTabText]}>{icon}  {label}</Text>
+                      <Icon size={16} color={settingsTab === tab ? "#087d61" : "#555"} />
+                      <Text style={[styles.tabText, settingsTab === tab && styles.activeTabText]}>{label}</Text>
                     </Pressable>
                   ))}
                 </ScrollView>
@@ -630,9 +632,8 @@ const styles = StyleSheet.create({
   headingRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   dialogTitle: { fontSize: 16, fontWeight: "600", color: "#252525" },
   closeButton: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
-  closeText: { fontSize: 28, lineHeight: 30, color: "#777" },
   tabRow: { flexDirection: "row", gap: 4, marginTop: 12 },
-  tab: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10 },
+  tab: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10 },
   activeTab: { backgroundColor: "#e8f3ef" },
   tabText: { color: "#555", fontSize: 12 },
   activeTabText: { color: "#087d61", fontWeight: "600" },

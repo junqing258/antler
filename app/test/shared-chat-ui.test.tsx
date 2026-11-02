@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Composer, ChatScreen, MessageBubble, ModelPicker } from "@antler/ui";
 import { MessageList } from "../../packages/ui/src/message-list.web";
+import { Keyboard, Platform } from "react-native";
 
 afterEach(cleanup);
 
@@ -392,6 +393,21 @@ describe("shared chat screen", () => {
     onSend: vi.fn(),
     onStop: vi.fn(),
   };
+
+  it("dismisses the native keyboard when the welcome area is tapped", () => {
+    const originalOS = Platform.OS;
+    const dismiss = vi.spyOn(Keyboard, "dismiss").mockImplementation(() => {});
+    Object.defineProperty(Platform, "OS", { configurable: true, value: "ios" });
+    try {
+      render(<ChatScreen {...base} messages={[]} composerBackground={<span />} />);
+      fireEvent.click(screen.getByText("今天我能帮你做什么？"));
+      expect(dismiss).toHaveBeenCalledOnce();
+      expect(screen.getByRole("textbox", { name: "消息" })).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(Platform, "OS", { configurable: true, value: originalOS });
+      dismiss.mockRestore();
+    }
+  });
 
   it("shows the welcome state with the composer when ready and empty, and the loading list otherwise", () => {
     const { rerender } = render(

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Bot, Settings } from "lucide-react-native";
 import { AgentList, type AgentCardItem } from "@antler/ui";
 import { createNativePlatform } from "../../lib/native-platform";
 import type { NativeConfig } from "../../lib/native-config";
@@ -145,7 +146,7 @@ export function HomePage({
         </View>
         <Text style={styles.navActive}>Agent</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="打开设置" onPress={onOpenSettings} style={styles.settings}>
-          <Text style={styles.settingsIcon}>⚙</Text>
+          <Settings size={18} color="#777" />
         </Pressable>
       </View>
       <View style={styles.body}>
@@ -181,10 +182,7 @@ export function HomePage({
                 <Pressable accessibilityRole="button" onPress={() => onOpenAgent(link.item.id)}>{content}</Pressable>
               ) : null}
               renderIcon={() => (
-                <View style={styles.bot}>
-                  <View style={styles.botAntenna} />
-                  <Text style={styles.botFace}>••</Text>
-                </View>
+                <Bot size={24} color="#222" />
               )}
             />
           )}
@@ -219,7 +217,6 @@ const styles = StyleSheet.create({
   brand: { color: "#43a887", fontSize: 16, fontWeight: "700" },
   navActive: { fontSize: 14, color: "#222" },
   settings: { marginLeft: "auto", width: 32, height: 32, borderRadius: 16, backgroundColor: "#f3f4f4", alignItems: "center", justifyContent: "center" },
-  settingsIcon: { fontSize: 20, color: "#777" },
   body: { flex: 1, overflow: "hidden" },
   content: { paddingHorizontal: 24, paddingTop: 40, paddingBottom: 32 },
   title: { fontSize: 30, fontWeight: "600", letterSpacing: -0.5, color: "#222", marginBottom: 32 },
@@ -233,7 +230,4 @@ const styles = StyleSheet.create({
   history: { padding: 16, marginBottom: 12, borderWidth: 1, borderColor: "#e6e6e2", backgroundColor: "white", borderRadius: 12 },
   redShape: { position: "absolute", top: "20%", left: -10, width: 100, height: 100, borderRadius: 50, backgroundColor: "rgba(239,83,80,0.1)" },
   blueShape: { position: "absolute", top: "22%", right: -40, width: 100, height: 100, borderRadius: 16, backgroundColor: "rgba(66,133,244,0.1)", transform: [{ rotate: "45deg" }] },
-  bot: { width: 21, height: 16, borderWidth: 2, borderColor: "#222", borderRadius: 4, alignItems: "center", justifyContent: "center" },
-  botAntenna: { position: "absolute", top: -6, width: 6, height: 4, borderTopWidth: 2, borderRightWidth: 2, borderColor: "#222" },
-  botFace: { color: "#222", fontSize: 12, lineHeight: 14, letterSpacing: 2 },
 });

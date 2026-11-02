@@ -1,22 +1,27 @@
 import {
-  useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
+  type ComponentType,
+  type ReactElement,
 } from "react";
 import {
-  KeyboardAvoidingView,
-  Platform,
+  ActivityIndicator,
+  Image,
   Pressable,
   StyleSheet,
   Text,
   View,
+  type ViewProps,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { BlurView } from "expo-blur";
-import { SafeAreaInsetsContext } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
+import MaskedView from "@react-native-masked-view/masked-view";
+import { Menu } from "lucide-react-native";
+import { ChatKeyboardAvoidingView } from "./chat-keyboard-avoiding-view";
 import { ChatScreen, type ProviderConfigDraft } from "@antler/ui";
 import {
   ChatSession,
@@ -27,6 +32,10 @@ import {
 } from "@antler/client-runtime";
 import type { NativeConfig } from "../../lib/native-config";
 import { createNativePlatform } from "../../lib/native-platform";
+
+// The library’s class declaration targets older React Native types.
+const GradientMask = MaskedView as unknown as ComponentType<ViewProps & { maskElement: ReactElement }>;
+
 
 export function NativeChat({
   config,
@@ -53,7 +62,6 @@ export function NativeChat({
   title?: string;
   onOpenDrawer?: () => void;
 }) {
-  const insets = useContext(SafeAreaInsetsContext);
   const providerRef = useRef(provider);
   providerRef.current = provider;
   const platform = useMemo(
@@ -186,11 +194,8 @@ export function NativeChat({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cancelAfter, state.running]);
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? (insets?.top ?? 0) : 0}
-    >
+    <View style={styles.flex}>
+    <ChatKeyboardAvoidingView>
       <View style={styles.row}>
         {onOpenDrawer && (
           <Pressable
@@ -200,7 +205,7 @@ export function NativeChat({
             hitSlop={8}
             style={styles.menuButton}
           >
-            <Text style={styles.menuIcon}>☰</Text>
+            <Menu size={22} color="#333" />
           </Pressable>
         )}
         <View style={styles.title}>
@@ -214,7 +219,29 @@ export function NativeChat({
           )}
         </View>
       </View>
+      {!state.ready ? (
+        <View style={styles.loading} accessibilityState={{ busy: true }}>
+          <View style={styles.loadingLogo}>
+            <Image source={require("../../../assets/antler-logo.png")} style={styles.logo} accessibilityIgnoresInvertColors />
+          </View>
+          <View style={styles.loadingLabel} accessibilityRole="progressbar" accessibilityLabel="正在加载会话">
+            <ActivityIndicator size="small" color="#087d61" />
+            <Text style={styles.loadingText}>正在加载会话…</Text>
+          </View>
+          {!!state.notice && <Text accessibilityRole="alert" style={styles.loadingNotice}>{state.notice}</Text>}
+        </View>
+      ) : <View style={styles.chatContent}>
       <ChatScreen
+        showDisclaimer={false}
+        dockBackground={
+          <GradientMask pointerEvents="none" style={StyleSheet.absoluteFill} maskElement={
+            <LinearGradient colors={["transparent", "rgba(0,0,0,0.65)", "#000"]} locations={[0, 0.55, 1]} style={StyleSheet.absoluteFill} />
+          }>
+            <BlurView tint="light" intensity={90} style={StyleSheet.absoluteFill} />
+            <View style={styles.dockTint} />
+            <LinearGradient colors={["rgba(255,255,255,0)", "#fff"]} style={styles.safeAreaFade} />
+          </GradientMask>
+        }
         composerBackground={<BlurView tint="light" intensity={65} style={StyleSheet.absoluteFill} />}
         messages={state.messages}
         ready={state.ready}
@@ -253,12 +280,23 @@ export function NativeChat({
           onModelSelected(picked, Boolean(state.executionConfig));
         }}
       />
-    </KeyboardAvoidingView>
+      </View>}
+    </ChatKeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  chatContent: { flex: 1, minHeight: 0 },
+  dockTint: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(255,255,255,0.7)" },
+  safeAreaFade: { position: "absolute", left: 0, right: 0, bottom: 0, height: 32 },
+  loading: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24, backgroundColor: "#fff" },
+  loadingLogo: { width: 64, height: 64, borderRadius: 16, backgroundColor: "#f0f8f5", alignItems: "center", justifyContent: "center", marginBottom: 20 },
+  logo: { width: 40, height: 40, resizeMode: "contain" },
+  loadingLabel: { flexDirection: "row", alignItems: "center", gap: 8 },
+  loadingText: { fontSize: 14, fontWeight: "500", color: "#404b47" },
+  loadingNotice: { marginTop: 12, textAlign: "center", fontSize: 14, color: "#747d79" },
   title: { flex: 1, minWidth: 0 },
   heading: { fontSize: 18, fontWeight: "700" },
   subtitle: { fontSize: 12, color: "#777" },
@@ -268,7 +306,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  menuIcon: { fontSize: 22, color: "#333" },
   row: {
     flexDirection: "row",
     alignItems: "center",

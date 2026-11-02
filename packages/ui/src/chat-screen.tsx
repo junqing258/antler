@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Keyboard, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import type { ChatMessage } from "@antler/chat-core";
 import { Composer } from "./composer";
 import { MessageList } from "./message-list";
@@ -27,6 +27,8 @@ export type ChatScreenProps = {
   onModelChange?: (model: string) => void;
   welcomeTitle?: string;
   composerBackground?: ReactNode;
+  dockBackground?: ReactNode;
+  showDisclaimer?: boolean;
 };
 
 export function ChatScreen({
@@ -51,6 +53,8 @@ export function ChatScreen({
   onModelChange,
   welcomeTitle = "今天我能帮你做什么？",
   composerBackground,
+  dockBackground,
+  showDisclaimer = true,
 }: ChatScreenProps) {
   const [dockHeight, setDockHeight] = useState(0);
   const floating = Platform.OS !== "web" && !!composerBackground;
@@ -115,10 +119,17 @@ export function ChatScreen({
     return (
       <View style={styles.flex}>
         {notices}
-        <View style={styles.welcome}>
-          <Text style={styles.welcomeTitle}>{welcomeTitle}</Text>
-          <View style={styles.welcomeComposer}>{composer}</View>
-        </View>
+        {floating ? (
+          <Pressable style={styles.welcome} onPress={Keyboard.dismiss} accessible={false}>
+            <Text style={styles.welcomeTitle}>{welcomeTitle}</Text>
+          </Pressable>
+        ) : (
+          <View style={styles.welcome}>
+            <Text style={styles.welcomeTitle}>{welcomeTitle}</Text>
+            <View style={styles.welcomeComposer}>{composer}</View>
+          </View>
+        )}
+        {floating && <View style={styles.composerDock}>{dockBackground}{composer}</View>}
       </View>
     );
   return (
@@ -126,8 +137,9 @@ export function ChatScreen({
       {notices}
       <MessageList messages={messages} ready={ready} onCopy={onCopy} bottomInset={floating ? dockHeight : 0} />
       <View onLayout={(event) => setDockHeight(event.nativeEvent.layout.height)} style={[styles.composerDock, floating && styles.floatingDock]} pointerEvents="box-none">
+        {floating && dockBackground}
         {composer}
-        <Text style={styles.disclaimer}>Antler 可能出错，请核查重要结果。</Text>
+        {showDisclaimer && <Text style={styles.disclaimer}>Antler 可能出错，请核查重要结果。</Text>}
       </View>
     </View>
   );

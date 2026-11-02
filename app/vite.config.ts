@@ -53,6 +53,7 @@ export default defineConfig(({ mode }) => ({
   ],
   resolve: {
     alias: [
+      ...(mode === "test" ? [{ find: /^lucide-react-native$/, replacement: path.resolve(import.meta.dirname, "node_modules/lucide-react/dist/esm/lucide-react.mjs") }] : []),
       { find: /^react-native$/, replacement: path.resolve(import.meta.dirname, "node_modules/react-native-web/dist/index.js") },
       { find: "@", replacement: path.resolve(import.meta.dirname, "./src") },
     ],

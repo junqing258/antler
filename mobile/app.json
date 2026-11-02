@@ -4,6 +4,7 @@
     "slug": "antler-p0-probe",
     "scheme": "antler",
     "version": "0.1.0",
+    "icon": "./assets/icon.png",
     "orientation": "default",
     "ios": {
       "bundleIdentifier": "com.antler.p0probe",
@@ -15,7 +16,11 @@
       }
     },
     "android": {
-      "package": "com.antler.p0probe"
+      "package": "com.antler.p0probe",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
     },
     "plugins": [
       "expo-secure-store"

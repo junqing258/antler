@@ -3,6 +3,7 @@ node_modules/
 dist/
 dist-p0/
 .expo/
+.codegraph
 mobile/ios/
 mobile/android/
 *.log

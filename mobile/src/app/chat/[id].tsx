@@ -85,7 +85,7 @@ export function ChatRoute() {
           )
         }
         onOpenSettings={() => root.openSettings()}
-        onSignOut={boot.backend.mode === "supabase" ? root.signOut : undefined}
+        onOpenProfile={() => root.openSettings(undefined, "profile")}
       />
     </View>
   );

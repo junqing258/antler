@@ -162,7 +162,7 @@ export function Chat({
           onLoadMore={onLoadMore}
         />
       </nav>
-      <div className="mt-auto flex items-center justify-between px-1 pt-1.5">
+      <div className={`mt-auto flex items-center justify-between px-1 ${isMobile ? "border-t border-[#e8e8e5] pt-3" : "pt-1.5"}`}>
         <button
           className="flex items-center gap-2 rounded-md border-0 bg-transparent p-1 text-left text-[#252525] hover:bg-[#eee]"
           type="button"
