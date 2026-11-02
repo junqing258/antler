@@ -56,6 +56,7 @@ export default defineConfig(({ mode }) => ({
     ...(mode === "test" ? [
       { find: /^lucide-react-native$/, replacement: path.resolve(import.meta.dirname, "node_modules/lucide-react/dist/esm/lucide-react.mjs") },
       { find: /^react-native-drawer-layout$/, replacement: path.resolve(import.meta.dirname, "test/react-native-drawer-layout.tsx") },
+      { find: /^react-native-keyboard-controller$/, replacement: path.resolve(import.meta.dirname, "test/react-native-keyboard-controller.tsx") },
     ] : []),
       { find: /^react-native$/, replacement: path.resolve(import.meta.dirname, "node_modules/react-native-web/dist/index.js") },
       { find: "@", replacement: path.resolve(import.meta.dirname, "./src") },
