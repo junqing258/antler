@@ -56,6 +56,7 @@ const routerFake = vi.hoisted(() => {
     push: go,
     replace: go,
     back: () => go("/"),
+    canGoBack: () => routerState.route !== "/",
     canDismiss: () => false,
   };
 });

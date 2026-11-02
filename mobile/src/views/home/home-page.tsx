@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Bot, Settings } from "lucide-react-native";
 import { AgentList, type AgentCardItem } from "@antler/ui";
 import { createNativePlatform } from "../../lib/native-platform";
@@ -89,20 +90,23 @@ export function HomePage({
   });
   return (
     <View style={styles.page}>
-      <View style={styles.header}>
-        <View style={styles.brandRow}>
-          <Image source={require("../../../assets/antler-logo.png")} style={styles.logo} />
-          <Text style={styles.brand}>Antler</Text>
+      <SafeAreaView style={styles.headerSafeArea} edges={["top"]}>
+        <View style={styles.header}>
+          <View style={styles.brandRow}>
+            <Image source={require("../../../assets/antler-logo.png")} style={styles.logo} />
+            <Text style={styles.brand}>Antler</Text>
+          </View>
+          <Text style={styles.navActive}>Agent</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="打开设置" onPress={onOpenSettings} style={styles.settings}>
+            <Settings size={18} color="#777" />
+          </Pressable>
         </View>
-        <Text style={styles.navActive}>Agent</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="打开设置" onPress={onOpenSettings} style={styles.settings}>
-          <Settings size={18} color="#777" />
-        </Pressable>
-      </View>
-      <View style={styles.body}>
-        <View pointerEvents="none" style={styles.redShape} />
-        <View pointerEvents="none" style={styles.blueShape} />
-        <ScrollView contentContainerStyle={styles.content}>
+      </SafeAreaView>
+      <SafeAreaView style={styles.bodySafeArea} edges={["bottom"]}>
+        <View style={styles.body}>
+          <View pointerEvents="none" style={styles.redShape} />
+          <View pointerEvents="none" style={styles.blueShape} />
+          <ScrollView contentContainerStyle={styles.content}>
           <Text accessibilityRole="header" style={styles.title}>选择你的 Agent</Text>
           <Text style={styles.subtitle}>选择专注于任务的 Agent，开始对话。</Text>
           <Pressable
@@ -162,20 +166,23 @@ export function HomePage({
               <Text style={styles.link}>{historyQuery.isFetchingNextPage ? "加载中…" : "加载更多历史"}</Text>
             </Pressable>
           )}
-        </ScrollView>
-      </View>
+          </ScrollView>
+        </View>
+      </SafeAreaView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: "#fafaf9" },
+  headerSafeArea: { backgroundColor: "#fff" },
   header: { backgroundColor: "white", borderBottomWidth: 1, borderBottomColor: "#e8e8e5", paddingHorizontal: 20, paddingVertical: 16, flexDirection: "row", alignItems: "center", gap: 20 },
   brandRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   logo: { width: 32, height: 32 },
   brand: { color: "#43a887", fontSize: 16, fontWeight: "700" },
   navActive: { fontSize: 14, color: "#222" },
   settings: { marginLeft: "auto", width: 32, height: 32, borderRadius: 16, backgroundColor: "#f3f4f4", alignItems: "center", justifyContent: "center" },
+  bodySafeArea: { flex: 1, backgroundColor: "#fafaf9" },
   body: { flex: 1, overflow: "hidden" },
   content: { paddingHorizontal: 24, paddingTop: 40, paddingBottom: 32 },
   title: { fontSize: 30, fontWeight: "600", letterSpacing: -0.5, color: "#222", marginBottom: 32 },

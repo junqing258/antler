@@ -1,9 +1,7 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Animated,
-  Easing,
+  BackHandler,
   Image,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -12,7 +10,8 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { SafeAreaInsetsContext, SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Drawer } from "react-native-drawer-layout";
 import { ConversationList } from "@antler/ui";
 import { Pencil, Plus, Settings } from "lucide-react-native";
 import type { NativeConfig } from "../../lib/native-config";
@@ -28,7 +27,7 @@ import { ConfirmDialog, InputDialog } from "../../components/dialogs";
 
 const BRAND_COLOR = "#087d61";
 
-/** 聊天页原生抽屉：品牌回首页、新建会话、按当前 Agent 的历史管理、账号与设置。 */
+/** 聊天页抽屉：使用原生手势与 UI 线程动画管理会话、账号和设置。 */
 export function ChatDrawer({
   visible,
   activeId,
@@ -38,6 +37,8 @@ export function ChatDrawer({
   onUnauthorized,
   isCurrent,
   email,
+  children,
+  onOpen,
   onClose,
   onBackHome,
   onNewConversation,
@@ -58,6 +59,8 @@ export function ChatDrawer({
   onUnauthorized: () => void;
   isCurrent: () => boolean;
   email?: string;
+  children?: ReactNode;
+  onOpen?: () => void;
   onClose: () => void;
   onBackHome: () => void;
   onNewConversation: () => void;
@@ -70,8 +73,6 @@ export function ChatDrawer({
   onOpenSettings: () => void;
   onOpenProfile: () => void;
 }) {
-  // Read the screen insets before the modal and its off-screen slide animation.
-  const screenInsets = useContext(SafeAreaInsetsContext);
   const platform = useMemo(
     () => createNativePlatform(config, getToken, onUnauthorized, isCurrent),
     [config, getToken, onUnauthorized, isCurrent],
@@ -96,43 +97,8 @@ export function ChatDrawer({
   const reportedTitle = useRef("");
   const { width } = useWindowDimensions();
   const drawerWidth = Math.min(width * 0.78, 320);
-  const animation = useRef(new Animated.Value(0)).current;
-
-  const [modalVisible, setModalVisible] = useState(visible);
   const pendingAction = useRef<(() => void) | undefined>(undefined);
   const closing = useRef(false);
-
-  useEffect(() => {
-    if (visible) {
-      closing.current = false;
-      pendingAction.current = undefined;
-      setModalVisible(true);
-      const transition = Animated.timing(animation, {
-        toValue: 1,
-        duration: 220,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: Platform.OS !== "web",
-      });
-      transition.start();
-      return () => transition.stop();
-    }
-    if (!modalVisible) return;
-    const transition = Animated.timing(animation, {
-      toValue: 0,
-      duration: 220,
-      easing: Easing.in(Easing.cubic),
-      useNativeDriver: Platform.OS !== "web",
-    });
-    transition.start(({ finished }) => {
-      if (!finished) return;
-      setModalVisible(false);
-      closing.current = false;
-      const action = pendingAction.current;
-      pendingAction.current = undefined;
-      action?.();
-    });
-    return () => transition.stop();
-  }, [visible, modalVisible, animation]);
 
   const closeDrawer = (action?: () => void) => {
     if (closing.current) return;
@@ -140,6 +106,25 @@ export function ChatDrawer({
     pendingAction.current = action;
     onClose();
   };
+
+  // Drawer Layout does not own Android's hardware-back event as Modal did.
+  useEffect(() => {
+    if (!visible || Platform.OS !== "android") return;
+    const listener = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (busy) return true;
+      if (deleteTarget) {
+        setDeleteTarget(undefined);
+        setOperationError("");
+      } else if (renameTarget) {
+        setRenameTarget(undefined);
+        setOperationError("");
+      } else {
+        closeDrawer();
+      }
+      return true;
+    });
+    return () => listener.remove();
+  }, [busy, deleteTarget, renameTarget, visible]);
 
   // 打开时重新拉取首页，保证看到服务端最新状态（含其他端的改动）。
   useEffect(() => {
@@ -324,167 +309,151 @@ export function ChatDrawer({
 
   return (
     <>
-      <Modal
-        transparent
-        visible={modalVisible}
-        animationType="none"
-        onRequestClose={() => {
+      <Drawer
+        open={visible}
+        drawerType="front"
+        drawerPosition="left"
+        drawerStyle={[styles.drawer, { width: drawerWidth }]}
+        overlayStyle={styles.backdrop}
+        overlayAccessibilityLabel="关闭会话菜单"
+        onOpen={onOpen ?? (() => {})}
+        onClose={() => {
           if (busy) return;
           if (deleteTarget) { setDeleteTarget(undefined); setOperationError(""); }
           else if (renameTarget) { setRenameTarget(undefined); setOperationError(""); }
-          else closeDrawer();
+          else onClose();
         }}
-      >
-        <View style={styles.container}>
-          <Animated.View
-            style={[styles.backdrop, { opacity: animation }]}
-            pointerEvents={visible ? "auto" : "none"}
-          >
-            <Pressable
-              accessibilityLabel="关闭会话菜单"
-              accessibilityRole="button"
-              style={styles.backdropPress}
-              onPress={() => closeDrawer()}
-            />
-          </Animated.View>
-          <Animated.View
-            accessibilityViewIsModal
-            style={[
-              styles.drawer,
-              { width: drawerWidth },
-              {
-                transform: [
-                  {
-                    translateX: animation.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-drawerWidth, 0],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            <SafeAreaColumn insets={screenInsets}>
+        onTransitionEnd={(isClosing) => {
+          if (!isClosing) return;
+          closing.current = false;
+          const action = pendingAction.current;
+          pendingAction.current = undefined;
+          action?.();
+        }}
+        renderDrawerContent={() => (
+          <SafeAreaColumn>
+            <View style={styles.brandHeader}>
               <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="返回 Agent 首页"
-                onPress={() => closeDrawer(onBackHome)}
-                style={styles.brandButton}
+              accessibilityRole="button"
+              accessibilityLabel="返回 Agent 首页"
+              onPress={() => closeDrawer(onBackHome)}
+              style={styles.brandButton}
               >
-                <Image source={require("../../../assets/antler-logo.png")} style={styles.logo} />
+                <View style={styles.logoBadge}>
+                  <Image source={require("../../../assets/antler-logo.png")} style={styles.logo} />
+                </View>
                 <View style={styles.brandText}>
                   <Text style={styles.brand}>Antler Agent</Text>
-                  <Text style={styles.version}>V0.1.0</Text>
+                  <Text style={styles.version}>V0.1.0 · YOUR AI WORKSPACE</Text>
                 </View>
               </Pressable>
-              <View style={styles.divider} />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="新建会话"
-                onPress={() => closeDrawer(onNewConversation)}
-                style={styles.newButton}
-              >
-                <Plus size={16} color="#222" />
-                <Text style={styles.newText}>新建会话</Text>
-              </Pressable>
-              <View style={styles.divider} />
-              <View style={styles.listArea}>
-                {!!error && (
-                  <View style={styles.status}>
-                    <Text accessibilityRole="alert">{error}</Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="新建会话"
+              onPress={() => closeDrawer(onNewConversation)}
+              style={styles.newButton}
+            >
+              <Plus size={17} color="#fff" />
+              <Text style={styles.newText}>新建会话</Text>
+            </Pressable>
+            <View style={styles.listArea}>
+              {!!error && (
+                <View style={styles.status}>
+                  <Text accessibilityRole="alert">{error}</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setAttempt((value) => value + 1)}
+                  >
+                    <Text style={styles.link}>重试</Text>
+                  </Pressable>
+                </View>
+              )}
+              {loading && rows.length === 0 && (
+                <Text style={styles.hint}>正在加载会话…</Text>
+              )}
+              {(rows.length > 0 || (!error && !loading)) && (
+                <ScrollView keyboardShouldPersistTaps="handled">
+                  <ConversationList
+                    renameIcon={<Pencil size={17} color="#777" strokeWidth={1.8} />}
+                    conversations={rows.map((row) => ({
+                      id: row.id,
+                      title: row.title || "新会话",
+                    }))}
+                    activeId={activeId}
+                    onSelect={(id) => {
+                      const row = summaries.get(id);
+                      if (!row) return;
+                      closeDrawer(() => onSelectConversation(id, row.agentId, row.title));
+                    }}
+                    onRename={(item) => {
+                      const row = summaries.get(item.id);
+                      if (row) { setOperationError(""); setRenameTarget(row); }
+                    }}
+                    onDelete={(item) => {
+                      const row = summaries.get(item.id);
+                      if (row) { setOperationError(""); setDeleteTarget(row); }
+                    }}
+                  />
+                  {!!nextCursor && (
                     <Pressable
                       accessibilityRole="button"
-                      onPress={() => setAttempt((value) => value + 1)}
+                      accessibilityLabel="加载更多会话"
+                      disabled={loadingMore}
+                      onPress={loadMore}
+                      style={styles.loadMore}
                     >
-                      <Text style={styles.link}>重试</Text>
+                      <Text style={styles.link}>
+                        {loadingMore ? "加载中…" : "加载更多会话"}
+                      </Text>
                     </Pressable>
-                  </View>
-                )}
-                {loading && rows.length === 0 && (
-                  <Text style={styles.hint}>正在加载会话…</Text>
-                )}
-                {(rows.length > 0 || (!error && !loading)) && (
-                  <ScrollView keyboardShouldPersistTaps="handled">
-                    <ConversationList
-                      renameIcon={<Pencil size={17} color="#777" strokeWidth={1.8} />}
-                      conversations={rows.map((row) => ({
-                        id: row.id,
-                        title: row.title || "新会话",
-                      }))}
-                      activeId={activeId}
-                      onSelect={(id) => {
-                        const row = summaries.get(id);
-                        if (!row) return;
-                        closeDrawer(() => onSelectConversation(id, row.agentId, row.title));
-                      }}
-                      onRename={(item) => {
-                        const row = summaries.get(item.id);
-                        if (row) { setOperationError(""); setRenameTarget(row); }
-                      }}
-                      onDelete={(item) => {
-                        const row = summaries.get(item.id);
-                        if (row) { setOperationError(""); setDeleteTarget(row); }
-                      }}
-                    />
-                    {!!nextCursor && (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="加载更多会话"
-                        disabled={loadingMore}
-                        onPress={loadMore}
-                        style={styles.loadMore}
-                      >
-                        <Text style={styles.link}>
-                          {loadingMore ? "加载中…" : "加载更多会话"}
-                        </Text>
-                      </Pressable>
-                    )}
-                  </ScrollView>
-                )}
-              </View>
-              {!!operationError && !deleteTarget && !renameTarget && (
-                <Text
-                  accessibilityRole="alert"
-                  style={styles.operationError}
-                  numberOfLines={2}
-                >
-                  {operationError}
-                </Text>
+                  )}
+                </ScrollView>
               )}
-              <View style={styles.divider} />
-              <View style={styles.account}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="个人资料"
-                  onPress={() => closeDrawer(onOpenProfile)}
-                  style={styles.accountRow}
-                >
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>
-                      {email ? email.slice(0, 1).toUpperCase() : "U"}
-                    </Text>
-                  </View>
-                  <View style={styles.accountDetails}>
-                    <Text numberOfLines={1} style={styles.accountName}>
-                      {email ? email.split("@")[0] : "本地模式"}
-                    </Text>
-                    {!!email && <Text numberOfLines={1} style={styles.email}>{email}</Text>}
-                  </View>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="打开设置"
-                  onPress={() => closeDrawer(onOpenSettings)}
-                  style={styles.accountAction}
-                >
-                  <Settings size={18} color="#777" />
-                </Pressable>
-              </View>
-            </SafeAreaColumn>
-          </Animated.View>
-        </View>
+            </View>
+            {!!operationError && !deleteTarget && !renameTarget && (
+              <Text
+                accessibilityRole="alert"
+                style={styles.operationError}
+                numberOfLines={2}
+              >
+                {operationError}
+              </Text>
+            )}
+            <View style={styles.account}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="个人资料"
+                onPress={() => closeDrawer(onOpenProfile)}
+                style={styles.accountRow}
+              >
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>
+                    {email ? email.slice(0, 1).toUpperCase() : "U"}
+                  </Text>
+                </View>
+                <View style={styles.accountDetails}>
+                  <Text numberOfLines={1} style={styles.accountName}>
+                    {email ? email.split("@")[0] : "本地模式"}
+                  </Text>
+                  {!!email && <Text numberOfLines={1} style={styles.email}>{email}</Text>}
+                </View>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="打开设置"
+                onPress={() => closeDrawer(onOpenSettings)}
+                style={styles.accountAction}
+              >
+                <Settings size={18} color={BRAND_COLOR} />
+              </Pressable>
+            </View>
+          </SafeAreaColumn>
+        )}
+      >
+        {children ?? <View style={styles.content} />}
+      </Drawer>
       <InputDialog
-        embedded
         visible={Boolean(renameTarget)}
         title="重命名会话"
         initialValue={renameTarget?.title ?? ""}
@@ -497,7 +466,6 @@ export function ChatDrawer({
         }}
       />
       <ConfirmDialog
-        embedded
         visible={Boolean(deleteTarget)}
         title="删除会话"
         message={`删除会话“${deleteTarget?.title || "新会话"}”？此操作无法撤销。`}
@@ -508,36 +476,20 @@ export function ChatDrawer({
           if (!busy) { setDeleteTarget(undefined); setOperationError(""); }
         }}
       />
-      </Modal>
-
     </>
   );
 }
 
-/** iOS 使用页面的安全区域，避免抽屉滑入时按屏幕外的位置测量。 */
-function SafeAreaColumn({ children, insets }: {
-  children: React.ReactNode;
-  insets: { top: number; bottom: number } | null;
-}) {
-  if (Platform.OS === "ios" && insets) {
-    return <View style={[styles.safe, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>{children}</View>;
-  }
-  return <SafeAreaView style={styles.safe}>{children}</SafeAreaView>;
+/** Keep the panel surface full-screen while its controls respect device cutouts. */
+function SafeAreaColumn({ children }: { children: ReactNode }) {
+  return <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>{children}</SafeAreaView>;
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, flexDirection: "row" },
-  backdrop: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.35)",
-  },
-  backdropPress: { flex: 1 },
+  content: { flex: 1 },
+  backdrop: { backgroundColor: "rgba(0,0,0,0.35)" },
   drawer: {
-    backgroundColor: "#fbfbfa",
+    backgroundColor: "#ffffff",
     borderTopRightRadius: 16,
     borderBottomRightRadius: 16,
     elevation: 8,
@@ -547,36 +499,38 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 4, height: 0 },
   },
   safe: { flex: 1 },
-  brandButton: { paddingHorizontal: 16, minHeight: 76, flexDirection: "row", alignItems: "center", gap: 12 },
-  logo: { width: 40, height: 40 },
-  brandText: { gap: 2 },
-  brand: { fontSize: 15, fontWeight: "700", color: BRAND_COLOR },
-  version: { fontSize: 10, letterSpacing: 0.8, color: BRAND_COLOR },
-  divider: { height: 1, backgroundColor: "#e7e5e0" },
+  brandHeader: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 10 },
+  brandButton: { minHeight: 72, paddingHorizontal: 12, borderRadius: 16, flexDirection: "row", alignItems: "center", gap: 12 },
+  logoBadge: { width: 44, height: 44, borderRadius: 14, backgroundColor: "#dff3eb", alignItems: "center", justifyContent: "center" },
+  logo: { width: 30, height: 30 },
+  brandText: { gap: 3 },
+  brand: { fontSize: 17, fontWeight: "700", color: BRAND_COLOR },
+  version: { fontSize: 9, fontWeight: "700", letterSpacing: 1.1, color: "#4e8f7c" },
   newButton: {
-    marginHorizontal: 12,
-    marginVertical: 10,
-    minHeight: 44,
-    borderRadius: 10,
-    backgroundColor: "#efedea",
+    marginHorizontal: 16,
+    marginTop: 14,
+    marginBottom: 10,
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: BRAND_COLOR,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     paddingHorizontal: 12,
   },
-  newText: { fontSize: 13, color: "#222" },
-  listArea: { flex: 1, minHeight: 0 },
+  newText: { fontSize: 14, fontWeight: "600", color: "#fff" },
+  listArea: { flex: 1, minHeight: 0, paddingTop: 2 },
   status: { padding: 12, gap: 8 },
   hint: { padding: 12, color: "#888" },
   loadMore: { minHeight: 44, alignItems: "center", justifyContent: "center" },
   link: { color: BRAND_COLOR, fontSize: 14 },
   operationError: { paddingHorizontal: 12, paddingVertical: 6, color: "#b3261e" },
-  account: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 10 },
-  accountRow: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44 },
-  avatar: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#e8f3ef", alignItems: "center", justifyContent: "center" },
+  account: { flexDirection: "row", alignItems: "center", margin: 12, padding: 10, borderRadius: 16, backgroundColor: "#f3f8f6" },
+  accountRow: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 10, minHeight: 46 },
+  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#dff3eb", alignItems: "center", justifyContent: "center" },
   avatarText: { color: BRAND_COLOR, fontWeight: "600", fontSize: 12 },
   accountDetails: { flex: 1, minWidth: 0 },
-  accountName: { fontSize: 13, fontWeight: "600", color: "#252525" },
-  email: { fontSize: 10, color: "#777" },
-  accountAction: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  accountName: { fontSize: 14, fontWeight: "700", color: "#252525" },
+  email: { fontSize: 11, color: "#6f7a76" },
+  accountAction: { width: 40, height: 40, borderRadius: 12, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
 });

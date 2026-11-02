@@ -9,7 +9,6 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { SafeAreaInsetsContext } from "../../mobile/node_modules/react-native-safe-area-context";
 import {
   deleteConversation,
   listConversations,
@@ -23,8 +22,6 @@ import {
   defaultNativeConfig,
   type NativeConfig,
 } from "../../mobile/src/lib/native-config";
-
-const { Platform } = await vi.importActual<{ Platform: { OS: string } }>("react-native");
 
 const state = vi.hoisted(() => ({
   changeHandler: undefined as
@@ -220,20 +217,10 @@ it("replaces a cached drawer list with the authoritative server result", async (
   expect(screen.queryByText("会话乙")).not.toBeInTheDocument();
 });
 
-it("uses the screen safe area when the iOS drawer first opens", () => {
-  const originalOS = Platform.OS;
-  Object.defineProperty(Platform, "OS", { configurable: true, value: "ios" });
-  try {
-    render(
-      <SafeAreaInsetsContext.Provider value={{ top: 59, bottom: 34, left: 0, right: 0 }}>
-        <DrawerHarness />
-      </SafeAreaInsetsContext.Provider>,
-    );
-    const column = screen.getByRole("button", { name: "返回 Agent 首页" }).parentElement;
-    expect(column).toHaveStyle({ paddingTop: "59px", paddingBottom: "34px" });
-  } finally {
-    Object.defineProperty(Platform, "OS", { configurable: true, value: originalOS });
-  }
+it("avoids doubling the chat route's safe-area padding in the drawer header", () => {
+  render(<DrawerHarness />);
+  const header = screen.getByRole("button", { name: "返回 Agent 首页" }).parentElement;
+  expect(header).toHaveStyle({ paddingTop: "14px", paddingBottom: "10px" });
 });
 
 it("loads the current agent's conversations and marks the active one", async () => {
@@ -315,18 +302,16 @@ it("keeps the row and reports an error when the rename fails", async () => {
   expect(screen.queryByText("冲突改名")).not.toBeInTheDocument();
 });
 
-it("shows delete and rename confirmations within the drawer modal", async () => {
+it("shows delete and rename confirmations over the drawer", async () => {
   render(<DrawerHarness />);
   await screen.findByText("会话乙");
   fireEvent.click(screen.getByRole("button", { name: "删除 会话乙" }));
-  const modal = screen.getByRole("dialog");
-  expect(within(modal).getByText("删除会话")).toBeInTheDocument();
-  expect(within(modal).getByRole("button", { name: "返回 Agent 首页" })).toBeInTheDocument();
+  expect(screen.getByText("删除会话")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "返回 Agent 首页" })).toBeInTheDocument();
   expect(deleteMock).not.toHaveBeenCalled();
-  fireEvent.keyUp(document, { key: "Escape" });
-  expect(screen.queryByText("删除会话")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "取消" }));
   fireEvent.click(screen.getByRole("button", { name: "重命名 会话乙" }));
-  expect(within(screen.getByRole("dialog")).getByLabelText("会话名称")).toBeInTheDocument();
+  expect(screen.getByLabelText("会话名称")).toBeInTheDocument();
 });
 
 it("deletes a non-active conversation after confirmation without switching", async () => {

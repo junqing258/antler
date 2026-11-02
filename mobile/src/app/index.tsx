@@ -1,6 +1,7 @@
 import { useState } from "react";
 import * as Crypto from "expo-crypto";
 import { fetch as expoFetch } from "expo/fetch";
+import { View } from "react-native";
 import { HomePage } from "../views/home/home-page";
 import { Probe } from "../experiments/probe";
 import { Button } from "../components/button";
@@ -13,7 +14,7 @@ export function HomeRoute() {
   if (!root.boot) return null;
   const { boot } = root;
   return (
-    <>
+    <View style={{ flex: 1 }}>
       {boot.automationEnabled && (
         <Button
           label={showProbe ? "返回主页" : "流式诊断"}
@@ -40,7 +41,7 @@ export function HomeRoute() {
           }
         />
       )}
-    </>
+    </View>
   );
 }
 

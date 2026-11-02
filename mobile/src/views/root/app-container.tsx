@@ -454,7 +454,8 @@ export function AppContainer() {
   );
   const goHome = useCallback(() => {
     setPendingAuto(undefined);
-    router.replace("/");
+    if (router.canGoBack()) router.back();
+    else router.replace("/");
   }, [router]);
   const contextValue = useMemo<RootContextValue>(
     () => ({
@@ -510,8 +511,8 @@ export function AppContainer() {
   return (
     <QueryProvider key={boot.generation} scope={boot.cacheScope}>
     <RootContext.Provider value={contextValue}>
-      <SafeAreaView style={styles.flex}>
-        <Stack screenOptions={{ headerShown: false, animation: "none" }} />
+      <View style={styles.flex}>
+        <Stack screenOptions={{ headerShown: false, animation: "default" }} />
         {!!error && <Text accessibilityRole="alert">{error}</Text>}
         {settings && <Modal visible transparent animationType="fade" onRequestClose={() => setSettings(false)}>
           <KeyboardAvoidingView style={styles.modalFrame} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -587,7 +588,7 @@ export function AppContainer() {
             </View>
           </KeyboardAvoidingView>
         </Modal>}
-      </SafeAreaView>
+      </View>
     </RootContext.Provider>
     </QueryProvider>
   );

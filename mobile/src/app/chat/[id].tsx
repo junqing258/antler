@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { View, StyleSheet } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import * as Crypto from "expo-crypto";
 import { CachedNativeChat } from "../../views/chat/cached-native-chat";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
@@ -40,28 +41,6 @@ export function ChatRoute() {
   };
   return (
     <View style={styles.flex}>
-      <CachedNativeChat
-        key={id}
-        config={chatConfig}
-        provider={root.provider}
-        getToken={root.getToken}
-        onUnauthorized={root.onUnauthorized}
-        isCurrent={root.isCurrent}
-        autoMessage={pending?.message}
-        cancelAfter={pending?.cancelAfter ?? 0}
-        title={title}
-        onOpenDrawer={() => setDrawerOpen(true)}
-        onConfigure={root.openSettings}
-        onModelSelected={(model, startNew) => {
-          void root.saveProviderModel(model).then((saved) => {
-            if (saved && startNew)
-              root.openChat(
-                { id: Crypto.randomUUID(), agentId, title: "新对话" },
-                "replace",
-              );
-          });
-        }}
-      />
       <CachedChatDrawer
         visible={drawerOpen}
         activeId={id}
@@ -71,6 +50,7 @@ export function ChatRoute() {
         onUnauthorized={root.onUnauthorized}
         isCurrent={root.isCurrent}
         email={root.accountEmail || undefined}
+        onOpen={() => setDrawerOpen(true)}
         onClose={() => setDrawerOpen(false)}
         onBackHome={() => {
           setDrawerOpen(false);
@@ -102,13 +82,39 @@ export function ChatRoute() {
         onConversationDeleted={onConversationDeleted}
         onOpenSettings={() => root.openSettings()}
         onOpenProfile={() => root.openSettings(undefined, "profile")}
-      />
+      >
+        <SafeAreaView style={[styles.flex, styles.page]} edges={["top", "bottom"]}>
+          <CachedNativeChat
+            key={id}
+            config={chatConfig}
+            provider={root.provider}
+            getToken={root.getToken}
+            onUnauthorized={root.onUnauthorized}
+            isCurrent={root.isCurrent}
+            autoMessage={pending?.message}
+            cancelAfter={pending?.cancelAfter ?? 0}
+            title={title}
+            onOpenDrawer={() => setDrawerOpen(true)}
+            onConfigure={root.openSettings}
+            onModelSelected={(model, startNew) => {
+              void root.saveProviderModel(model).then((saved) => {
+                if (saved && startNew)
+                  root.openChat(
+                    { id: Crypto.randomUUID(), agentId, title: "新对话" },
+                    "replace",
+                  );
+              });
+            }}
+          />
+        </SafeAreaView>
+      </CachedChatDrawer>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  page: { backgroundColor: "#fff" },
 });
 
 export default ChatRoute;
