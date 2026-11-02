@@ -11,9 +11,11 @@
   "dependencies": {
     "@antler/chat-core": "workspace:*",
     "lowlight": "^3.3.0",
+    "lucide-react-native": "^1.33.0",
     "markdown-it": "^14.1.0",
     "markdown-it-cjk-friendly": "^3.0.0",
     "markdown-it-footnote": "^4.0.0",
+    "react-native-svg": "15.16.0",
     "remend": "^1.4.0"
   },
   "peerDependencies": {

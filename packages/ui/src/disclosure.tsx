@@ -1,15 +1,20 @@
 import type { ReactNode } from "react";
+import { ChevronRight } from "lucide-react-native";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 export function Disclosure({
   open,
   onToggle,
   title,
+  icon,
+  tone = "neutral",
   children,
 }: {
   open: boolean;
   onToggle: () => void;
   title: string;
+  icon?: ReactNode;
+  tone?: "neutral" | "active" | "error";
   children: ReactNode;
 }) {
   return (
@@ -18,11 +23,26 @@ export function Disclosure({
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         accessibilityLabel={title}
-        style={styles.header}
+        style={[styles.header, tone === "error" && styles.errorHeader]}
         onPress={onToggle}
       >
-        <Text style={[styles.chevron, open && styles.chevronOpen]}>›</Text>
-        <Text style={styles.title}>{title}</Text>
+        {icon && <View style={styles.icon}>{icon}</View>}
+        <Text
+          style={[
+            styles.title,
+            tone === "active" && styles.activeText,
+            tone === "error" && styles.errorText,
+          ]}
+        >
+          {title}
+        </Text>
+        <View style={open ? styles.chevronOpen : undefined}>
+          <ChevronRight
+            size={15}
+            strokeWidth={1.8}
+            color={tone === "error" ? "#b42318" : "#8a8a8a"}
+          />
+        </View>
       </Pressable>
       {open && <View style={styles.body}>{children}</View>}
     </View>
@@ -31,28 +51,34 @@ export function Disclosure({
 
 const styles = StyleSheet.create({
   root: {
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#e9e9e9",
-    backgroundColor: "#fcfcfc",
-    marginBottom: 10,
-    overflow: "hidden",
+    marginBottom: 6,
   },
   header: {
-    minHeight: 38,
+    alignSelf: "flex-start",
+    minHeight: 30,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
+    gap: 7,
+    borderRadius: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
   },
-  chevron: { color: "#777", fontSize: 14 },
+  errorHeader: { backgroundColor: "#fff7f6" },
+  icon: {
+    width: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   chevronOpen: { transform: [{ rotate: "90deg" }] },
-  title: { fontSize: 13, fontWeight: "500", color: "#4c4c4c" },
+  title: { fontSize: 13, fontWeight: "400", color: "#6b6b6b", lineHeight: 20 },
+  activeText: { color: "#4f4f4f" },
+  errorText: { color: "#b42318" },
   body: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#eee",
-    paddingHorizontal: 12,
-    paddingBottom: 12,
-    paddingTop: 10,
+    marginLeft: 12,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: "#e5e5e5",
+    paddingLeft: 17,
+    paddingBottom: 8,
+    paddingTop: 4,
   },
 });

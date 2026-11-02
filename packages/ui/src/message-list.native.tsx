@@ -3,6 +3,8 @@ import { FlatList, Text, View } from "react-native";
 import type { ChatMessage } from "@antler/chat-core";
 import { MessageBubble } from "./message-bubble";
 
+const RESPONSE_RESERVE_HEIGHT = 220;
+
 export function MessageList({
   messages,
   ready,
@@ -21,22 +23,42 @@ export function MessageList({
   const [reserveSpace, setReserveSpace] = useState(false);
   const handledRequest = useRef<number | undefined>(undefined);
   const pendingIndex = useRef<number | null>(null);
+  const reservedMessageIndex = useRef<number | null>(null);
   const initialPositioned = useRef(false);
   const retryFrame = useRef<number | undefined>(undefined);
   const retries = useRef(0);
 
   useLayoutEffect(() => {
     if (!sendRequest || handledRequest.current === sendRequest.id) return;
-    const reverseIndex = [...messages].reverse().findIndex(
-      (message) => message.role === "user" && !sendRequest.knownUserIds.includes(message.id),
-    );
+    const reverseIndex = [...messages]
+      .reverse()
+      .findIndex(
+        (message) =>
+          message.role === "user" &&
+          !sendRequest.knownUserIds.includes(message.id),
+      );
     if (reverseIndex < 0) return;
     handledRequest.current = sendRequest.id;
     retries.current = 0;
     pendingIndex.current = messages.length - 1 - reverseIndex;
+    reservedMessageIndex.current = pendingIndex.current;
     initialPositioned.current = true;
     setReserveSpace(true);
   }, [messages, sendRequest]);
+
+  // The temporary footer only makes room to position the just-sent message.
+  // Keeping a full viewport after the assistant starts streaming leaves an
+  // unnecessarily large blank region above the composer.
+  useEffect(() => {
+    const index = reservedMessageIndex.current;
+    if (!reserveSpace || index === null) return;
+    if (
+      messages.slice(index + 1).some((message) => message.role === "assistant")
+    ) {
+      reservedMessageIndex.current = null;
+      setReserveSpace(false);
+    }
+  }, [messages, reserveSpace]);
 
   const positionPending = () => {
     if (pendingIndex.current === null || !viewportHeight) return;
@@ -45,13 +67,18 @@ export function MessageList({
     list.current?.scrollToIndex({ index, animated: false, viewPosition: 0 });
   };
   useEffect(() => {
-    if (!reserveSpace || !viewportHeight || pendingIndex.current === null) return;
+    if (!reserveSpace || !viewportHeight || pendingIndex.current === null)
+      return;
     const frame = requestAnimationFrame(positionPending);
     return () => cancelAnimationFrame(frame);
   }, [messages, reserveSpace, viewportHeight]);
-  useEffect(() => () => {
-    if (retryFrame.current !== undefined) cancelAnimationFrame(retryFrame.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (retryFrame.current !== undefined)
+        cancelAnimationFrame(retryFrame.current);
+    },
+    [],
+  );
 
   return (
     <FlatList
@@ -62,25 +89,48 @@ export function MessageList({
       keyboardDismissMode="interactive"
       data={messages}
       keyExtractor={(item) => item.id}
-      renderItem={({ item }) => <MessageBubble message={item} onCopy={onCopy} />}
+      renderItem={({ item }) => (
+        <MessageBubble message={item} onCopy={onCopy} />
+      )}
       ListEmptyComponent={<Text>{ready ? "暂无消息" : "正在加载会话…"}</Text>}
-      ListFooterComponent={<View onLayout={positionPending} style={{ height: reserveSpace ? viewportHeight + 12 : bottomInset + 12 }} />}
+      ListFooterComponent={
+        <View
+          onLayout={positionPending}
+          style={{
+            height: reserveSpace
+              ? Math.min(viewportHeight, RESPONSE_RESERVE_HEIGHT) +
+                bottomInset +
+                12
+              : bottomInset + 12,
+          }}
+        />
+      }
       maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
       onLayout={(event) => setViewportHeight(event.nativeEvent.layout.height)}
       onContentSizeChange={() => {
-        if (pendingIndex.current === null && !initialPositioned.current && ready && messages.length) {
+        if (
+          pendingIndex.current === null &&
+          !initialPositioned.current &&
+          ready &&
+          messages.length
+        ) {
           initialPositioned.current = true;
           list.current?.scrollToEnd({ animated: false });
         }
       }}
       onScrollBeginDrag={() => {
         pendingIndex.current = null;
-        if (retryFrame.current !== undefined) cancelAnimationFrame(retryFrame.current);
+        if (retryFrame.current !== undefined)
+          cancelAnimationFrame(retryFrame.current);
       }}
       onScrollToIndexFailed={({ index, averageItemLength }) => {
         pendingIndex.current = index;
-        list.current?.scrollToOffset({ offset: index * averageItemLength, animated: false });
-        if (retries.current++ < 3) retryFrame.current = requestAnimationFrame(positionPending);
+        list.current?.scrollToOffset({
+          offset: index * averageItemLength,
+          animated: false,
+        });
+        if (retries.current++ < 3)
+          retryFrame.current = requestAnimationFrame(positionPending);
       }}
     />
   );

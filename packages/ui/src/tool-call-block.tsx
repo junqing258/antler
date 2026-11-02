@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Wrench } from "lucide-react-native";
 import { ScrollView, StyleSheet, Text } from "react-native";
 import { Disclosure } from "./disclosure";
 
@@ -30,6 +31,14 @@ export function ToolCallBlock({
             ? `${toolName} 调用失败`
             : `${toolName} 调用完成`
       }
+      icon={
+        <Wrench
+          size={16}
+          strokeWidth={1.8}
+          color={isError ? "#b42318" : "#737373"}
+        />
+      }
+      tone={isError ? "error" : running ? "active" : "neutral"}
     >
       <ScrollView style={styles.scroll} nestedScrollEnabled>
         {query ? (

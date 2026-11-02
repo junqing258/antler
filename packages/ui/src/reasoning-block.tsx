@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Lightbulb } from "lucide-react-native";
 import { ScrollView, StyleSheet, Text } from "react-native";
 import { Disclosure } from "./disclosure";
 
@@ -18,6 +19,8 @@ export function ReasoningBlock({
       open={open}
       onToggle={() => setOpen((value) => !value)}
       title={running ? "正在思考" : "思考过程"}
+      icon={<Lightbulb size={16} strokeWidth={1.8} color="#737373" />}
+      tone={running ? "active" : "neutral"}
     >
       <ScrollView style={styles.scroll} nestedScrollEnabled>
         <Text selectable style={styles.text}>
