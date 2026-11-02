@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 export type ConversationItem = { id: string; title: string };
@@ -7,6 +8,7 @@ export function ConversationList({
   activeId,
   onSelect,
   onRename,
+  renameIcon,
   onDelete,
   label = "会话历史",
   emptyText = "暂无会话",
@@ -16,6 +18,7 @@ export function ConversationList({
   activeId?: string;
   onSelect: (id: string) => void;
   onRename?: (item: ConversationItem) => void;
+  renameIcon?: ReactNode;
   onDelete?: (item: ConversationItem) => void;
   label?: string;
   emptyText?: string;
@@ -67,7 +70,7 @@ export function ConversationList({
                   onPress={() => onRename(conversation)}
                   style={styles.action}
                 >
-                  <Text style={styles.actionText}>✎</Text>
+                  {renameIcon ?? <Text style={styles.actionText}>✎</Text>}
                 </Pressable>
               )}
               {onDelete && (

@@ -3,7 +3,10 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Composer, ChatScreen, MessageBubble, ModelPicker } from "@antler/ui";
 import { MessageList } from "../../packages/ui/src/message-list.web";
-import { Keyboard, Platform } from "react-native";
+const { Keyboard, Platform } = await vi.importActual<{
+  Keyboard: { dismiss: () => void };
+  Platform: { OS: string };
+}>("react-native");
 
 afterEach(cleanup);
 

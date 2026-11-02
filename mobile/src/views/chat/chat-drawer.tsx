@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -12,9 +12,9 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaInsetsContext, SafeAreaView } from "react-native-safe-area-context";
 import { ConversationList } from "@antler/ui";
-import { Plus, Settings } from "lucide-react-native";
+import { Pencil, Plus, Settings } from "lucide-react-native";
 import type { NativeConfig } from "../../lib/native-config";
 import { createNativePlatform } from "../../lib/native-platform";
 import {
@@ -64,6 +64,8 @@ export function ChatDrawer({
   onOpenSettings: () => void;
   onOpenProfile: () => void;
 }) {
+  // Read the screen insets before the modal and its off-screen slide animation.
+  const screenInsets = useContext(SafeAreaInsetsContext);
   const platform = useMemo(
     () => createNativePlatform(config, getToken, onUnauthorized, isCurrent),
     [config, getToken, onUnauthorized, isCurrent],
@@ -336,7 +338,7 @@ export function ChatDrawer({
               },
             ]}
           >
-            <SafeAreaColumn>
+            <SafeAreaColumn insets={screenInsets}>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="返回 Agent 首页"
@@ -378,6 +380,7 @@ export function ChatDrawer({
                 {!error && !loading && (
                   <ScrollView keyboardShouldPersistTaps="handled">
                     <ConversationList
+                      renameIcon={<Pencil size={17} color="#777" strokeWidth={1.8} />}
                       conversations={rows.map((row) => ({
                         id: row.id,
                         title: row.title || "新会话",
@@ -481,8 +484,14 @@ export function ChatDrawer({
   );
 }
 
-/** 抽屉占满高度：顶部/底部安全区域由各平台的 SafeAreaView 兜底。 */
-function SafeAreaColumn({ children }: { children: React.ReactNode }) {
+/** iOS 使用页面的安全区域，避免抽屉滑入时按屏幕外的位置测量。 */
+function SafeAreaColumn({ children, insets }: {
+  children: React.ReactNode;
+  insets: { top: number; bottom: number } | null;
+}) {
+  if (Platform.OS === "ios" && insets) {
+    return <View style={[styles.safe, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>{children}</View>;
+  }
   return <SafeAreaView style={styles.safe}>{children}</SafeAreaView>;
 }
 

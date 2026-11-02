@@ -9,6 +9,7 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { SafeAreaInsetsContext } from "../../mobile/node_modules/react-native-safe-area-context";
 import {
   deleteConversation,
   listConversations,
@@ -20,6 +21,8 @@ import {
   defaultNativeConfig,
   type NativeConfig,
 } from "../../mobile/src/lib/native-config";
+
+const { Platform } = await vi.importActual<{ Platform: { OS: string } }>("react-native");
 
 const state = vi.hoisted(() => ({
   changeHandler: undefined as
@@ -155,6 +158,22 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+});
+
+it("uses the screen safe area when the iOS drawer first opens", () => {
+  const originalOS = Platform.OS;
+  Object.defineProperty(Platform, "OS", { configurable: true, value: "ios" });
+  try {
+    render(
+      <SafeAreaInsetsContext.Provider value={{ top: 59, bottom: 34, left: 0, right: 0 }}>
+        <DrawerHarness />
+      </SafeAreaInsetsContext.Provider>,
+    );
+    const column = screen.getByRole("button", { name: "返回 Agent 首页" }).parentElement;
+    expect(column).toHaveStyle({ paddingTop: "59px", paddingBottom: "34px" });
+  } finally {
+    Object.defineProperty(Platform, "OS", { configurable: true, value: originalOS });
+  }
 });
 
 it("loads the current agent's conversations and marks the active one", async () => {
