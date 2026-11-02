@@ -93,7 +93,7 @@ export function ProviderConfigForm({
     });
   };
   return (
-    <ScrollView style={styles.form} nestedScrollEnabled>
+    <ScrollView style={styles.form} contentContainerStyle={styles.formContent} nestedScrollEnabled keyboardShouldPersistTaps="handled" keyboardDismissMode="interactive">
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.description}>{description}</Text>
       {credentialBinding && (
@@ -261,6 +261,7 @@ export function ProviderConfigForm({
 
 const styles = StyleSheet.create({
   form: { maxWidth: 560 },
+  formContent: { paddingBottom: 32 },
   title: { fontSize: 18, fontWeight: "600", color: "#222" },
   description: { fontSize: 12, color: "#777", marginTop: 4 },
   binding: {

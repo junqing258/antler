@@ -83,6 +83,7 @@ export function ChatScreen({
             model={model ?? ""}
             models={models}
             onModelChange={onModelChange}
+            onConfigure={onConfigureCredentials}
           />
         ) : undefined
       }

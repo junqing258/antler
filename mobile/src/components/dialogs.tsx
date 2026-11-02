@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
+import { BottomSheet, Button, Host, RNHostView } from "@expo/ui";
 import {
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -42,50 +42,68 @@ export function InputDialog({
     onConfirm(value.trim());
   };
   const content = (
-      <Pressable style={styles.backdrop} onPress={onCancel}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={styles.center}
-          pointerEvents="box-none"
+    <Pressable
+      style={embedded ? styles.backdrop : styles.sheetContent}
+      onPress={onCancel}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={styles.center}
+        pointerEvents="box-none"
+      >
+        <Pressable
+          style={styles.card}
+          onPress={(event) => event.stopPropagation()}
         >
-          <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
-            <Text style={styles.title}>{title}</Text>
-            <TextInput
-              accessibilityLabel="会话名称"
-              value={value}
-              onChangeText={setValue}
-              onSubmitEditing={submit}
-              maxLength={200}
-              autoFocus
-              style={styles.input}
-            />
-            {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-            <View style={styles.actions}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={onCancel}
-                style={styles.button}
-              >
-                <Text style={styles.cancelText}>取消</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ disabled: invalid }}
+          <Text style={styles.title}>{title}</Text>
+          <TextInput
+            accessibilityLabel="会话名称"
+            value={value}
+            onChangeText={setValue}
+            onSubmitEditing={submit}
+            maxLength={200}
+            autoFocus
+            style={styles.input}
+          />
+          {!!error && (
+            <Text accessibilityRole="alert" style={styles.error}>
+              {error}
+            </Text>
+          )}
+          <View style={styles.actions}>
+            <Host matchContents seedColor="#087d61">
+              <Button label="取消" variant="text" onPress={onCancel} />
+            </Host>
+            <Host matchContents seedColor="#087d61">
+              <Button
+                label={busy ? "处理中…" : confirmLabel}
                 disabled={invalid}
                 onPress={submit}
-                style={[styles.button, styles.confirm, invalid && styles.disabled]}
-              >
-                <Text style={[styles.confirmText, invalid && styles.disabledText]}>
-                  {busy ? "处理中…" : confirmLabel}
-                </Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Pressable>
+              />
+            </Host>
+          </View>
+        </Pressable>
+      </KeyboardAvoidingView>
+    </Pressable>
   );
-  if (embedded) return visible ? <View style={styles.overlay} accessibilityViewIsModal>{content}</View> : null;
-  return <Modal transparent visible={visible} animationType="fade" onRequestClose={onCancel}>{content}</Modal>;
+  if (embedded)
+    return visible ? (
+      <View style={styles.overlay} accessibilityViewIsModal>
+        {content}
+      </View>
+    ) : null;
+  return (
+    <BottomSheet
+      isPresented={visible}
+      onDismiss={onCancel}
+      snapPoints={[{ height: 320 }]}
+      contentPadding={0}
+    >
+      <RNHostView>
+        <View style={styles.sheetFrame}>{content}</View>
+      </RNHostView>
+    </BottomSheet>
+  );
 }
 
 /** 跨平台确认弹窗：用于删除等不可撤销操作。 */
@@ -111,44 +129,69 @@ export function ConfirmDialog({
   embedded?: boolean;
 }) {
   const content = (
-      <Pressable style={styles.backdrop} onPress={onCancel}>
-        <View style={styles.center} pointerEvents="box-none">
-          <Pressable style={styles.card} onPress={(event) => event.stopPropagation()}>
-            <Text style={styles.title}>{title}</Text>
-            <Text style={styles.message}>{message}</Text>
-            {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-            <View style={styles.actions}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={onCancel}
-                style={styles.button}
-              >
-                <Text style={styles.cancelText}>取消</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ disabled: busy }}
+    <Pressable
+      style={embedded ? styles.backdrop : styles.sheetContent}
+      onPress={onCancel}
+    >
+      <View style={styles.center} pointerEvents="box-none">
+        <Pressable
+          style={styles.card}
+          onPress={(event) => event.stopPropagation()}
+        >
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.message}>{message}</Text>
+          {!!error && (
+            <Text accessibilityRole="alert" style={styles.error}>
+              {error}
+            </Text>
+          )}
+          <View style={styles.actions}>
+            <Host matchContents seedColor="#087d61">
+              <Button label="取消" variant="text" onPress={onCancel} />
+            </Host>
+            <Host matchContents seedColor="#b3261e">
+              <Button
+                label={busy ? "处理中…" : confirmLabel}
                 disabled={busy}
                 onPress={onConfirm}
-                style={[styles.button, styles.confirm, styles.destructive, busy && styles.disabled]}
-              >
-                <Text style={[styles.confirmText, busy && styles.disabledText]}>
-                  {busy ? "处理中…" : confirmLabel}
-                </Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </View>
-      </Pressable>
+              />
+            </Host>
+          </View>
+        </Pressable>
+      </View>
+    </Pressable>
   );
-  if (embedded) return visible ? <View style={styles.overlay} accessibilityViewIsModal>{content}</View> : null;
-  return <Modal transparent visible={visible} animationType="fade" onRequestClose={onCancel}>{content}</Modal>;
+  if (embedded)
+    return visible ? (
+      <View style={styles.overlay} accessibilityViewIsModal>
+        {content}
+      </View>
+    ) : null;
+  return (
+    <BottomSheet
+      isPresented={visible}
+      onDismiss={onCancel}
+      snapPoints={[{ height: 320 }]}
+      contentPadding={0}
+    >
+      <RNHostView>
+        <View style={styles.sheetFrame}>{content}</View>
+      </RNHostView>
+    </BottomSheet>
+  );
 }
 
 const styles = StyleSheet.create({
   overlay: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
+  sheetFrame: { height: 320, width: "100%" },
+  sheetContent: { flex: 1 },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
   card: {
     backgroundColor: "white",
     borderRadius: 12,

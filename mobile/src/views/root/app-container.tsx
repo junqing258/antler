@@ -9,16 +9,17 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Linking,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { BottomSheet, RNHostView } from "@expo/ui";
 import * as Crypto from "expo-crypto";
 import { BookOpen, CircleHelp, Settings, UserRound, X } from "lucide-react-native";
 import { useRouter, useGlobalSearchParams, Stack } from "expo-router";
@@ -75,6 +76,7 @@ type Boot = {
  * 由这里的 Linking 监听解析后经 openChat 进入 /chat/[id]。
  */
 export function AppContainer() {
+  const { height: windowHeight } = useWindowDimensions();
   const [boot, setBoot] = useState<Boot>();
   const bootGeneration = useRef(0);
   const [attempt, setAttempt] = useState(0);
@@ -514,9 +516,9 @@ export function AppContainer() {
       <View style={styles.flex}>
         <Stack screenOptions={{ headerShown: false, animation: "default" }} />
         {!!error && <Text accessibilityRole="alert">{error}</Text>}
-        {settings && <Modal visible transparent animationType="fade" onRequestClose={() => setSettings(false)}>
-          <KeyboardAvoidingView style={styles.modalFrame} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-            <Pressable style={StyleSheet.absoluteFill} accessibilityLabel="关闭设置" onPress={() => setSettings(false)} />
+        {settings && <BottomSheet isPresented={settings} onDismiss={() => setSettings(false)} contentPadding={0} containerColor="#fff">
+          <RNHostView matchContents={{ vertical: true }}>
+          <KeyboardAvoidingView style={[styles.modalFrame, { maxHeight: windowHeight * 0.85 }]} behavior={Platform.OS === "ios" ? "padding" : undefined}>
             <View style={styles.dialog} accessibilityViewIsModal>
               <View style={styles.dialogHeader}>
                 <View style={styles.headingRow}>
@@ -587,7 +589,8 @@ export function AppContainer() {
               </View>
             </View>
           </KeyboardAvoidingView>
-        </Modal>}
+          </RNHostView>
+        </BottomSheet>}
       </View>
     </RootContext.Provider>
     </QueryProvider>
@@ -641,9 +644,9 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: "center", padding: 24, gap: 12 },
   connectionLoading: { alignItems: "center", backgroundColor: "#fff" },
   loginContent: { flexGrow: 1, justifyContent: "center", padding: 24, gap: 12 },
-  modalFrame: { flex: 1, backgroundColor: "rgba(0,0,0,0.38)", justifyContent: "center", padding: 16 },
-  dialog: { width: "100%", maxWidth: 820, maxHeight: "92%", minHeight: 400, alignSelf: "center", borderRadius: 14, borderWidth: 1, borderColor: "#e4e4e4", backgroundColor: "white", overflow: "hidden" },
-  dialogHeader: { padding: 16, paddingBottom: 12, backgroundColor: "#fafafa", borderBottomWidth: 1, borderBottomColor: "#eee" },
+  modalFrame: { width: "100%", flexShrink: 1, backgroundColor: "white" },
+  dialog: { flexShrink: 1, width: "100%", maxWidth: 820, alignSelf: "center", backgroundColor: "white" },
+  dialogHeader: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, backgroundColor: "white", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#e5e5e5" },
   headingRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   dialogTitle: { fontSize: 16, fontWeight: "600", color: "#252525" },
   closeButton: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
@@ -652,8 +655,8 @@ const styles = StyleSheet.create({
   activeTab: { backgroundColor: "#e8f3ef" },
   tabText: { color: "#555", fontSize: 12 },
   activeTabText: { color: "#087d61", fontWeight: "600" },
-  dialogContent: { flexShrink: 1, minHeight: 0, padding: 20 },
-  detailContent: { gap: 20 },
+  dialogContent: { flexShrink: 1, minHeight: 0, paddingHorizontal: 20, paddingTop: 20 },
+  detailContent: { gap: 20, paddingBottom: 32 },
   detailHeading: { borderBottomWidth: 1, borderBottomColor: "#eee", paddingBottom: 16, gap: 4 },
   detailTitle: { fontSize: 18, fontWeight: "600", color: "#222" },
   hint: { fontSize: 12, lineHeight: 18, color: "#777" },

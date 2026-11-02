@@ -5,10 +5,12 @@ export function ModelPicker({
   model,
   models,
   onModelChange,
+  onConfigure: _onConfigure,
 }: {
   model: string;
   models: string[];
   onModelChange: (model: string) => void;
+  onConfigure?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const available = models.length > 0;
