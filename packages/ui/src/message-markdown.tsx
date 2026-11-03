@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import MarkdownIt from "markdown-it";
-import type Token from "markdown-it/lib/token.mjs";
+import type { Token } from "markdown-it";
 import footnote from "./markdown-footnote";
 import cjkFriendly from "markdown-it-cjk-friendly";
 import remend from "remend";
@@ -120,7 +120,7 @@ function inline(nodes: Node[]): React.ReactNode {
           </Text>
         );
       case "link_open": {
-        const href = token.attrGet("href") ?? "";
+        const href = String(token.attrGet("href") ?? "");
         const safe = /^(https?:|mailto:)/i.test(href);
         return (
           <Text
@@ -144,7 +144,7 @@ function inline(nodes: Node[]): React.ReactNode {
       case "footnote_ref":
         return (
           <Text key={index} style={styles.footnoteRef}>
-            {`[${token.meta.id + 1}]`}
+            {`[${Number(token.meta?.id ?? 0) + 1}]`}
           </Text>
         );
       default:
