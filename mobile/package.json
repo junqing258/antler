@@ -5,6 +5,7 @@
   "main": "expo-router/entry",
   "scripts": {
     "ios:device": "bash scripts/ios-device.sh",
+    "android:device": "bash scripts/android-device.sh",
     "start:device": "bash scripts/ios-device.sh metro",
     "check": "tsc --noEmit",
     "export": "npx expo export --platform all"

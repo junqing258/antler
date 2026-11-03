@@ -53,8 +53,9 @@ export default defineConfig(({ mode }) => ({
   ],
   resolve: {
     alias: [
-    ...(mode === "test" ? [
+      // Shared UI uses native icon imports; the web app renders DOM SVG icons.
       { find: /^lucide-react-native$/, replacement: path.resolve(import.meta.dirname, "node_modules/lucide-react/dist/esm/lucide-react.mjs") },
+    ...(mode === "test" ? [
       { find: /^react-native-drawer-layout$/, replacement: path.resolve(import.meta.dirname, "test/react-native-drawer-layout.tsx") },
       { find: /^react-native-keyboard-controller$/, replacement: path.resolve(import.meta.dirname, "test/react-native-keyboard-controller.tsx") },
     ] : []),
