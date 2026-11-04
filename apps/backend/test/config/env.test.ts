@@ -50,3 +50,78 @@ describe("backend workspace configuration", () => {
     expect(config.ragKey).toBe("test-rag-key");
   });
 });
+
+describe("conversation storage configuration", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("defaults to local storage and rejects unknown modes", async () => {
+    vi.stubEnv("ANTLER_CONVERSATION_STORAGE", undefined);
+    const { config, parseConversationStorage } = await import(
+      "../../src/config/env.js"
+    );
+    expect(config.conversationStorage ?? "local").toBe("local");
+    expect(parseConversationStorage("cos")).toBe("cos");
+    expect(() => parseConversationStorage("s3")).toThrow(
+      "ANTLER_CONVERSATION_STORAGE 无效",
+    );
+  });
+
+  it("omits the COS config unless every required variable is present", async () => {
+    vi.stubEnv("COS_SECRET_ID", "id");
+    vi.stubEnv("COS_SECRET_KEY", "key");
+    vi.stubEnv("COS_REGION", undefined);
+    vi.stubEnv("COS_BUCKET", undefined);
+    const { config } = await import("../../src/config/env.js");
+    expect(config.cos).toBeUndefined();
+  });
+
+  it("builds the COS config from complete environment variables", async () => {
+    vi.stubEnv("COS_SECRET_ID", "id");
+    vi.stubEnv("COS_SECRET_KEY", "key");
+    vi.stubEnv("COS_REGION", "ap-guangzhou");
+    vi.stubEnv("COS_BUCKET", "bucket-1250000000");
+    vi.stubEnv("COS_TOKEN", "token");
+    vi.stubEnv("ANTLER_COS_PREFIX", "custom/prefix");
+    const { config } = await import("../../src/config/env.js");
+    expect(config.cos).toMatchObject({
+      secretId: "id",
+      secretKey: "key",
+      region: "ap-guangzhou",
+      bucket: "bucket-1250000000",
+      token: "token",
+      scheme: "https",
+    });
+    expect(config.cosPrefix).toBe("custom/prefix");
+  });
+
+  it("fails startup in cos mode without the required COS variables", async () => {
+    const { validateConversationStorageConfig } = await import(
+      "../../src/config/env.js"
+    );
+    expect(() =>
+      validateConversationStorageConfig({
+        host: "127.0.0.1",
+        port: 0,
+        provider: "openai",
+        model: "test",
+        workspaceRoot: "/tmp",
+        maxRunDurationMs: 1000,
+        conversationStorage: "cos",
+      }),
+    ).toThrow("ANTLER_CONVERSATION_STORAGE=cos 需要");
+    expect(() =>
+      validateConversationStorageConfig({
+        host: "127.0.0.1",
+        port: 0,
+        provider: "openai",
+        model: "test",
+        workspaceRoot: "/tmp",
+        maxRunDurationMs: 1000,
+        conversationStorage: "local",
+      }),
+    ).not.toThrow();
+  });
+});

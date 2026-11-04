@@ -18,7 +18,10 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "migrate:conversations-to-cos": "tsx scripts/migrate-conversations-to-cos.ts",
+    "check:cos-connectivity": "tsx scripts/check-cos-connectivity.ts",
+    "export:cos-conversations": "tsx scripts/export-cos-conversations.ts"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.10",

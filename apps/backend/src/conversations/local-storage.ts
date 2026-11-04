@@ -5,28 +5,12 @@ import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import type { RunEvent } from "../agent/events.js";
 import type { StoredRun } from "../runs/run-store.js";
-import { projectEvent, type MessageContent } from "./message.js";
+import { projectEvent } from "./message.js";
+import type { Batch, Checkpoint, ConversationStorage, LocalMessage } from "./storage.js";
 import { createLogger } from "../logger.js";
 
 const logger = createLogger("Conversations");
-
-export type LocalMessage = {
-  id: string;
-  conversationId: string;
-  userId: string;
-  seq: number;
-  runId: string;
-  role: string;
-  content: MessageContent;
-  status: string;
-  appliedEventId: number;
-  error?: { code?: string; message: string };
-  createdAt: string;
-  updatedAt: string;
-};
-type Batch = { version: 1; messages: LocalMessage[]; events: RunEvent[] };
-type Checkpoint = { checkpoint: unknown; contextState: string };
-function applyFailures(
+export function applyFailures(
   messages: Map<string, LocalMessage>,
   events: RunEvent[],
 ) {
@@ -46,8 +30,41 @@ function applyFailures(
 const missing = (error: unknown) =>
   (error as NodeJS.ErrnoException).code === "ENOENT";
 
+/** 首次写入某个 run 时落盘的 user/assistant 初始消息投影。 */
+export function initialMessages(run: StoredRun, seq: number): LocalMessage[] {
+  const common = {
+    conversationId: run.conversationId,
+    userId: run.userId,
+    runId: run.id,
+    appliedEventId: 0,
+    createdAt: run.createdAt,
+    updatedAt: run.createdAt,
+  };
+  return [
+    {
+      ...common,
+      id: `${run.id}:user`,
+      seq: seq + 1,
+      role: "user",
+      status: "complete",
+      content: {
+        schemaVersion: 1,
+        parts: [{ type: "text", text: run.input }],
+      },
+    },
+    {
+      ...common,
+      id: `${run.id}:assistant`,
+      seq: seq + 2,
+      role: "assistant",
+      status: run.status,
+      content: { schemaVersion: 1, parts: [] },
+    },
+  ];
+}
+
 /** Single-backend local history. Each newline commits one complete batch. */
-export class LocalConversationStorage {
+export class LocalConversationStorage implements ConversationStorage {
   private readonly root: string;
   private readonly queues = new Map<string, Promise<unknown>>();
   private readonly cache = new Map<string, Map<string, LocalMessage>>();
@@ -183,35 +200,7 @@ export class LocalConversationStorage {
   }
 
   private initial(run: StoredRun, seq: number): LocalMessage[] {
-    const common = {
-      conversationId: run.conversationId,
-      userId: run.userId,
-      runId: run.id,
-      appliedEventId: 0,
-      createdAt: run.createdAt,
-      updatedAt: run.createdAt,
-    };
-    return [
-      {
-        ...common,
-        id: `${run.id}:user`,
-        seq: seq + 1,
-        role: "user",
-        status: "complete",
-        content: {
-          schemaVersion: 1,
-          parts: [{ type: "text", text: run.input }],
-        },
-      },
-      {
-        ...common,
-        id: `${run.id}:assistant`,
-        seq: seq + 2,
-        role: "assistant",
-        status: run.status,
-        content: { schemaVersion: 1, parts: [] },
-      },
-    ];
+    return initialMessages(run, seq);
   }
 
   async create(run: StoredRun) {
@@ -231,9 +220,12 @@ export class LocalConversationStorage {
     });
   }
 
-  async persist(run: StoredRun, events: RunEvent[]) {
+  async persist(
+    run: StoredRun,
+    events: RunEvent[],
+  ): Promise<number | undefined> {
     const directory = this.directory(run.userId, run.conversationId);
-    await this.serial(directory, async () => {
+    return await this.serial(directory, async () => {
       const messages = await this.state(directory);
       const existing = messages.get(`${run.id}:assistant`);
       const initial = existing
@@ -272,6 +264,7 @@ export class LocalConversationStorage {
           });
         }
       }
+      return undefined;
     });
   }
 
@@ -385,13 +378,14 @@ export class LocalConversationStorage {
     id: string,
     checkpoint: unknown,
     contextState: string,
+    runId?: string,
   ) {
     const directory = this.directory(userId, id);
     await this.serial(directory, async () => {
       await this.prepare(directory);
       await this.atomic(
         join(directory, "checkpoint.json"),
-        JSON.stringify({ checkpoint, contextState }),
+        JSON.stringify({ checkpoint, contextState, ...(runId ? { runId } : {}) }),
       );
     });
   }
@@ -427,6 +421,40 @@ export class LocalConversationStorage {
     await this.serial(directory, async () => {
       await rm(directory, { recursive: true, force: true });
       this.cache.delete(directory);
+    });
+  }
+
+  async exportAll(userId: string, id: string) {
+    const directory = this.directory(userId, id);
+    return this.serial(directory, async () => {
+      const messages = [...(await this.state(directory)).values()].sort(
+        (a, b) => a.seq - b.seq,
+      );
+      // event.id 只在单个 run 内递增，去重键必须包含 runId。
+      const seen = new Set<string>();
+      const events: RunEvent[] = [];
+      for await (const batch of this.records(directory)) {
+        for (const event of batch.events) {
+          const identity = `${event.runId}:${event.id}`;
+          if (seen.has(identity)) continue;
+          seen.add(identity);
+          events.push(event);
+        }
+      }
+      // 直接读文件，避免同队列死锁（checkpoint() 会再次进入串行队列）。
+      let checkpoint: Checkpoint | undefined;
+      try {
+        checkpoint = JSON.parse(
+          await readFile(join(directory, "checkpoint.json"), "utf8"),
+        ) as Checkpoint;
+      } catch (error) {
+        if (!missing(error)) throw error;
+      }
+      return {
+        messages: structuredClone(messages),
+        events,
+        checkpoint,
+      };
     });
   }
 }

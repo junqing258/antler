@@ -745,6 +745,9 @@ export class AntlerHostRuntime {
     if (isTerminalRunStatus(active.run.status)) return;
     if (active.timeout) clearTimeout(active.timeout);
     await this.flushStreams(active);
+    // 计划 §4.3：先持久化本轮全部普通事件与消息投影，再让 checkpoint 可见，
+    // 保证 checkpoint 不先于本轮输出提交；终态事件最后发布。
+    await active.eventBuffer.flush();
     const messages = active.adapter.exportContext?.(active.run.conversationId);
     if (!messages)
       logger.warn("no model context exported; conversation will have no checkpoint", {
@@ -757,7 +760,7 @@ export class AntlerHostRuntime {
       this.modelContexts.set(active.run.conversationId, structuredClone(checkpoint));
       const safe = active.secretGuard.sanitize(checkpoint);
       const restorable = isDeepStrictEqual(safe, checkpoint);
-      await this.runStore?.saveCheckpoint?.(active.run.userId, active.run.conversationId, restorable ? checkpoint : { schemaVersion: 1, unavailable: true }, restorable ? "available" : "unavailable").catch((error) => {
+      await this.runStore?.saveCheckpoint?.(active.run.userId, active.run.conversationId, restorable ? checkpoint : { schemaVersion: 1, unavailable: true }, restorable ? "available" : "unavailable", active.run.id).catch((error) => {
         logger.warn("checkpoint persistence failed", { runId: active.run.id, error });
       });
     }

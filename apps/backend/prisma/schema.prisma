@@ -192,6 +192,9 @@ model Conversation {
   messageStorage String @default("database")
   contextState String @default("not_restored")
   revision Int @default(1)
+  // 诊断 hint：cos-v1 会话已确认提交到 COS 的正文提交序号近似值，
+  // 不参与条件更新协议，也绝不保存消息正文或事件 payload。
+  storageGeneration Int @default(0)
   activeRunId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -202,6 +205,36 @@ model Conversation {
   @@index([userId, lastMessageAt, id])
   @@index([userId, agentId, lastMessageAt, id])
   @@map("conversations")
+}
+
+/// 删除恢复（docs/21 §4.5）：与墓碑同一事务创建，各阶段可续跑，
+/// 崩溃后不依赖内存队列；stage: pending → deleting → manifest → done。
+model ConversationDeletionTask {
+  id String @id @default(uuid())
+  conversationId String
+  userId String
+  marker String
+  /// 可恢复的对象键清单；由工作器先读取 manifest 后持久记录。
+  keys Json?
+  stage String @default("pending")
+  attempts Int @default(0)
+  lastError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([stage, createdAt])
+  @@map("conversation_deletion_tasks")
+}
+
+/// 垃圾回收候选（docs/21 §4.4）：对象变为不可达时记录键与首次发现时间，
+/// 经过宽限期且确认仍不被 manifest/删除任务/暂存引用后删除。
+model StorageGarbageCandidate {
+  key String @id
+  conversationId String
+  firstSeenAt DateTime @default(now())
+
+  @@index([firstSeenAt])
+  @@map("storage_garbage_candidates")
 }
 
 model ConversationMessage {

@@ -9,7 +9,7 @@ export type StoredRun = Run;
 
 export interface RunStore {
   getExecution?(userId: string, id: string): Promise<{ config: Record<string, unknown>; checkpoint: unknown; contextState: string; revision: number; titleSource?: string } | undefined>;
-  saveCheckpoint?(userId: string, id: string, checkpoint: unknown, contextState: string): Promise<void>;
+  saveCheckpoint?(userId: string, id: string, checkpoint: unknown, contextState: string, runId?: string): Promise<void>;
   generatedTitle?(userId: string, id: string, title: string): Promise<void>;
   findRequest?(userId: string, clientRequestId: string, requestHash: string): Promise<StoredRun | undefined>;
   create(run: StoredRun): Promise<void>;

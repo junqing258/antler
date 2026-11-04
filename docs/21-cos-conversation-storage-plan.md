@@ -1,6 +1,6 @@
 # 腾讯云 COS 会话历史存储方案
 
-> 状态：待实施（单 backend、低并发版本）
+> 状态：核心已实施（2026-11-04）；分阶段交付，见文末「实施记录」。
 >
 > 日期：2026-11-04
 >
@@ -227,3 +227,31 @@ GC 使用独立身份运行，应用身份不需要 `ListBucket`。GC 只处理�
 3. COS 桶是否启用服务端加密、版本控制、生命周期和跨地域复制；这些策略决定恢复窗口与存储成本。
 4. 历史会话、事件与 checkpoint 的保留期限、用户删除后的物理删除时限和备份演练频率。
 5. 若未来启用多 backend 实例，需重新引入条件更新、运行租约、跨进程通知与恢复协调；本版进程内 manifest 缓存不可直接扩展到多写者。
+
+## 9. 实施记录（2026-11-04）
+
+### 已交付
+
+| 项 | 实现 |
+| --- | --- |
+| 存储抽象 | `apps/backend/src/conversations/storage.ts`：`ConversationStorage` 接口（含迁移/回滚用的 `exportAll`）；`LocalConversationStorage` 与 `CosConversationStorage` 均实现该接口，`ConversationStore` 不再直接依赖文件系统 |
+| 配置与安全 | `env.ts` 新增 `ANTLER_CONVERSATION_STORAGE`（local/cos）、`ANTLER_COS_PREFIX` 与 COS_* 配置；cos 模式缺必填变量启动失败（`validateConversationStorageConfig`）；已有 `cos-v1` 会话但未配置 COS 时 onReady 拒绝启动；错误信息只含对象键摘要、状态码与 COS request ID |
+| COS 客户端 | `cos-client.ts`：XML API 窄封装（PUT/GET/DELETE，sha1 请求签名，临时 token header），超时 + 5xx/429 指数退避重试，404 分类由调用方负责 |
+| COS 存储 | `cos-storage.ts`：§4.1 对象键布局（SHA-256 conversationKey）、manifest/snapshot/batch/checkpoint、每个对象写 `sha256` 内容哈希并在读取时校验；终态后紧凑出新世代 snapshot；checkpoint 用 ULID 新键，重复保存不递增 revision；删除仅按 manifest 可达键清理；cos-v1 缺 manifest 或引用对象缺失一律报完整性错误，禁止降级为空历史 |
+| 路由 | `store.ts`：按 `messageStorage` 标记路由（`database`→按需导入当前默认介质、`local-jsonl`→本地、`cos-v1`→COS）；`ANTLER_CONVERSATION_STORAGE` 只决定新会话介质；删除经持久删除任务工作器清理存储 |
+| 持久暂存 | `staging.ts`：跨容器保留的暂存日志（每会话 JSONL，换行提交语义，尾部不完整行忽略），`ANTLER_STAGING_MAX_BYTES` 容量上限与启动可写/剩余容量校验；COS batch/manifest 提交先暂存再上传，确认后清除 |
+| 崩溃恢复 | `store.recover()`（onReady，先于 `recoverInterrupted`）：按会话串行重放暂存记录，幂等补齐 COS 对象与 manifest（仅当当前 manifest 落后于暂存目标），经 `reconcileStaged` 以 `storageGeneration` 为 guard 幂等对账数据库（revision/`activeRunId`/变更事件），终态意图绝不生成 `interrupted`；`recoverInterrupted` 另对「COS 已含终态但数据库运行中」的运行按存储终态补齐，读取失败保持运行中重试 |
+| 删除恢复 | §4.5：墓碑、变更事件与 `conversation_deletion_tasks` 同事务写入；工作器阶段 pending→deleting→manifest→done 持久进度、可续跑，404 视为已删除，manifest 读取失败保持待重试；收尾清除本地暂存与数据库 checkpoint 镜像 |
+| 垃圾回收 | §4.4：紧凑/导入/checkpoint 替换时把不再可达的对象键记录为 `storage_garbage_candidates`（含首次发现时间，无需 ListBucket）；GC 由单 backend 调度（启动 + 每小时），达到 `ANTLER_COS_GC_GRACE_MS`（默认 24h）宽限期且重新确认不被 manifest/在途删除任务/暂存引用后才删除，与写入共用会话队列；禁止对含有效对象的前缀配置按年龄过期 |
+| 收尾顺序 | `host-runtime.ts` `finish`：先 flush 全部普通事件与消息投影，再保存 checkpoint，最后发布终态事件；checkpoint 对象记录 runId |
+| 数据库 | `storageGeneration`（Prisma 迁移 `20261104000000`/`20261104010000`，新表与 `conversations` 同启用 RLS）：cos-v1 会话记录已对账的正文提交序号，同时作为恢复对账的幂等 guard |
+| 迁移工具 | `scripts/migrate-conversations-to-cos.ts`（`pnpm --filter @antler/server migrate:conversations-to-cos`）：枚举 local-jsonl 会话，本地优先、数据库镜像兜底选择 checkpoint，导入 COS 后校验消息/事件/哈希，全部通过才改标记；失败项保留原标记，可安全重跑 |
+| 运维脚本 | `check:cos-connectivity`（§6.2.3 只读连通性检查）；`export:cos-conversations`（§6.3 反向导出：cos-v1 → 独立本地目录，校验通过才改标记，失败项保留 COS 标记并阻止回退旧版本，可重跑） |
+| 测试 | `test/conversations/`：COS 存储往返、终态紧凑、checkpoint ULID、完整性错误（缺 manifest/对象损坏/缺 batch）、删除幂等、外部提交后重载；CosClient 签名/重试/404 分类/凭据不泄漏；存储路由（新会话介质、local 会话不被迁移、database 导入、未配置 COS 拒绝）；暂存日志（追加/重放/移除/不完整尾行/容量）；崩溃恢复（暂存 batch 重放、终态意图对账不误标 interrupted、已确认终态不重复递增 revision）；删除任务（各阶段完成与幂等、manifest 损坏保持待重试）；GC（宽限期内保留、过期删除、可达对象撤销候选）；env 配置校验。`pnpm check` 与 `pnpm test` 全部通过 |
+
+### 实现偏差与暂未交付（后续阶段）
+
+- §4.3 有界暂存：暂存日志覆盖 batch/manifest/终态意图；普通 SSE 的推送仍不等待暂存与 COS，`RunEventBuffer` 2 秒窗口内的丢失边界与原实现一致。暂存写入失败（容量耗尽等）时该批次写入报错并被记为 warn 日志，尚未把「中止运行 + 拒绝新 run」接入 host-runtime 背压（§4.3.4/§7 对应条目待接入）。
+- §4.4 GC 采用「提交时记录候选」而非桶列举扫描：应用身份不需要 `cos:ListBucket`，代价是「应用崩溃遗留在暂存之外的对象」不会被自动发现，需人工清理；未配置按年龄生命周期规则。
+- §5.6 的独立 LRU 正文水位对账协议与队列公平性：读取每次以最新 manifest 为准（一次 manifest GET + `storageGeneration` guard），未引入独立缓存水位；单 backend 低并发下可接受。
+- §6.2 部署步骤、§8.1 实机压测报告与 §8 待确认决策（PG vs COS 最终定案、加密/版本控制、保留期限）仍需运维侧执行；COS 终态持续不可用时数据库仍按现状提交终态（§4.3.7 的「保持非终态等待恢复」未实现）。

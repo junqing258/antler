@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import MarkdownIt from "markdown-it";
 import type { Token } from "markdown-it";
 import footnote from "./markdown-footnote";
@@ -242,32 +242,7 @@ function blocks(nodes: Node[]): React.ReactNode {
           </View>
         );
       case "table_open":
-        return (
-          <ScrollView horizontal key={index}>
-            <View style={styles.table}>{blocks(children)}</View>
-          </ScrollView>
-        );
-      case "thead_open":
-      case "tbody_open":
-        return <View key={index}>{blocks(children)}</View>;
-      case "tr_open":
-        return (
-          <View key={index} style={styles.row}>
-            {blocks(children)}
-          </View>
-        );
-      case "th_open":
-      case "td_open":
-        return (
-          <View key={index} style={styles.cell}>
-            <Text
-              selectable
-              style={token.type === "th_open" ? styles.strong : undefined}
-            >
-              {children.map((child) => inline(child.children))}
-            </Text>
-          </View>
-        );
+        return <MarkdownTable key={`${index}:${tableContent(children)}`} sections={children} />;
       default:
         return (
           <View key={index}>
@@ -280,6 +255,48 @@ function blocks(nodes: Node[]): React.ReactNode {
         );
     }
   });
+}
+
+function tableContent(nodes: Node[]): string {
+  return nodes.map(({ token, children }) => `${token.type}:${token.content}:${tableContent(children)}`).join("|");
+}
+
+function MarkdownTable({ sections }: { sections: Node[] }) {
+  const [widths, setWidths] = useState<number[]>([]);
+  const rows = sections.flatMap((section) => section.children);
+  return (
+    <ScrollView horizontal>
+      <View style={styles.table}>
+        {rows.map((row, rowIndex) => (
+          <View key={rowIndex} style={styles.row}>
+            {row.children.map(({ token, children }, columnIndex) => {
+              const alignment = String(token.attrGet("style") ?? "")
+                .match(/text-align:\s*(left|center|right)/)?.[1] as "left" | "center" | "right" | undefined;
+              return (
+                <View
+                  key={columnIndex}
+                  style={[styles.cell, widths[columnIndex] != null && { minWidth: widths[columnIndex] }]}
+                  onLayout={(event) => {
+                    const width = event.nativeEvent.layout.width;
+                    setWidths((current) => {
+                      if (width <= (current[columnIndex] ?? 0)) return current;
+                      const next = [...current];
+                      next[columnIndex] = width;
+                      return next;
+                    });
+                  }}
+                >
+                  <Text selectable style={[token.type === "th_open" && styles.strong, { textAlign: alignment ?? "left" }]}>
+                    {children.map((child) => inline(child.children))}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
 }
 
 export function MessageMarkdown({
@@ -317,17 +334,11 @@ const styles = StyleSheet.create({
   list: { paddingLeft: 8 },
   listItem: { flexDirection: "row" },
   listBody: { flex: 1 },
-  // 表格只画上/左边框，单元格画右/下边框：末列、末行的边即外框，
-  // 避免相邻边框叠画；flex 等分列宽保证各行竖线对齐。
+  // 各单元格测量内容宽度，整列共享最大值。
   table: { borderTopWidth: 1, borderLeftWidth: 1, borderColor: "#bcc9c3", marginVertical: 5 },
   row: { flexDirection: "row" },
   cell: {
-    // 显式写 flexGrow/flexBasis：RNW 的 View 默认 flexBasis:auto 会覆盖
-    // `flex: 1` shorthand 隐含的 0%，导致列宽按内容而非等分、竖线错位。
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: 0,
-    minWidth: 100,
+    flexShrink: 0,
     padding: 6,
     borderRightWidth: 1,
     borderBottomWidth: 1,

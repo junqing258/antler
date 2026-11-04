@@ -233,6 +233,19 @@ describe("shared Markdown", () => {
     expect(document.querySelector("script")).toBeNull();
   });
 
+  it("keeps table columns aligned and respects explicit text alignment", () => {
+    render(
+      <MessageBubble message={message(
+        "| 类型 | 指数 | 说明 |\n| --- | :---: | ---: |\n| 短 | 很长的内容用于检查列宽 | 右侧 |\n| 较长的第一列内容 | 中 | 末尾 |",
+      )} />,
+    );
+    const cells = ["类型", "指数", "说明", "短", "很长的内容用于检查列宽", "右侧", "较长的第一列内容", "中", "末尾"]
+      .map((text) => screen.getByText(text));
+    expect(getComputedStyle(cells[0]).textAlign).toBe("left");
+    expect(getComputedStyle(cells[4]).textAlign).toBe("center");
+    expect(getComputedStyle(cells[5]).textAlign).toBe("right");
+  });
+
   it("reparses incomplete streaming input when it becomes complete", () => {
     const { rerender } = render(
       <MessageBubble message={message("正在 **生成")} />,

@@ -1,4 +1,4 @@
-import { validateAuthConfig } from "./config/env.js";
+import { validateAuthConfig, validateConversationStorageConfig } from "./config/env.js";
 import { generateAgentIcon } from "./platform/agent-icon.js";
 import { agentWorkspace } from "./platform/agent-workspace.js";
 import { createHash } from "node:crypto";
@@ -49,9 +49,14 @@ import type { ServiceRegistry } from "./scheduler/types.js";
 import { registerRequestTracing } from "./plugins/request-tracing.js";
 import { currentRunUserId } from "./run-context.js";
 import { skillEnvironment } from "./config/tool-environment.js";
+import { StagingJournal } from "./conversations/staging.js";
+import { createLogger } from "./logger.js";
+
+const logger = createLogger("App");
 
 export function createApp(config: AppConfig) {
   validateAuthConfig(config);
+  validateConversationStorageConfig(config);
   mkdirSync(config.workspaceRoot, { recursive: true });
   // Schema-free embedded apps have ephemeral storage just like their in-memory database.
   const ephemeralPlatform =
@@ -167,7 +172,23 @@ export function createApp(config: AppConfig) {
   };
   const skillRegistry = new SkillRegistry(config.agentsDir);
   const platform = new PlatformService(app.prisma, platformRoot, skillRegistry);
-  const conversations = new ConversationStore(app.prisma, join(platformRoot, "storage", "conversations"));
+  const stagingJournal = config.cos
+    ? new StagingJournal(
+        resolve(platformRoot, "staging", "conversations"),
+        config.stagingMaxBytes ?? 1_073_741_824,
+      )
+    : undefined;
+  const conversations = new ConversationStore(
+    app.prisma,
+    join(platformRoot, "storage", "conversations"),
+    {
+      conversationStorage: config.conversationStorage,
+      cosPrefix: config.cosPrefix,
+      cos: config.cos,
+      journal: stagingJournal,
+      gcGraceMs: config.cosGcGraceMs,
+    },
+  );
   const runtime = new AntlerHostRuntime(
     createAdapter,
     { maxRunDurationMs: config.maxRunDurationMs, maxEvents: 10_000, authMode, resolveWorkingDirectory: (id) => resolve(id ? agentWorkspace(config.workspaceRoot, id) : config.workspaceRoot), defaultExecutionConfig: { protocol: config.provider === "anthropic" ? "anthropic-messages" : "openai-responses", model: config.model, baseUrl: config.provider === "anthropic" ? config.anthropicBaseUrl ?? "" : config.openAiBaseUrl ?? "", credentialSource: "server", workingDirectory: config.workspaceRoot } },
@@ -189,7 +210,34 @@ export function createApp(config: AppConfig) {
       // One-time backfill of legacy on-disk skill directories into skill_files.
       await migrateFileSkills(app.prisma, platformRoot);
       await platform.ensureBuiltinAgents();
+      // 已有 cos-v1 会话的环境即使默认模式为 local 也必须配置 COS，
+      // 否则这些会话会变成不可读历史；启动失败比静默降级安全。
+      if (!config.cos) {
+        const cosConversations = await app.prisma.conversation.count({
+          where: { messageStorage: "cos-v1", deletedAt: null },
+        });
+        if (cosConversations)
+          throw new Error(
+            `数据库中存在 ${cosConversations} 个 cos-v1 会话但未配置 COS：请补全 COS_SECRET_ID/COS_SECRET_KEY/COS_REGION/COS_BUCKET，或将 ANTLER_CONVERSATION_STORAGE 保持可用。`,
+          );
+      } else {
+        // 暂存卷必须跨容器重建保留：启动时验证可写与剩余容量（§4.3）。
+        await stagingJournal!.validate();
+        // 先重放持久暂存并对账终态意图，再标记中断运行（§4.3.6）。
+        await conversations.recover();
+      }
       await runtime.recoverInterrupted();
+      // 协调式 GC 由单 backend 调度，与写入共享进程内会话队列（§4.4）。
+      const gcTimer = setInterval(() => {
+        void conversations
+          .collectGarbage()
+          .catch((error) =>
+            logger.warn("periodic garbage collection failed", {
+              error: String(error),
+            }),
+          );
+      }, 3_600_000);
+      gcTimer.unref();
     }
   });
   const taskService = new TaskService(runtime);

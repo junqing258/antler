@@ -51,6 +51,7 @@ describe("database", () => {
         "agent_skills",
         "agents",
         "conversation_changes",
+        "conversation_deletion_tasks",
         "conversation_messages",
         "conversation_sync_states",
         "conversations",
@@ -59,6 +60,7 @@ describe("database", () => {
         "scheduled_tasks",
         "skill_files",
         "skills",
+        "storage_garbage_candidates",
         "task_executions",
       ]);
       expect(tables.every((table) => table.rowsecurity)).toBe(true);

@@ -36,6 +36,22 @@ export type AppConfig = {
   agentsDir?: string;
   databaseUrl?: string;
   schedulerEnableScript?: boolean;
+  /** 新会话的正文存储介质；缺省为 local。已有会话按各自 messageStorage 路由。 */
+  conversationStorage?: "local" | "cos";
+  cosPrefix?: string;
+  /** 持久暂存日志容量上限（字节）；达到高水位时拒绝新写入并明确报错。 */
+  stagingMaxBytes?: number;
+  /** GC 宽限期（毫秒）；必须大于允许的最长读取与提交时长。 */
+  cosGcGraceMs?: number;
+  cos?: {
+    secretId: string;
+    secretKey: string;
+    token?: string;
+    region: string;
+    bucket: string;
+    scheme: string;
+    endpoint?: string;
+  };
 };
 
 const workspaceRoot = resolve(
@@ -62,6 +78,47 @@ export function parseAuthMode(value: string | undefined): "local" | "supabase" {
   if (value === undefined || value === "local") return "local";
   if (value === "supabase") return "supabase";
   throw new Error("ANTLER_AUTH_MODE 无效：仅支持 local 或 supabase。");
+}
+
+/** Unknown storage modes must not silently fall back to local files. */
+export function parseConversationStorage(
+  value: string | undefined,
+): "local" | "cos" {
+  if (value === undefined || value === "local") return "local";
+  if (value === "cos") return "cos";
+  throw new Error(
+    "ANTLER_CONVERSATION_STORAGE 无效：仅支持 local 或 cos。",
+  );
+}
+
+const cosRequired = [
+  "COS_SECRET_ID",
+  "COS_SECRET_KEY",
+  "COS_REGION",
+  "COS_BUCKET",
+] as const;
+
+function buildCosConfig(): AppConfig["cos"] {
+  const values = cosRequired.map((name) => process.env[name]?.trim() ?? "");
+  if (values.some((value) => !value)) return undefined;
+  return {
+    secretId: values[0],
+    secretKey: values[1],
+    token: process.env.COS_TOKEN?.trim() || undefined,
+    region: values[2],
+    bucket: values[3],
+    scheme: process.env.COS_SCHEME?.trim() || "https",
+    endpoint: process.env.COS_ENDPOINT?.trim() || undefined,
+  };
+}
+
+/** cos 模式缺少必填 COS 配置时必须启动失败，而不是回退到本地存储。 */
+export function validateConversationStorageConfig(config: AppConfig): void {
+  if ((config.conversationStorage ?? "local") !== "cos") return;
+  if (!config.cos)
+    throw new Error(
+      "ANTLER_CONVERSATION_STORAGE=cos 需要 COS_SECRET_ID、COS_SECRET_KEY、COS_REGION 和 COS_BUCKET。",
+    );
 }
 
 export const config: AppConfig = {
@@ -101,6 +158,17 @@ export const config: AppConfig = {
     ? resolve(projectRoot, process.env.ANTLER_AGENTS_DIR)
     : undefined,
   databaseUrl: process.env.DATABASE_URL,
+  conversationStorage: parseConversationStorage(
+    process.env.ANTLER_CONVERSATION_STORAGE,
+  ),
+  cosPrefix: process.env.ANTLER_COS_PREFIX?.trim() || "antler/conversations/v1",
+  stagingMaxBytes: process.env.ANTLER_STAGING_MAX_BYTES
+    ? Number(process.env.ANTLER_STAGING_MAX_BYTES)
+    : undefined,
+  cosGcGraceMs: process.env.ANTLER_COS_GC_GRACE_MS
+    ? Number(process.env.ANTLER_COS_GC_GRACE_MS)
+    : undefined,
+  cos: buildCosConfig(),
 };
 
 /** Fail closed before starting a server with incomplete Supabase authentication. */
