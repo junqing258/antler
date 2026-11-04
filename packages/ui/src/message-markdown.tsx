@@ -317,9 +317,22 @@ const styles = StyleSheet.create({
   list: { paddingLeft: 8 },
   listItem: { flexDirection: "row" },
   listBody: { flex: 1 },
-  table: { borderWidth: 1, borderColor: "#bcc9c3", marginVertical: 5 },
+  // 表格只画上/左边框，单元格画右/下边框：末列、末行的边即外框，
+  // 避免相邻边框叠画；flex 等分列宽保证各行竖线对齐。
+  table: { borderTopWidth: 1, borderLeftWidth: 1, borderColor: "#bcc9c3", marginVertical: 5 },
   row: { flexDirection: "row" },
-  cell: { minWidth: 100, padding: 6, borderWidth: 0.5, borderColor: "#bcc9c3" },
+  cell: {
+    // 显式写 flexGrow/flexBasis：RNW 的 View 默认 flexBasis:auto 会覆盖
+    // `flex: 1` shorthand 隐含的 0%，导致列宽按内容而非等分、竖线错位。
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 100,
+    padding: 6,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: "#bcc9c3",
+  },
   rule: {
     borderBottomWidth: 1,
     borderBottomColor: "#bcc9c3",

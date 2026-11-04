@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
-import { BottomSheet, Button, Host, RNHostView } from "@expo/ui";
+import { useEffect, useRef, useState } from "react";
+import { Button, Host } from "@expo/ui";
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
+  Modal,
+  ScrollView,
   Pressable,
   StyleSheet,
   Text,
@@ -11,7 +14,7 @@ import {
 } from "react-native";
 
 /** 跨平台输入弹窗：空值禁止提交。 */
-export function InputDialog({
+function CustomInputDialog({
   visible,
   title,
   initialValue,
@@ -43,7 +46,7 @@ export function InputDialog({
   };
   const content = (
     <Pressable
-      style={embedded ? styles.backdrop : styles.sheetContent}
+      style={styles.backdrop}
       onPress={onCancel}
     >
       <KeyboardAvoidingView
@@ -93,21 +96,20 @@ export function InputDialog({
       </View>
     ) : null;
   return (
-    <BottomSheet
-      isPresented={visible}
-      onDismiss={onCancel}
-      snapPoints={[{ height: 320 }]}
-      contentPadding={0}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onCancel}
+      statusBarTranslucent
     >
-      <RNHostView>
-        <View style={styles.sheetFrame}>{content}</View>
-      </RNHostView>
-    </BottomSheet>
+      {content}
+    </Modal>
   );
 }
 
 /** 跨平台确认弹窗：用于删除等不可撤销操作。 */
-export function ConfirmDialog({
+function CustomConfirmDialog({
   visible,
   title,
   message,
@@ -130,7 +132,7 @@ export function ConfirmDialog({
 }) {
   const content = (
     <Pressable
-      style={embedded ? styles.backdrop : styles.sheetContent}
+      style={styles.backdrop}
       onPress={onCancel}
     >
       <View style={styles.center} pointerEvents="box-none">
@@ -139,7 +141,9 @@ export function ConfirmDialog({
           onPress={(event) => event.stopPropagation()}
         >
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.message}>{message}</Text>
+          <ScrollView style={styles.messageScroll} bounces={false}>
+            <Text style={styles.message}>{message}</Text>
+          </ScrollView>
           {!!error && (
             <Text accessibilityRole="alert" style={styles.error}>
               {error}
@@ -168,24 +172,95 @@ export function ConfirmDialog({
       </View>
     ) : null;
   return (
-    <BottomSheet
-      isPresented={visible}
-      onDismiss={onCancel}
-      snapPoints={[{ height: 320 }]}
-      contentPadding={0}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onCancel}
+      statusBarTranslucent
     >
-      <RNHostView>
-        <View style={styles.sheetFrame}>{content}</View>
-      </RNHostView>
-    </BottomSheet>
+      {content}
+    </Modal>
   );
+}
+
+type InputDialogProps = Parameters<typeof CustomInputDialog>[0];
+type ConfirmDialogProps = Parameters<typeof CustomConfirmDialog>[0];
+
+/** iOS 提供带输入框的系统提示框；其他平台使用可输入的兼容实现。 */
+export function InputDialog(props: InputDialogProps) {
+  if (Platform.OS === "ios" && !props.embedded) return <NativeInputDialog {...props} />;
+  return <CustomInputDialog {...props} />;
+}
+
+function NativeInputDialog(props: InputDialogProps) {
+  const latest = useRef(props);
+  latest.current = props;
+  const value = useRef(props.initialValue);
+  const [validationError, setValidationError] = useState("");
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    if (!props.visible) {
+      value.current = props.initialValue;
+      setValidationError("");
+      return;
+    }
+    if (props.busy) return;
+    Alert.prompt(
+      props.title,
+      props.error || validationError || undefined,
+      [
+        { text: "取消", style: "cancel", onPress: () => latest.current.onCancel() },
+        {
+          text: props.confirmLabel || "确定",
+          onPress: (input) => {
+            const next = (input || "").trim();
+            value.current = input || "";
+            if (!next || next.length > 200) {
+              setValidationError(!next ? "请输入会话名称。" : "会话名称不能超过 200 个字符。");
+              setAttempt((current) => current + 1);
+              return;
+            }
+            setValidationError("");
+            latest.current.onConfirm(next);
+          },
+        },
+      ],
+      "plain-text",
+      value.current,
+    );
+  }, [props.visible, props.busy, props.error, props.title, props.confirmLabel, validationError, attempt]);
+  return null;
+}
+
+/** 使用系统确认框，提交失败后再次显示错误和操作选项。 */
+export function ConfirmDialog(props: ConfirmDialogProps) {
+  if (Platform.OS !== "web" && !props.embedded) return <NativeConfirmDialog {...props} />;
+  return <CustomConfirmDialog {...props} />;
+}
+
+function NativeConfirmDialog(props: ConfirmDialogProps) {
+  const latest = useRef(props);
+  latest.current = props;
+  useEffect(() => {
+    if (!props.visible || props.busy) return;
+    Alert.alert(
+      props.title,
+      props.error ? `${props.message}\n\n${props.error}` : props.message,
+      [
+        { text: "取消", style: "cancel", onPress: () => latest.current.onCancel() },
+        { text: props.confirmLabel || "删除", style: "destructive", onPress: () => latest.current.onConfirm() },
+      ],
+      { cancelable: true, onDismiss: () => latest.current.onCancel() },
+    );
+  }, [props.visible, props.busy, props.error, props.title, props.message, props.confirmLabel]);
+  return null;
 }
 
 const styles = StyleSheet.create({
   overlay: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
-  sheetFrame: { height: 320, width: "100%" },
-  sheetContent: { flex: 1 },
   center: {
     flex: 1,
     alignItems: "center",
@@ -198,10 +273,12 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     width: "100%",
-    maxWidth: 320,
+    maxWidth: 400,
+    maxHeight: "100%",
   },
   title: { fontSize: 16, fontWeight: "600", color: "#222" },
-  message: { fontSize: 14, color: "#555" },
+  messageScroll: { flexGrow: 0, flexShrink: 1 },
+  message: { fontSize: 14, lineHeight: 21, color: "#555" },
   error: { fontSize: 14, color: "#b3261e" },
   input: {
     borderWidth: 1,
@@ -213,17 +290,4 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   actions: { flexDirection: "row", justifyContent: "flex-end", gap: 8 },
-  button: {
-    minHeight: 44,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  confirm: { backgroundColor: "#087d61" },
-  destructive: { backgroundColor: "#b3261e" },
-  disabled: { opacity: 0.5 },
-  cancelText: { color: "#087d61", fontSize: 15, fontWeight: "600" },
-  confirmText: { color: "white", fontSize: 15, fontWeight: "600" },
-  disabledText: { color: "rgba(255,255,255,0.8)" },
 });

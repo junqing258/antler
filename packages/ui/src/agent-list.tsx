@@ -71,8 +71,9 @@ function AgentGrid({
 }) {
   const [containerWidth, setContainerWidth] = useState(0);
   const columns = containerWidth >= 880 ? 3 : containerWidth >= 560 ? 2 : 1;
+  // 单列也必须显式占满整行，否则卡片按内容宽度（max-content）撑开导致横向溢出。
   const cardWidth =
-    columns > 1 && containerWidth > 0
+    containerWidth > 0
       ? (containerWidth - CARD_GAP * (columns - 1)) / columns
       : undefined;
   return (
