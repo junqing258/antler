@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 
-const env = { ...process.env };
+// Mobile devices reach the development backend through the LAN address.
+const env = { ANTLER_HOST: "0.0.0.0", ...process.env };
 // pnpm --stream pipes child output, so detect the terminal before starting it.
 if (
   process.stdout.isTTY &&

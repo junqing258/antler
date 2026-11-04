@@ -50,6 +50,7 @@ export function NativeChat({
   cancelAfter = 0,
   title = "",
   onOpenDrawer,
+  onStartNewConversation,
   cachedMessages,
   onCacheMessages,
 }: {
@@ -64,6 +65,7 @@ export function NativeChat({
   cancelAfter?: number;
   title?: string;
   onOpenDrawer?: () => void;
+  onStartNewConversation?: () => void;
   cachedMessages?: ChatMessage[];
   onCacheMessages?: (messages: ChatMessage[], hasMore: boolean) => void;
 }) {
@@ -257,6 +259,7 @@ export function NativeChat({
         notice={state.ready ? state.notice : `显示本地缓存，${state.notice || "正在连接服务端…"}`}
         operationError={operationError}
         contextReason={state.contextReason}
+        onStartNewConversation={onStartNewConversation}
         credentialProblem={problem}
         draft={draft}
         onDraftChange={(value) => { draftVersion.current++; setDraft(value); }}
@@ -304,8 +307,8 @@ const styles = StyleSheet.create({
   loadingText: { fontSize: 14, fontWeight: "500", color: "#404b47" },
   loadingNotice: { marginTop: 12, textAlign: "center", fontSize: 14, color: "#747d79" },
   title: { flex: 1, minWidth: 0 },
-  heading: { fontSize: 18, fontWeight: "700" },
-  subtitle: { fontSize: 12, color: "#777" },
+  heading: { fontSize: 18, fontWeight: "700", color: "#1b1f1d", letterSpacing: -0.2 },
+  subtitle: { marginTop: 2, fontSize: 12, color: "#737b77" },
   menuButton: {
     width: 44,
     height: 44,
@@ -316,6 +319,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    minHeight: 60,
     paddingVertical: 8,
     paddingRight: 16,
     backgroundColor: "#fff",

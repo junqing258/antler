@@ -161,7 +161,7 @@ it("keeps earlier credentials protected after rotating keys and degrades unsafe 
   await finish();
   const row = await db.conversation.findUnique({ where: { id: "thread" } });
   expect(row?.contextState).toBe("unavailable");
-  expect(row?.checkpoint).toBeNull();
+  expect(JSON.stringify(row?.checkpoint)).not.toContain(provider.apiKey);
   expect(
     JSON.stringify(await store.storage.checkpoint("alice", "thread")),
   ).not.toContain(provider.apiKey);

@@ -8,7 +8,9 @@
     "android:device": "bash scripts/android-device.sh",
     "start:device": "bash scripts/ios-device.sh metro",
     "check": "tsc --noEmit",
-    "export": "npx expo export --platform all"
+    "export": "npx expo export --platform all",
+    "ios:release": "node scripts/ios-release.mjs",
+    "ios:release:device": "node scripts/ios-release.mjs --install"
   },
   "dependencies": {
     "@antler/chat-core": "workspace:*",

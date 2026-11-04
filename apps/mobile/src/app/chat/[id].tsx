@@ -95,6 +95,12 @@ export function ChatRoute() {
             cancelAfter={pending?.cancelAfter ?? 0}
             title={title}
             onOpenDrawer={() => setDrawerOpen(true)}
+            onStartNewConversation={() =>
+              root.openChat(
+                { id: Crypto.randomUUID(), agentId, title: "新对话" },
+                "replace",
+              )
+            }
             onConfigure={root.openSettings}
             onModelSelected={(model, startNew) => {
               void root.saveProviderModel(model).then((saved) => {

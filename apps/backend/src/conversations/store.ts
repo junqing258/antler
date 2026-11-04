@@ -36,6 +36,7 @@ export class ConversationStore extends PrismaRunStore {
 
   // Called under the conversation queue. Publish the backend marker only
   // after copying all legacy payloads successfully; a failed copy is retryable.
+  // Checkpoints remain in Postgres as a sanitized recovery copy.
   private async ensureLocal(row: Conversation) {
     if (row.messageStorage === "local-jsonl") return;
     const [messages, events] = await Promise.all([
@@ -69,7 +70,7 @@ export class ConversationStore extends PrismaRunStore {
     );
     await this.db.conversation.update({
       where: { id: row.id },
-      data: { messageStorage: "local-jsonl", checkpoint: Prisma.DbNull },
+      data: { messageStorage: "local-jsonl" },
     });
   }
 
@@ -299,10 +300,11 @@ export class ConversationStore extends PrismaRunStore {
         throw new PlatformError("conversation_not_found", 404);
       await this.ensureLocal(row);
       const local = await this.storage.checkpoint(userId, id);
+      const checkpoint = local?.checkpoint ?? row.checkpoint ?? null;
       return {
         config: row.executionConfig as Record<string, unknown>,
-        checkpoint: local?.checkpoint ?? null,
-        contextState: local?.contextState ?? "not_restored",
+        checkpoint,
+        contextState: local?.contextState ?? (checkpoint ? row.contextState : "not_restored"),
         revision: row.revision,
         titleSource: row.titleSource,
       };
@@ -318,10 +320,16 @@ export class ConversationStore extends PrismaRunStore {
     await this.serial(id, async () => {
       const row = await this.owned(userId, id);
       await this.ensureLocal(row);
-      await this.storage.saveCheckpoint(userId, id, checkpoint, contextState);
+      try {
+        await this.storage.saveCheckpoint(userId, id, checkpoint, contextState);
+      } catch (error) {
+        // The database mirror preserves safe contexts when a container volume
+        // is temporarily unavailable or has been recreated.
+        console.warn(`[Conversations] Local checkpoint persistence failed for ${id}`, error);
+      }
       await this.db.conversation.update({
         where: { id },
-        data: { checkpoint: Prisma.DbNull, contextState },
+        data: { checkpoint: json(checkpoint), contextState },
       });
     });
   }
@@ -341,7 +349,8 @@ export class ConversationStore extends PrismaRunStore {
     if (
       row.messageStorage === "local-jsonl" &&
       row.contextState === "available" &&
-      !(await this.storage.checkpoint(userId, id))
+      !(await this.storage.checkpoint(userId, id)) &&
+      !row.checkpoint
     ) {
       detail.contextState = "not_restored";
     }

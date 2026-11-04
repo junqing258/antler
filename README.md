@@ -29,7 +29,7 @@ pnpm install
 pnpm dev
 ```
 
-在浏览器打开 <http://127.0.0.1:1420>。Vite 开发服务器使用 `1420` 端口，后端 API 默认监听 `127.0.0.1:3210`。也可以分别运行 `pnpm dev:web` 和 `pnpm dev:server`。
+在浏览器打开 <http://127.0.0.1:1420>。Vite 开发服务器使用 `1420` 端口，后端 API 在开发模式下默认监听 `0.0.0.0:3210`，供本机和同一局域网的移动设备访问。也可以分别运行 `pnpm dev:web` 和 `pnpm dev:server`。
 
 在页面的“供应商配置”中填写模型密钥，或在仓库根目录的 `.env` 中设置服务端密钥，例如：
 
@@ -114,7 +114,11 @@ ANTLER_RAG_KEY=your-rag-api-key
 pnpm build        # 构建 Web、后端和移动端验证 bundle
 pnpm build:web    # 仅构建前端，输出 apps/web/dist
 pnpm build:server # 仅构建后端，输出 apps/backend/dist
+pnpm build:ios:device # Personal Team：构建 Release 并安装到自己的 iPhone
+pnpm build:ios    # App Store 分发：Release 归档和 IPA（需要分发资格）
 ```
+
+iPhone 个人自用可使用本机 Personal Team 安装 Release；App Store IPA 需要分发资格。命令选项和产物说明见 [Mobile 构建配置](docs/mobile-build-configuration.md#ios-正式包)。
 
 构建后可设置 `ANTLER_STATIC_DIR` 为 `apps/web/dist` 的绝对路径，再运行 `pnpm --filter @antler/server start`，由后端同源提供前端页面、API 和 SSE。后端启动前仍需配置 `DATABASE_URL` 并应用数据库迁移。
 

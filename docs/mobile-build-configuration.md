@@ -13,6 +13,62 @@ node scripts/mobile-autostart.mjs --platform android --message '请详细回答'
 
 发版前须用与正式包相同的环境和地址验证两平台实际地址、TLS、服务端认证配置、登录、流式对话和异常恢复，并对正式包本身做冒烟测试。Supabase 配置必须完整；受 local 令牌保护的部署仅支持持有与该地址绑定的旧令牌的升级设备。确认公网部署具备受信任的访问控制；不要为适配新设备而关闭访问控制。Expo Updates 的配置更新和回滚尚未纳入此流程。
 
+## iPhone 个人自用 Release
+
+使用免费 Personal Team 在自己的 iPhone 上运行 Release 版本，在仓库根目录执行：
+
+```sh
+# USB 连接并解锁 iPhone，确认信任电脑、开启开发者模式
+# 使用本机 Team，自动选择唯一已连接的 iPhone
+pnpm build:ios:device
+
+# 连接多台 iPhone 时指定 UDID
+pnpm build:ios:device --device 你的iPhoneUDID
+
+# 复用已有 Release 归档，跳过重新编译
+pnpm build:ios:device --archive apps/mobile/dist/ios/<时间>/Antler.xcarchive
+```
+
+此命令使用 `production` 配置和正式 HTTPS 后端，创建 Apple Development 签名的 Release 归档，直接将归档中的 `.app` 安装到手机并启动，不执行 App Store IPA 导出，也不依赖 Metro。安装会更新手机上相同 Bundle ID 的应用。默认只自动选择已连接的真实 iPhone；找不到设备或连接多台时会提示处理。若已安装但启动被系统拒绝，请解锁手机并在设置中确认开发者信任后手动打开 Antler。
+
+Personal Team 不需要开通 App Store 分发会员即可执行上述个人安装，但开发签名有有效期，过期后需要重新运行构建安装命令。后端仍需可通过网络访问。需要 App Store / TestFlight 分发时，使用下方的 `pnpm build:ios` 流程。
+
+## iOS 正式包
+
+在 macOS 上安装完整 Xcode、CocoaPods 和工作区依赖，并在 Xcode 的 Accounts 中登录有发布权限的 Apple 开发者账号。App Store Connect / TestFlight 导出需要 Apple Developer Program 分发身份及匹配的 App ID。当前 Bundle ID 为 `com.antler.p0probe`，由 `apps/mobile/app.json` 决定；首次上架前确定最终标识，已有上架记录则保持一致。
+
+在仓库根目录执行：
+
+```sh
+# 使用本机 iOS 工程的 Team，生成 Release 归档和 IPA；不会上传
+pnpm build:ios
+
+# 显式指定其他 Team
+pnpm build:ios --team ABCDE12345
+
+# 也可通过环境变量提供 Apple Team ID
+APPLE_TEAM_ID=ABCDE12345 pnpm build:ios
+
+# 指定正式 HTTPS 后端与产物目录（相对路径从执行命令的目录计算）
+pnpm build:ios --team ABCDE12345 --server-url https://antler.example.com --output apps/mobile/dist/ios/release-001
+
+# 仅归档，随后在 Xcode Organizer 中手动分发
+pnpm build:ios --team ABCDE12345 --archive-only
+
+# 使用 Xcode 导出的签名配置，例如指定设备的分发配置
+pnpm build:ios --team ABCDE12345 --export-options /absolute/path/ExportOptions.plist
+
+pnpm build:ios --help
+```
+
+默认产物位于 `apps/mobile/dist/ios/<时间>/`：`Antler.xcarchive` 为签名归档，`ipa/*.ipa` 为导出的安装包，`ExportOptions.plist` 记录默认导出配置。脚本不会覆盖已有归档或 IPA 目录。App Store 分发包通过 TestFlight 或 App Store 安装；直接分发给已注册设备时，需提供相应的导出配置及描述文件。上传新构建前更新 `app.json` 中的 `expo.version` 和 `expo.ios.buildNumber`，避免重复构建号。
+
+脚本强制 `production` 环境、关闭自动化和 dotenv 加载，后端地址依次取 `--server-url`、`EXPO_PUBLIC_ANTLER_SERVER_URL`、默认 `https://www.xiaoanai.top`，并拒绝 HTTP、凭据和查询参数。源码会复制到 `apps/mobile/dist/` 下的临时工程，复用已安装的 node_modules，通过当前 Node 直接调用已安装的 Expo CLI（不在临时目录执行 pnpm exec 或重新安装 JS 依赖），重新生成 iOS 工程并安装 Pods，然后执行 `xcodebuild archive` 与 `-exportArchive`；结束后清理临时工程，现有 `apps/mobile/ios/` 不会被修改。需要保留的原生定制必须通过 Expo 配置或 config plugin 提供。Team ID 按 `--team`、`APPLE_TEAM_ID`、本机 `apps/mobile/ios/*.xcodeproj/project.pbxproj` 中的 `DEVELOPMENT_TEAM` 顺序读取；本机只检测到一个 Team 时自动使用，检测到多个或未配置时要求显式指定。签名使用选定的 Team ID 和自动签名，允许 Xcode 更新描述文件；脚本不会自动上传到 App Store Connect。
+
+如果 Release 归档成功而 IPA 导出失败，脚本会保留 `.xcarchive` 并显示路径。可用 `open /absolute/path/Antler.xcarchive` 在 Xcode Organizer 中重新分发，无需重新编译。若日志提示 Team 不具备所需会员资格、找不到 Distribution 证书或 App Store 描述文件，需要先在 Xcode Accounts 中配置具备分发资格的 Apple Developer Program Team 及相应签名身份；自动读取本机 Team ID 不代表该 Team 具备 App Store 分发资格。
+
+`pnpm build:mobile` 仍只导出 JS 和资源，不生成 IPA。原生归档/导出需要实际可用的签名证书和描述文件，不能用 JS 导出成功替代正式包验证。
+
 ## Android 真机开发
 
 安装 Android SDK 和 JDK，配置好 Android 开发环境；手机开启 USB 调试，连接电脑并授权，与电脑处于同一局域网。在仓库根目录运行：

@@ -35,6 +35,26 @@ afterEach(async () => {
   await rm(storageRoot, { recursive: true, force: true });
 });
 describe("authoritative conversation store", () => {
+  it("mirrors a safe checkpoint to Postgres for recovery after local storage loss", async () => {
+    await store.create(run());
+    const checkpoint = { schemaVersion: 1, messages: [{ role: "user" }] };
+    await store.saveCheckpoint("alice", "thread", checkpoint, "available");
+    expect(
+      (await db.conversation.findUnique({ where: { id: "thread" } }))
+        ?.checkpoint,
+    ).toEqual(checkpoint);
+
+    await rm(store.storage.directory("alice", "thread"), {
+      recursive: true,
+      force: true,
+    });
+    const restarted = new ConversationStore(db, storageRoot);
+    expect(await restarted.getExecution("alice", "thread")).toMatchObject({
+      checkpoint,
+      contextState: "available",
+    });
+  });
+
   it("commits a run, stable messages and a user cursor together and isolates owners", async () => {
     await store.create(run());
     expect((await store.list("alice", 10)).lastChangeId).toBe(1);
@@ -319,7 +339,10 @@ it("migrates legacy messages, events and checkpoints lazily and preserves legacy
   });
   expect(
     await db.conversation.findUnique({ where: { id: "thread" } }),
-  ).toMatchObject({ messageStorage: "local-jsonl", checkpoint: null });
+  ).toMatchObject({
+    messageStorage: "local-jsonl",
+    checkpoint: { schemaVersion: 1, messages: ["memory"] },
+  });
   expect(await db.conversationMessage.count()).toBe(2);
   expect(await db.runEvent.count()).toBe(1);
   const restarted = new ConversationStore(db, storageRoot);
@@ -328,7 +351,8 @@ it("migrates legacy messages, events and checkpoints lazily and preserves legacy
   ).toHaveLength(2);
   expect(importer).toHaveBeenCalledTimes(2);
   importer.mockRestore();
-  // Once migrated, a missing disk must not resurrect stale database payloads.
+  // A missing disk must not resurrect messages or events, but the sanitized
+  // database checkpoint still restores the model context after a restart.
   await rm(store.storage.directory("alice", "thread"), {
     recursive: true,
     force: true,
@@ -339,11 +363,11 @@ it("migrates legacy messages, events and checkpoints lazily and preserves legacy
   );
   expect(await missingDisk.getEvents("legacy", 0)).toEqual([]);
   expect(await missingDisk.getExecution("alice", "thread")).toMatchObject({
-    checkpoint: null,
-    contextState: "not_restored",
+    checkpoint: { messages: ["memory"] },
+    contextState: "available",
   });
   expect((await missingDisk.detail("alice", "thread"))?.contextState).toBe(
-    "not_restored",
+    "available",
   );
 });
 

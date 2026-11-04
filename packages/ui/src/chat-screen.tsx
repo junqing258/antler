@@ -14,6 +14,7 @@ export type ChatScreenProps = {
   notice?: string;
   operationError?: string;
   contextReason?: string;
+  onStartNewConversation?: () => void;
   credentialProblem?: string;
   draft: string;
   onDraftChange: (text: string) => void;
@@ -40,6 +41,7 @@ export function ChatScreen({
   notice,
   operationError,
   contextReason,
+  onStartNewConversation,
   credentialProblem,
   draft,
   onDraftChange,
@@ -110,7 +112,22 @@ export function ChatScreen({
         <Text accessibilityRole="alert">{operationError}</Text>
       )}
       {!!contextReason && (
-        <Text accessibilityRole="alert">{contextReason}</Text>
+        <View accessibilityRole="alert" style={styles.contextNotice}>
+          <View style={styles.contextNoticeCopy}>
+            <Text style={styles.contextNoticeTitle}>该历史会话无法续聊</Text>
+            <Text style={styles.contextNoticeText}>{contextReason}</Text>
+          </View>
+          {onStartNewConversation && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="新建会话"
+              onPress={onStartNewConversation}
+              style={styles.contextNoticeAction}
+            >
+              <Text style={styles.contextNoticeActionText}>新建会话</Text>
+            </Pressable>
+          )}
+        </View>
       )}
       {!!credentialProblem && (
         <View style={styles.warning}>
@@ -177,7 +194,7 @@ const styles = StyleSheet.create({
   },
   welcomeTitle: { fontSize: 24, fontWeight: "600", marginBottom: 24 },
   welcomeComposer: { width: "100%", maxWidth: 1024 },
-  notices: { gap: 4, paddingHorizontal: 12, paddingTop: 4 },
+  notices: { gap: 8, paddingHorizontal: 16, paddingTop: 10 },
   connectionLoading: {
     alignSelf: "center",
     marginTop: 8,
@@ -192,6 +209,27 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: "#fdf3e7",
   },
+  contextNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#f0d7ae",
+    borderRadius: 14,
+    backgroundColor: "#fff9ed",
+  },
+  contextNoticeCopy: { flex: 1, gap: 3 },
+  contextNoticeTitle: { color: "#714c11", fontSize: 14, fontWeight: "700" },
+  contextNoticeText: { color: "#805f29", fontSize: 13, lineHeight: 19 },
+  contextNoticeAction: {
+    flexShrink: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 9,
+    backgroundColor: "#087d61",
+  },
+  contextNoticeActionText: { color: "#fff", fontSize: 13, fontWeight: "700" },
   link: { color: "#126b9a" },
   disclaimer: {
     textAlign: "center",

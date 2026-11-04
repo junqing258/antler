@@ -517,6 +517,21 @@ describe("shared chat screen", () => {
     );
     expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
   });
+
+  it("offers a direct new-conversation action when context cannot be restored", () => {
+    const onStartNewConversation = vi.fn();
+    render(
+      <ChatScreen
+        {...base}
+        messages={[]}
+        contextReason="服务重启后未找到该会话的持久化上下文。"
+        onStartNewConversation={onStartNewConversation}
+      />,
+    );
+    expect(screen.getByText("该历史会话无法续聊")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "新建会话" }));
+    expect(onStartNewConversation).toHaveBeenCalledOnce();
+  });
 });
 
 describe("shared model picker", () => {

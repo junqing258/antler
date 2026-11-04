@@ -98,7 +98,7 @@ export function registerConversationRoutes(
             ? null
             : row.contextState === "unavailable"
               ? "模型上下文含不能安全保存的秘密，无法恢复，请新建会话。"
-              : "模型上下文尚未恢复，请新建会话。",
+              : "服务重启后未找到该会话的持久化上下文；历史消息仍可查看，请新建会话继续。",
       };
     },
   );
