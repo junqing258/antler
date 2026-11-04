@@ -5,6 +5,9 @@ import {
   type Prisma,
   type PrismaClient,
 } from "../generated/prisma/client.js";
+import { createLogger } from "../logger.js";
+
+const logger = createLogger("Platform");
 
 const MAX_FILES = 200,
   MAX_FILE_BYTES = 1024 * 1024,
@@ -126,9 +129,9 @@ export async function migrateFileSkills(prisma: PrismaClient, root: string) {
         persistSkillFiles(tx.skillFile, row.id, files),
       );
     } catch (error) {
-      console.warn(
-        `[Platform] skill ${row.id} could not be migrated from disk; re-upload to repair`,
-        error,
+      logger.warn(
+        "skill could not be migrated from disk; re-upload to repair",
+        { skillId: row.id, error },
       );
       await prisma.skill.update({
         where: { id: row.id },

@@ -1,15 +1,13 @@
 import { randomBytes } from "node:crypto";
 import type { FastifyInstance } from "fastify";
+import {
+  color,
+  createLogger,
+  formatTimestamp,
+  supportsColor,
+  type LoggerFields,
+} from "../logger.js";
 import { traceFields } from "../telemetry/tracing.js";
-
-function formatTimestamp(date: Date) {
-  const pad = (value: number, length = 2) =>
-    String(value).padStart(length, "0");
-  return (
-    `${pad(date.getFullYear(), 4)}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
-    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`
-  );
-}
 
 export function createRequestId() {
   const timestamp = formatTimestamp(new Date())
@@ -18,38 +16,26 @@ export function createRequestId() {
   return `${timestamp}_${randomBytes(8).toString("hex")}`;
 }
 
-function supportsColor() {
-  if (
-    process.env.NODE_ENV === "production" ||
-    process.env.NO_COLOR !== undefined ||
-    process.env.FORCE_COLOR === "0"
-  ) {
-    return false;
-  }
-  // FORCE_COLOR also supports dev runners that pipe the server's output.
-  return (
-    process.env.FORCE_COLOR !== undefined ||
-    (process.stdout.isTTY === true && process.env.TERM !== "dumb")
-  );
-}
+const logger = createLogger("app");
 
 export function registerRequestLogging(app: FastifyInstance) {
   app.addHook("onResponse", async (request, reply) => {
     const useColor = supportsColor();
-    const color = (value: string, code: number) =>
-      useColor ? `\u001b[${code}m${value}\u001b[0m` : value;
+    const paint = (value: string, code: number) =>
+      useColor ? color(value, code) : value;
     const statusColor =
       reply.statusCode >= 500 ? 31 :
         reply.statusCode >= 400 ? 33 : reply.statusCode >= 300 ? 36 : 32;
     // EventSource URLs can contain an access token; only log the pathname.
     const path = request.url.split("?", 1)[0];
     const fields = traceFields(request.antlerTraceSpan ?? undefined);
-    const correlation = fields ? ` trace_id=${fields.trace_id} span_id=${fields.span_id}` : "";
-    console.info(
-      `${color(formatTimestamp(new Date()), 90)} ${color("INFO", 32)}     ` +
-        `${color("app", 35)} api_request_completed ` +
-        `request_id=${request.id} method=${color(request.method, 36)} path=${path} ` +
-        `status=${color(String(reply.statusCode), statusColor)} duration_ms=${Math.round(reply.elapsedTime)}${correlation}`,
-    );
+    logger.info("api_request_completed", {
+      request_id: request.id,
+      method: paint(request.method, 36),
+      path,
+      status: paint(String(reply.statusCode), statusColor),
+      ...(fields ?? {}),
+      duration_ms: Math.round(reply.elapsedTime),
+    } satisfies LoggerFields);
   });
 }

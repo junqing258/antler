@@ -55,7 +55,7 @@ describe("request completion logging", () => {
     expect(log).toHaveBeenCalledTimes(1);
     const line = log.mock.calls[0][0] as string;
     expect(line).toMatch(
-      /^2026-10-10 20:24:47\.227 INFO     app api_request_completed request_id=20261010202447_[a-f0-9]{16} method=POST path=\/api\/log-test status=200 duration_ms=\d+$/,
+      /^2026-10-10 20:24:47\.227 INFO app api_request_completed request_id=20261010202447_[a-f0-9]{16} method=POST path=\/api\/log-test status=200 duration_ms=\d+$/,
     );
     expect(line).toContain(`request_id=${response.json().requestId} `);
     for (const secret of ["test-token", "query-secret", "body-secret", "client-supplied-id"])
@@ -117,7 +117,7 @@ describe("request completion logging", () => {
     expect(line).toContain("method=\u001b[36mGET\u001b[0m");
     expect(line).toContain(`status=\u001b[${color}m${status}\u001b[0m`);
     expect(line.replace(/\u001b\[\d+m/g, "")).toMatch(
-      /^2026-10-10 20:24:47\.227 INFO     app api_request_completed request_id=\S+ method=GET path=\/api\/status status=\d+ duration_ms=\d+$/,
+      /^2026-10-10 20:24:47\.227 INFO app api_request_completed request_id=\S+ method=GET path=\/api\/status status=\d+ duration_ms=\d+$/,
     );
   });
 

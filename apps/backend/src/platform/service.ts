@@ -1,4 +1,7 @@
 import { BUILTIN_AGENTS } from "./builtin-agents.js";
+import { createLogger } from "../logger.js";
+
+const logger = createLogger("Platform");
 import { randomUUID, createHash } from "node:crypto";
 import { mkdir, rename, rm } from "node:fs/promises";
 import { join, sep } from "node:path";
@@ -242,7 +245,7 @@ export class PlatformService {
             where: { id: fresh.id },
             data: { state: "broken" },
           });
-          console.warn(`[Platform] ${fresh.id}: broken`, error);
+          logger.warn("skill broken", { skillId: fresh.id, error });
           throw new PlatformError("agent_skills_unavailable", 500);
         });
         if (filesFingerprint(files).fingerprint === fresh.fingerprint) {
@@ -254,7 +257,7 @@ export class PlatformService {
         where: { id: row.id },
         data: { state: "tampered" },
       });
-      console.warn(`[Platform] ${row.id}: tampered`);
+      logger.warn("skill tampered", { skillId: row.id });
       throw new PlatformError("agent_skills_unavailable", 500);
     } finally {
       release();
@@ -383,7 +386,7 @@ export class PlatformService {
         diagnostic = "broken";
       }
       if (diagnostic) {
-        console.warn(`[Platform] ${row.id}: ${diagnostic}`);
+        logger.warn("skill diagnostic", { skillId: row.id, diagnostic });
         await this.prisma.skill.update({
           where: { id },
           data: { state: diagnostic },
@@ -463,7 +466,7 @@ export class PlatformService {
       }
       // Best-effort cache refresh while still holding the write lock; the read path self-heals.
       await this.installCache(row, parsed.files).catch((error) =>
-        console.warn("[Platform] cache refresh failed", error),
+        logger.warn("cache refresh failed", { skillId: row.id, error }),
       );
       return { ...row, diagnostics: [], bindable: !row.disableModelInvocation };
     } finally {
@@ -487,7 +490,7 @@ export class PlatformService {
       }
       await this.prisma.skill.delete({ where: { id } });
       await rm(this.directory(row!), { recursive: true, force: true }).catch(
-        (error) => console.warn("[Platform] cache removal failed", error),
+        (error) => logger.warn("cache removal failed", { skillId: row!.id, error }),
       );
     } finally {
       release();

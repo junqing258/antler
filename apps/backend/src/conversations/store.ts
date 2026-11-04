@@ -5,7 +5,10 @@ import { PrismaRunStore, type StoredRun } from "../runs/run-store.js";
 import type { RunEvent } from "../agent/events.js";
 import type { MessageContent } from "./message.js";
 import { LocalConversationStorage } from "./local-storage.js";
+import { createLogger } from "../logger.js";
 import type { Conversation } from "../generated/prisma/client.js";
+
+const logger = createLogger("Conversations");
 
 type Tx = Prisma.TransactionClient;
 const json = (value: unknown) => value as Prisma.InputJsonValue;
@@ -192,9 +195,9 @@ export class ConversationStore extends PrismaRunStore {
       try {
         await this.storage.create(run);
       } catch {
-        console.warn(
-          `[Conversations] Initial message write failed for ${run.conversationId}`,
-        );
+        logger.warn("initial message write failed", {
+          conversationId: run.conversationId,
+        });
       }
     });
   }
@@ -215,9 +218,7 @@ export class ConversationStore extends PrismaRunStore {
         try {
           await this.storage.persist(owner, events);
         } catch {
-          console.warn(
-            `[Conversations] Local message write failed for ${row.id}`,
-          );
+          logger.warn("local message write failed", { conversationId: row.id });
         }
       }
       // Only metadata and synchronization cursors touch Postgres. Message
@@ -325,7 +326,7 @@ export class ConversationStore extends PrismaRunStore {
       } catch (error) {
         // The database mirror preserves safe contexts when a container volume
         // is temporarily unavailable or has been recreated.
-        console.warn(`[Conversations] Local checkpoint persistence failed for ${id}`, error);
+        logger.warn("local checkpoint persistence failed", { conversationId: id, error });
       }
       await this.db.conversation.update({
         where: { id },
@@ -352,6 +353,10 @@ export class ConversationStore extends PrismaRunStore {
       !(await this.storage.checkpoint(userId, id)) &&
       !row.checkpoint
     ) {
+      logger.warn(
+        "context downgrade: contextState=available but local checkpoint.json and database mirror are both missing",
+        { conversationId: id },
+      );
       detail.contextState = "not_restored";
     }
     return detail;

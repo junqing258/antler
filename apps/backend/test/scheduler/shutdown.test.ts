@@ -60,7 +60,7 @@ it.skipIf(process.platform === "win32").each(["SIGINT", "SIGTERM"] as const)(
         );
         const consume = (chunk: Buffer) => {
           output += chunk.toString();
-          if (output.includes(`[Scheduler] Running task ${task.id}`)) resolve();
+          if (output.includes(`task running taskId=${task.id}`)) resolve();
         };
         child!.stdout!.on("data", consume);
         child!.stderr!.on("data", consume);

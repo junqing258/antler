@@ -8,6 +8,9 @@ import {
   type TaskExecution,
 } from "./types.js";
 import type { TaskExecutor } from "./executor.js";
+import { createLogger } from "../logger.js";
+
+const logger = createLogger("Scheduler");
 
 export const MAX_DELAY_MS = 2 ** 31 - 1;
 interface ScheduledJob {
@@ -72,13 +75,10 @@ export class CronScheduler {
         try {
           await this.scheduleTask(task);
         } catch (error) {
-          console.error(
-            `[Scheduler] Failed to schedule task ${task.id}:`,
-            error,
-          );
+          logger.error("failed to schedule task", { taskId: task.id, error });
         }
       }
-      console.log(`[Scheduler] Started with ${this.jobs.size} active jobs`);
+      logger.info(`started with ${this.jobs.size} active jobs`);
     } catch (error) {
       await this.stop();
       throw error;
@@ -91,7 +91,7 @@ export class CronScheduler {
     for (const controller of this.retryWaiters.values()) controller.abort();
     // Includes task lookup/record creation, not just executor work.
     await Promise.allSettled([...this.inFlight]);
-    console.log("[Scheduler] Stopped");
+    logger.info("stopped");
   }
 
   async scheduleTask(task: ScheduledTask): Promise<void> {
@@ -114,7 +114,7 @@ export class CronScheduler {
       job.cronJob = cron.schedule(task.schedule, () => this.runJob(job));
       this.jobs.set(task.id, job);
     }
-    console.log(`[Scheduler] Scheduled task ${task.id}: ${task.schedule}`);
+    logger.info("task scheduled", { taskId: task.id, schedule: task.schedule });
   }
 
   unscheduleTask(taskId: string): void {
@@ -219,7 +219,7 @@ export class CronScheduler {
         });
         executionId = initial.id;
         accepted?.resolve(initial);
-        console.log(`[Scheduler] Running task ${taskId}: ${task.name}`);
+        logger.info("task running", { taskId, name: task.name });
         const execution = await this.executeWithRetry(task, initial.id);
         await this.prisma.scheduledTask.updateMany({
           where: { id: taskId },
@@ -232,9 +232,7 @@ export class CronScheduler {
             data: { enabled: false },
           });
         }
-        console.log(
-          `[Scheduler] Task ${taskId} completed with status: ${execution.status}`,
-        );
+        logger.info("task completed", { taskId, status: execution.status });
       } catch (error) {
         accepted?.reject(error);
         if (executionId) {
@@ -248,13 +246,10 @@ export class CronScheduler {
               },
             })
             .catch((failure: unknown) =>
-              console.error(
-                "[Scheduler] Failed to finalize execution:",
-                failure,
-              ),
+              logger.error("failed to finalize execution", { taskId, failure }),
             );
         }
-        console.error(`[Scheduler] Error running task ${taskId}:`, error);
+        logger.error("task run failed", { taskId, error });
       }
     })().finally(() => {
       this.runningTasks.delete(taskId);
@@ -308,7 +303,7 @@ export class CronScheduler {
       });
       if (!this.running || !fresh?.enabled || attempt > fresh.retryCount) break;
       current = fresh;
-      console.log(`[Scheduler] Retrying task ${task.id}, attempt ${attempt}`);
+      logger.info("task retry scheduled", { taskId: task.id, attempt });
       result = await this.executor.executeResult(current, {
         retryAttempt: attempt,
       });

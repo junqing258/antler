@@ -20,6 +20,9 @@ import { RunEventBuffer } from "../runs/event-buffer.js";
 import { SecretGuard } from "./secret-guard.js";
 import { RunTracing } from "../telemetry/tracing.js";
 import { withRunContext } from "../run-context.js";
+import { createLogger } from "../logger.js";
+
+const logger = createLogger("Runs");
 
 /** 单次运行使用的模型连接配置，由适配器工厂转换为具体 provider 配置。 */
 export type ProviderRunConfig = {
@@ -343,7 +346,17 @@ export class AntlerHostRuntime {
       release = preflight.resolved?.release;
       if (bound && !this.modelContexts.has(conversationId)) {
         const checkpoint = bound.checkpoint as { schemaVersion?: unknown; messages?: unknown } | null;
-        if (bound.contextState !== "available" || checkpoint?.schemaVersion !== 1 || !Array.isArray(checkpoint.messages)) throw new PlatformError("conversation_context_not_restored");
+        if (bound.contextState !== "available" || checkpoint?.schemaVersion !== 1 || !Array.isArray(checkpoint.messages)) {
+          const messages = checkpoint?.messages;
+          logger.warn("context restore refused", {
+            conversationId,
+            user: auth.userId,
+            contextState: bound.contextState,
+            checkpointSchema: checkpoint?.schemaVersion ?? "none",
+            checkpointMessages: Array.isArray(messages) ? messages.length : "none",
+          });
+          throw new PlatformError("conversation_context_not_restored");
+        }
       }
       if (bound?.checkpoint && !this.modelContexts.has(conversationId)) this.modelContexts.set(conversationId, bound.checkpoint);
       const policy = normalizeSkillPolicy(
@@ -464,7 +477,7 @@ export class AntlerHostRuntime {
       this.executions.add(execution);
       void execution
         .catch((error: unknown) =>
-          console.error("Run persistence failed", error),
+          logger.error("Run persistence failed", { error }),
         )
         .finally(() => this.executions.delete(execution));
       return { run, skillDiagnostics: snapshot.diagnostics };
@@ -733,13 +746,19 @@ export class AntlerHostRuntime {
     if (active.timeout) clearTimeout(active.timeout);
     await this.flushStreams(active);
     const messages = active.adapter.exportContext?.(active.run.conversationId);
+    if (!messages)
+      logger.warn("no model context exported; conversation will have no checkpoint", {
+        runId: active.run.id,
+        conversationId: active.run.conversationId,
+        status,
+      });
     if (messages) {
       const checkpoint = { schemaVersion: 1, messages };
       this.modelContexts.set(active.run.conversationId, structuredClone(checkpoint));
       const safe = active.secretGuard.sanitize(checkpoint);
       const restorable = isDeepStrictEqual(safe, checkpoint);
-      await this.runStore?.saveCheckpoint?.(active.run.userId, active.run.conversationId, restorable ? checkpoint : { schemaVersion: 1, unavailable: true }, restorable ? "available" : "unavailable").catch(() => {
-        console.warn(`[Runs] Checkpoint persistence failed for ${active.run.id}`);
+      await this.runStore?.saveCheckpoint?.(active.run.userId, active.run.conversationId, restorable ? checkpoint : { schemaVersion: 1, unavailable: true }, restorable ? "available" : "unavailable").catch((error) => {
+        logger.warn("checkpoint persistence failed", { runId: active.run.id, error });
       });
     }
     if (active.timeout) clearTimeout(active.timeout);
@@ -818,7 +837,10 @@ export class AntlerHostRuntime {
       try {
         await this.runStore?.transition(active.run, event);
       } catch {
-        console.warn(`[Runs] State persistence failed for ${active.run.id} (${active.run.status})`);
+        logger.warn("state persistence failed", {
+          runId: active.run.id,
+          status: active.run.status,
+        });
       }
     } else {
       active.eventBuffer.append(event);

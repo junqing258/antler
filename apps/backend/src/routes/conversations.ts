@@ -3,6 +3,9 @@ import type { FastifyInstance } from "fastify";
 import type { ConversationStore } from "../conversations/store.js";
 import type { AntlerHostRuntime } from "../agent/host-runtime.js";
 import { PlatformError } from "../platform/errors.js";
+import { createLogger } from "../logger.js";
+
+const logger = createLogger("Conversations");
 
 function number(
   value: unknown,
@@ -87,18 +90,24 @@ export function registerConversationRoutes(
         request.params.id,
       );
       if (!row) throw new PlatformError("conversation_not_found", 404);
+      const live = runtime.hasConversationContext(row.id);
+      const contextReason =
+        live || row.contextState === "available"
+          ? null
+          : row.contextState === "unavailable"
+            ? "模型上下文含不能安全保存的秘密，无法恢复，请新建会话。"
+            : "服务重启后未找到该会话的持久化上下文；历史消息仍可查看，请新建会话继续。";
+      if (contextReason)
+        logger.warn("context not restorable", {
+          conversationId: row.id,
+          user: request.antlerUser?.id ?? "",
+          storedState: row.contextState,
+          liveContext: live,
+        });
       return {
         ...row,
-        contextState: runtime.hasConversationContext(row.id)
-          ? "available"
-          : row.contextState,
-        contextReason:
-          runtime.hasConversationContext(row.id) ||
-          row.contextState === "available"
-            ? null
-            : row.contextState === "unavailable"
-              ? "模型上下文含不能安全保存的秘密，无法恢复，请新建会话。"
-              : "服务重启后未找到该会话的持久化上下文；历史消息仍可查看，请新建会话继续。",
+        contextState: live ? "available" : row.contextState,
+        contextReason,
       };
     },
   );

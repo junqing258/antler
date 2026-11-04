@@ -3,6 +3,9 @@ import { hasFrozenAgentFields } from "./types.js";
 import { spawn } from "node:child_process";
 import { withRunContext } from "../run-context.js";
 import { Prisma, type PrismaClient } from "../generated/prisma/client.js";
+import { createLogger } from "../logger.js";
+
+const logger = createLogger("Scheduler");
 import type {
   ScheduledTask,
   TaskExecution,
@@ -218,10 +221,7 @@ export class TaskExecutor {
             process.kill(-child.pid, "SIGKILL");
           } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
-              console.error(
-                "[Scheduler] Failed to kill script process group:",
-                error,
-              );
+              logger.error("failed to kill script process group", { error });
             }
           }
         }

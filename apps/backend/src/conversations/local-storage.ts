@@ -6,6 +6,9 @@ import { createInterface } from "node:readline";
 import type { RunEvent } from "../agent/events.js";
 import type { StoredRun } from "../runs/run-store.js";
 import { projectEvent, type MessageContent } from "./message.js";
+import { createLogger } from "../logger.js";
+
+const logger = createLogger("Conversations");
 
 export type LocalMessage = {
   id: string;
@@ -264,9 +267,9 @@ export class LocalConversationStorage {
         try {
           await this.compact(directory);
         } catch {
-          console.warn(
-            `[Conversations] History compaction failed for ${run.conversationId}`,
-          );
+          logger.warn("history compaction failed", {
+            conversationId: run.conversationId,
+          });
         }
       }
     });

@@ -16,7 +16,9 @@ import {
 } from "@opentelemetry/sdk-trace-base";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
+import { createLogger } from "../logger.js";
 
+const logger = createLogger("Telemetry");
 const activeRuns = new Set<RunTracing>();
 
 export function initializeTracing(environment = process.env) {
@@ -177,8 +179,11 @@ export class RunTracing {
     this.span.end();
     activeRuns.delete(this);
     const fields = traceFields(this.span);
-    if (fields) console.info(
-      `run_trace_completed run_id=${this.run.id} trace_id=${fields.trace_id} span_id=${fields.span_id} status=${status}`,
-    );
+    if (fields) logger.info("run_trace_completed", {
+      run_id: this.run.id,
+      trace_id: fields.trace_id,
+      span_id: fields.span_id,
+      status,
+    });
   }
 }

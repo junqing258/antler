@@ -1,6 +1,9 @@
 import { type Prisma, type PrismaClient } from "../generated/prisma/client.js";
 import type { RunEvent, RunStatus } from "../agent/events.js";
 import type { Run } from "../agent/host-runtime.js";
+import { createLogger } from "../logger.js";
+
+const logger = createLogger("Runs");
 
 export type StoredRun = Run;
 
@@ -175,8 +178,9 @@ export class PrismaRunStore implements RunStore {
       where: { status: { in: ["queued", "running", "awaiting_approval"] } },
     });
     if (interrupted)
-      console.warn(
-        `[Runs] Marked ${interrupted} in-flight runs as interrupted at startup — only one backend should run per database.`,
+      logger.warn(
+        "marked in-flight runs as interrupted at startup — only one backend should run per database",
+        { interrupted },
       );
     await this.prisma.run.updateMany({
       where: { status: { in: ["queued", "running", "awaiting_approval"] } },

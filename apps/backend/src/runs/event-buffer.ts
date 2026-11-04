@@ -1,4 +1,7 @@
 import type { RunEvent } from "../agent/events.js";
+import { createLogger } from "../logger.js";
+
+const logger = createLogger("Runs");
 
 /** Loss-tolerant persistence; live events never wait for a batch write. */
 export class RunEventBuffer {
@@ -36,7 +39,10 @@ export class RunEventBuffer {
     const events = this.events.splice(0);
     this.writing = Promise.resolve().then(() => this.write(events)).catch(() => {
       // Do not retry an ever-growing backlog or poison subsequent batches.
-      console.warn(`[Runs] Event batch persistence failed for ${events[0].runId}; ${events.length} events dropped`);
+      logger.warn("event batch persistence failed; events dropped", {
+        runId: events[0].runId,
+        dropped: events.length,
+      });
     });
     await this.writing;
     this.writing = undefined;
