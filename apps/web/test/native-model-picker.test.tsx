@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { ModelPicker } from "../../packages/ui/src/model-picker.native";
+import { ModelPicker } from "../../../packages/ui/src/model-picker.native";
 
 afterEach(cleanup);
 

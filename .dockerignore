@@ -11,8 +11,8 @@ dist
 **/dist
 **/dist-p0
 **/.expo
-mobile/ios
-mobile/android
+apps/mobile/ios
+apps/mobile/android
 target
 **/target
 coverage

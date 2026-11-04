@@ -13,18 +13,18 @@ RUN sed -i "s|http://deb.debian.org|${DEBIAN_MIRROR}|g" /etc/apt/sources.list.d/
 
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
-COPY backend/package.json backend/package.json
-COPY web/package.json web/package.json
-COPY mobile/package.json mobile/package.json
+COPY apps/backend/package.json apps/backend/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY apps/mobile/package.json apps/mobile/package.json
 COPY packages/platform/package.json packages/platform/package.json
 COPY packages/chat-core/package.json packages/chat-core/package.json
 COPY packages/client-runtime/package.json packages/client-runtime/package.json
 COPY packages/ui/package.json packages/ui/package.json
 RUN pnpm install --frozen-lockfile --filter @antler/server... --filter @antler/app... --filter @antler/mobile...
 
-COPY backend backend
-COPY web web
-COPY mobile mobile
+COPY apps/backend apps/backend
+COPY apps/web apps/web
+COPY apps/mobile apps/mobile
 COPY packages/platform packages/platform
 COPY packages/chat-core packages/chat-core
 COPY packages/client-runtime packages/client-runtime
@@ -61,7 +61,7 @@ ENV UV_DEFAULT_INDEX=$PYPI_INDEX_URL
 ENV UV_PYTHON_DOWNLOADS=never
 
 # Keep Python tools separate from Debian's externally managed Python installation.
-COPY backend/requirements-runtime.txt /opt/antler/requirements-runtime.txt
+COPY apps/backend/requirements-runtime.txt /opt/antler/requirements-runtime.txt
 RUN python3 -m venv "$VIRTUAL_ENV" \
   && python -m pip install --no-cache-dir --retries 3 -r /opt/antler/requirements-runtime.txt \
   && python -m pip check \
@@ -70,17 +70,17 @@ RUN python3 -m venv "$VIRTUAL_ENV" \
 
 ENV NODE_ENV=production
 ENV ANTLER_STATIC_DIR=/app/public
-WORKDIR /app/backend
+WORKDIR /app/apps/backend
 
 COPY --from=build /app/node_modules /app/node_modules
-COPY --from=build /app/backend/node_modules ./node_modules
-COPY --from=build /app/backend/package.json ./package.json
-COPY --from=build /app/backend/prisma ./prisma
-COPY --from=build /app/backend/prisma.config.ts ./prisma.config.ts
-COPY --from=build /app/backend/src/config ./src/config
-COPY --from=build /app/backend/dist ./dist
-COPY --from=build /app/backend/skills ./skills
-COPY --from=build /app/web/dist /app/public
+COPY --from=build /app/apps/backend/node_modules ./node_modules
+COPY --from=build /app/apps/backend/package.json ./package.json
+COPY --from=build /app/apps/backend/prisma ./prisma
+COPY --from=build /app/apps/backend/prisma.config.ts ./prisma.config.ts
+COPY --from=build /app/apps/backend/src/config ./src/config
+COPY --from=build /app/apps/backend/dist ./dist
+COPY --from=build /app/apps/backend/skills ./skills
+COPY --from=build /app/apps/web/dist /app/public
 
 EXPOSE 3210
 CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node dist/index.js"]

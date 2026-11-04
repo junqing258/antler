@@ -43,7 +43,7 @@
 - Bash 直接启动本机进程；`cwd`、文件名检查和脱敏不构成执行沙箱。
 - 已声明 `awaiting_approval` 和审批事件，不意味着写入、网络和系统操作已具备完整审批闭环。
 
-参考代码：[Host Runtime](../backend/src/agent/host-runtime.ts)、[Pi Adapter](../backend/src/agent/pi-agent-adapter.ts)、[工作区工具](../backend/src/agent/workspace-tools.ts)、[RunStore](../backend/src/runs/run-store.ts)、[HTTP Hooks](../backend/src/plugins/http.ts)、[Prisma Schema](../backend/prisma/schema.prisma)。
+参考代码：[Host Runtime](../apps/backend/src/agent/host-runtime.ts)、[Pi Adapter](../apps/backend/src/agent/pi-agent-adapter.ts)、[工作区工具](../apps/backend/src/agent/workspace-tools.ts)、[RunStore](../apps/backend/src/runs/run-store.ts)、[HTTP Hooks](../apps/backend/src/plugins/http.ts)、[Prisma Schema](../apps/backend/prisma/schema.prisma)。
 
 ## 3. 目标架构
 

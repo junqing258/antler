@@ -16,12 +16,12 @@ Antler 多用户服务器采用 **OCI 容器镜像 + gVisor runsc** 执行 Pytho
 
 | 位置 | 当前行为 | 目标变化 |
 | --- | --- | --- |
-| `backend/src/skills/skill-tools.ts` | `run_skill` 准备运行副本，然后调用工作区 bash | 调用统一执行服务，传入已授权的技能版本 |
-| `backend/src/skills/skill-runtime.ts` | 在工作区创建可写资源副本并复用依赖 | 保留源指纹校验，拆分只读资源与可写安装目录 |
-| `backend/src/agent/workspace-tools.ts` | 文件工具检查路径；bash 在宿主机执行 | 文件工具保留路径限制；bash 接入沙箱 |
-| `backend/src/agent/secret-guard.ts` | 环境变量过滤及输出脱敏 | 继续作为凭据保护措施，不承担文件系统隔离 |
-| `backend/src/scheduler/executor.ts` | 启用的脚本任务直接创建宿主机子进程 | 接入统一执行服务，无归属任务不得执行 |
-| `backend/src/platform/agent-workspace.ts` | 默认按 agentId 分配目录，股票 Agent 可使用共享种子项目 | 按用户与项目解析工作区，种子仅作为只读模板 |
+| `apps/backend/src/skills/skill-tools.ts` | `run_skill` 准备运行副本，然后调用工作区 bash | 调用统一执行服务，传入已授权的技能版本 |
+| `apps/backend/src/skills/skill-runtime.ts` | 在工作区创建可写资源副本并复用依赖 | 保留源指纹校验，拆分只读资源与可写安装目录 |
+| `apps/backend/src/agent/workspace-tools.ts` | 文件工具检查路径；bash 在宿主机执行 | 文件工具保留路径限制；bash 接入沙箱 |
+| `apps/backend/src/agent/secret-guard.ts` | 环境变量过滤及输出脱敏 | 继续作为凭据保护措施，不承担文件系统隔离 |
+| `apps/backend/src/scheduler/executor.ts` | 启用的脚本任务直接创建宿主机子进程 | 接入统一执行服务，无归属任务不得执行 |
+| `apps/backend/src/platform/agent-workspace.ts` | 默认按 agentId 分配目录，股票 Agent 可使用共享种子项目 | 按用户与项目解析工作区，种子仅作为只读模板 |
 
 Python 的 `open()`、`pathlib` 和子进程不会经过 TypeScript 文件工具的路径检查。设置 `cwd`、环境变量和命令文本过滤，无法阻止脚本访问后端账号有权限访问的其他文件。
 
@@ -58,7 +58,7 @@ API/Agent 进程不直接暴露或挂载 Docker socket。单独的 Runner 服务
 
 执行上下文由认证身份和持久化 Run 记录构造，队列出队后再次检查 Run 是否仍有效。调度脚本使用持久化的所有者与项目授权；不存在可靠所有者的旧任务暂停迁移，禁止使用共享系统工作区执行。
 
-建议新增 `backend/src/execution/`：
+建议新增 `apps/backend/src/execution/`：
 
 | 模块 | 职责 |
 | --- | --- |

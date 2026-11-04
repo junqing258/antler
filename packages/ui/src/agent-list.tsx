@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 export type AgentCardItem = {
@@ -39,38 +40,11 @@ export function AgentList({
             <Text accessibilityRole="header" style={styles.groupTitle}>
               {group.name}
             </Text>
-            <View style={styles.grid}>
-              {group.items.map((agent) => (
-                <View key={agent.id} style={styles.card}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.nameRow}>
-                      <View style={styles.iconBadge}>
-                        {renderIcon?.(agent.icon)}
-                      </View>
-                      <Text style={styles.name}>{agent.name}</Text>
-                    </View>
-                    <Text style={styles.status}>
-                      {agent.status === "published" ? "已发布" : "草稿"}
-                    </Text>
-                  </View>
-                  <Text style={styles.description}>{agent.description}</Text>
-                  <Text style={styles.meta}>
-                    {`${agent.skillCount ?? 0} 个技能${agent.ownerNote ?? ""}`}
-                  </Text>
-                  <View style={styles.actions}>
-                    {renderLink(
-                      { kind: "open", item: agent },
-                      <Text style={styles.openText}>开始对话 →</Text>,
-                    )}
-                    {agent.editable &&
-                      renderLink(
-                        { kind: "edit", item: agent },
-                        <Text style={styles.editText}>编辑</Text>,
-                      )}
-                  </View>
-                </View>
-              ))}
-            </View>
+            <AgentGrid
+              items={group.items}
+              renderLink={renderLink}
+              renderIcon={renderIcon}
+            />
           </View>
         ) : null,
       )}
@@ -83,10 +57,68 @@ export function AgentList({
   );
 }
 
+/** 列数阈值与间距：≥880px 三列，≥560px 两列，否则单列。 */
+const CARD_GAP = 16;
+
+function AgentGrid({
+  items,
+  renderLink,
+  renderIcon,
+}: {
+  items: AgentCardItem[];
+  renderLink: (link: AgentListLink, content: ReactNode) => ReactNode;
+  renderIcon?: (name?: string | null) => ReactNode;
+}) {
+  const [containerWidth, setContainerWidth] = useState(0);
+  const columns = containerWidth >= 880 ? 3 : containerWidth >= 560 ? 2 : 1;
+  const cardWidth =
+    columns > 1 && containerWidth > 0
+      ? (containerWidth - CARD_GAP * (columns - 1)) / columns
+      : undefined;
+  return (
+    <View
+      style={styles.grid}
+      onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+    >
+      {items.map((agent) => (
+        <View
+          key={agent.id}
+          style={[styles.card, cardWidth != null && { width: cardWidth }]}
+        >
+          <View style={styles.cardHeader}>
+            <View style={styles.nameRow}>
+              <View style={styles.iconBadge}>{renderIcon?.(agent.icon)}</View>
+              <Text style={styles.name}>{agent.name}</Text>
+            </View>
+            <Text style={styles.status}>
+              {agent.status === "published" ? "已发布" : "草稿"}
+            </Text>
+          </View>
+          <Text style={styles.description}>{agent.description}</Text>
+          <Text style={styles.meta}>
+            {`${agent.skillCount ?? 0} 个技能${agent.ownerNote ?? ""}`}
+          </Text>
+          <View style={styles.actions}>
+            {renderLink(
+              { kind: "open", item: agent },
+              <Text style={styles.openText}>开始对话 →</Text>,
+            )}
+            {agent.editable &&
+              renderLink(
+                { kind: "edit", item: agent },
+                <Text style={styles.editText}>编辑</Text>,
+              )}
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   group: { marginBottom: 40 },
   groupTitle: { fontSize: 18, fontWeight: "600", marginBottom: 16 },
-  grid: { gap: 16 },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: CARD_GAP },
   card: {
     borderRadius: 12,
     borderWidth: 1,

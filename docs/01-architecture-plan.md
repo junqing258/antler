@@ -64,11 +64,11 @@ LLM Providers (OpenAI / Anthropic / Ollama ...)
 ```
 antler/
 ├── docs/               # 规划与设计文档
-├── web/                # Tauri + React 前端
+├── apps/web/                # Tauri + React 前端
 │   ├── src/            # React 源码
 │   ├── src-tauri/      # Rust 壳
 │   └── package.json
-├── backend/            # Node.js 后端
+├── apps/backend/            # Node.js 后端
 │   ├── src/
 │   └── package.json
 ├── packages/           # 共享 (可选：类型、协议定义)
@@ -182,7 +182,7 @@ stateDiagram-v2
 ### 推荐的目录增量
 
 ```
-backend/src/
+apps/backend/src/
 ├── agent/
 │   ├── pi-agent-adapter.ts # Pi session、prompt 与事件订阅
 │   ├── host-runtime.ts     # run 生命周期与 Pi 事件映射

@@ -14,14 +14,14 @@
 
 ## 2. 当前实现与改造依据
 
-- `web/src/lib/conversation-store.ts`：IndexedDB `antler`（version 3）的 `conversations` 保存完整 `ThreadMessageLike[]`，通过本地事务保护标题与消息更新，删除保护仅是当前页面内存 Set。
-- `web/src/components/assistant-ui/use-antler-runtime.ts`：订阅线程变化，250ms 防抖保存整段消息；运行和标题请求已走服务端。
-- `backend/prisma/schema.prisma`：已有 `Run`、`RunEvent`，尚无会话与展示消息表；Run 已带 `userId`、`conversationId`、Agent 信息。
-- `backend/src/runs/run-store.ts`：已持久化运行事件，可按事件序号读取；已有启动时将未完成运行标记为 interrupted 的逻辑。
-- `backend/src/routes/runs.ts`：已有发送、SSE、取消与标题接口；发送没有客户端幂等键。
-- `backend/src/app.ts`、`backend/src/agent/pi-agent-adapter.ts`：适配器按模型连接配置（含凭据）、工作目录等缓存，模型上下文保存在适配器内部；同一服务端不保证不同设备配置命中同一上下文。
-- `backend/src/utils/sse.ts`：当前先回放历史、后订阅，存在事件遗漏窗口，需随本次同步改造修复。
-- `web/src/lib/server-info.ts`：已有 local / Supabase 认证模式和统一鉴权头。
+- `apps/web/src/lib/conversation-store.ts`：IndexedDB `antler`（version 3）的 `conversations` 保存完整 `ThreadMessageLike[]`，通过本地事务保护标题与消息更新，删除保护仅是当前页面内存 Set。
+- `apps/web/src/components/assistant-ui/use-antler-runtime.ts`：订阅线程变化，250ms 防抖保存整段消息；运行和标题请求已走服务端。
+- `apps/backend/prisma/schema.prisma`：已有 `Run`、`RunEvent`，尚无会话与展示消息表；Run 已带 `userId`、`conversationId`、Agent 信息。
+- `apps/backend/src/runs/run-store.ts`：已持久化运行事件，可按事件序号读取；已有启动时将未完成运行标记为 interrupted 的逻辑。
+- `apps/backend/src/routes/runs.ts`：已有发送、SSE、取消与标题接口；发送没有客户端幂等键。
+- `apps/backend/src/app.ts`、`apps/backend/src/agent/pi-agent-adapter.ts`：适配器按模型连接配置（含凭据）、工作目录等缓存，模型上下文保存在适配器内部；同一服务端不保证不同设备配置命中同一上下文。
+- `apps/backend/src/utils/sse.ts`：当前先回放历史、后订阅，存在事件遗漏窗口，需随本次同步改造修复。
+- `apps/web/src/lib/server-info.ts`：已有 local / Supabase 认证模式和统一鉴权头。
 - `docs/11-conversation-compaction.md`：模型上下文目前在内存中，与界面历史是两份数据。仅搬迁 IndexedDB 不会自动解决服务重启后的续聊记忆。
 
 ## 3. 用户可见行为

@@ -28,11 +28,11 @@ vi.mock("react-native", () => ({
   Text: () => null,
   View: () => null,
 }));
-vi.mock("../../packages/ui/src/message-bubble", () => ({
+vi.mock("../../../packages/ui/src/message-bubble", () => ({
   MessageBubble: () => null,
 }));
 
-import { MessageList } from "../../packages/ui/src/message-list.native";
+import { MessageList } from "../../../packages/ui/src/message-list.native";
 
 describe("native message list", () => {
   it("positions the new user message once, leaving streaming replies and history alone", () => {

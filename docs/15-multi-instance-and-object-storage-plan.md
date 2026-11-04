@@ -20,11 +20,11 @@
 
 | 部分 | 当前依据 | 限制 |
 | --- | --- | --- |
-| 会话存储 | `backend/src/conversations/store.ts`、`local-storage.ts` | 消息、事件与 checkpoint 使用本地文件，串行队列在进程内；共享目录不能替代跨进程并发控制 |
-| Agent 执行 | `backend/src/agent/host-runtime.ts`、`pi-agent-adapter.ts` | 活跃 Run、取消控制器、监听器和 Agent 缓存在进程内 |
-| 运行恢复 | `backend/src/runs/run-store.ts` | 当前恢复建立在单后端假设上，新实例可能处理其他实例仍活跃的运行 |
-| 定时调度 | `backend/src/scheduler/scheduler.ts` | 启动时清理 running 执行并加载任务；周期任务没有集群级触发去重，配置更新只直接作用于本进程 |
-| 事件缓冲 | `backend/src/runs/event-buffer.ts` | 缓冲有上限，持久化失败允许丢弃，不满足可靠回放要求 |
+| 会话存储 | `apps/backend/src/conversations/store.ts`、`local-storage.ts` | 消息、事件与 checkpoint 使用本地文件，串行队列在进程内；共享目录不能替代跨进程并发控制 |
+| Agent 执行 | `apps/backend/src/agent/host-runtime.ts`、`pi-agent-adapter.ts` | 活跃 Run、取消控制器、监听器和 Agent 缓存在进程内 |
+| 运行恢复 | `apps/backend/src/runs/run-store.ts` | 当前恢复建立在单后端假设上，新实例可能处理其他实例仍活跃的运行 |
+| 定时调度 | `apps/backend/src/scheduler/scheduler.ts` | 启动时清理 running 执行并加载任务；周期任务没有集群级触发去重，配置更新只直接作用于本进程 |
+| 事件缓冲 | `apps/backend/src/runs/event-buffer.ts` | 缓冲有上限，持久化失败允许丢弃，不满足可靠回放要求 |
 | 部署 | `scripts/docker-compose.remote.yml` | 固定容器名、宿主机端口，挂载本地 workspace / platform |
 | Redis | `docs/redis.md` | 已有连接配置，应用尚未接入客户端 |
 

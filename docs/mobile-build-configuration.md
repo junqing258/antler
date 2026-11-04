@@ -33,7 +33,7 @@ pnpm --filter @antler/mobile android:device --device <设备名或标识>
 EXPO_PUBLIC_ANTLER_SERVER_URL=https://www.xiaoanai.top pnpm --filter @antler/mobile android:device
 ```
 
-这是开发调试构建。首次运行时 Expo 会生成 Android 工程；已有工程若需要同步环境或原生配置，先在 `mobile/` 中使用相同环境变量执行 `pnpm exec expo prebuild --platform android`，再重新运行脚本。
+这是开发调试构建。首次运行时 Expo 会生成 Android 工程；已有工程若需要同步环境或原生配置，先在 `apps/mobile/` 中使用相同环境变量执行 `pnpm exec expo prebuild --platform android`，再重新运行脚本。
 
 ## 当前验证记录
 

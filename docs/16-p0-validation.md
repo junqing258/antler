@@ -19,7 +19,7 @@ Web 宿主已升级 React/React DOM 及类型包至 19.3，现有 assistant-ui �
 
 ## 验证入口与已测结果
 
-- `pnpm dev:web` 启动后访问 `/rnw-probe.html`；`pnpm build:probe` 单独构建到 `web/dist-p0`，不将诊断页面纳入正常 PWA 构建。Vite 将精确的 `react-native` 导入解析到 RNW，并去重 React。
+- `pnpm dev:web` 启动后访问 `/rnw-probe.html`；`pnpm build:probe` 单独构建到 `apps/web/dist-p0`，不将诊断页面纳入正常 PWA 构建。Vite 将精确的 `react-native` 导入解析到 RNW，并去重 React。
 - `pnpm dev:mobile` 启动 Expo 实验入口；`pnpm build:mobile` 导出 iOS、Android 和 Web bundle。入口包含实验性聊天和原始 SSE 探针。探针中的令牌仅保存在页面内存中；聊天配置的保存方式见下文。
 - Expo 安装检查通过，当前锁定的实际组合为 Expo 58、React 19.3.0、React Native 0.88.1、RNW 0.21.4、移动端 TypeScript 6.0.x。`expo export` 已分别生成 iOS、Android 和 Web bundle；这只验证 Metro 打包，不代表原生应用构建或设备运行通过。
 - 在本机浏览器通过带鉴权校验的模拟 SSE 验证指定游标、跨 UTF-8 字节边界的中文、增量显示和中止；检查了桌面与 390px 窄屏布局。此结果不代表真实服务端、原生网络或 HTTPS Release 验收。
@@ -28,7 +28,7 @@ Web 宿主已升级 React/React DOM 及类型包至 19.3，现有 assistant-ui �
 
 本轮完整后端测试在并行高负载时有两项超时（365/367）；`test/routes/config.test.ts` 和 `test/scheduler/shutdown.test.ts` 单独复跑 25/25 通过。
 
-尝试 iOS 模拟器构建时，Expo prebuild 完成；CocoaPods 下载和安装依赖期间发现磁盘仅余约 1.5 GiB，因此中止安装，未进行 Xcode 构建。生成的 `mobile/ios` 已移入废纸篓，仍占用磁盘空间，清空废纸篓后才会释放；已下载的 React Native 构建缓存也保留。Android 未连接设备，现有模拟器尚未运行验证。
+尝试 iOS 模拟器构建时，Expo prebuild 完成；CocoaPods 下载和安装依赖期间发现磁盘仅余约 1.5 GiB，因此中止安装，未进行 Xcode 构建。生成的 `apps/mobile/ios` 已移入废纸篓，仍占用磁盘空间，清空废纸篓后才会释放；已下载的 React Native 构建缓存也保留。Android 未连接设备，现有模拟器尚未运行验证。
 
 ## P1a 领域提取进度
 
@@ -90,7 +90,7 @@ Web 宿主已通过开发开关接入共享聊天视图：`?chatView=shared` 时
 
 ## M1：assistant-ui 移除（P3b 完成）
 
-Web 主聊天已默认渲染共享 ChatScreen（`SharedThread` 经 `useChatSession` 消费唯一 ChatSession），旧 assistant-ui 实现彻底移除：删除 `web/src/components/assistant-ui/`（thread/slash-command-input/use-antler-runtime）、localStorage 开关与 `AssistantRuntimeProvider`，旧外层通知条与"加载更早消息"按钮由 ChatScreen 内建实现替代（凭据警告在欢迎页同样显示）；会话头部（标题与移动端抽屉触发）保留在 `chat.tsx`。`useAntlerRuntime` 重命名为 `useChatSession` 并移至 `web/src/views/chat/`，仅返回 session/state 与派生值。依赖移除 `@assistant-ui/react`、`@assistant-ui/react-markdown` 及随之无用的 `remark-gfm`（lockfile 中 assistant-ui 与 zustand 均已消失）；Vite 删除绑定旧 runtime 的整页刷新插件；删除 `styles/chat.css` 的全部 aui-* 旧样式。测试迁移：模型选择/凭据配置断言改经真实 SharedThread 与共享 ModelPicker；session hook 行为测试（幂等重试、会话重置、旧快照拒绝、凭据门控、StrictMode 释放、live 内容不被旧快照擦除）迁至 `use-chat-session.test.ts`；旧组件测试删除；conversation fixture 换用自有消息类型。验证：`pnpm check` 0 错误；全量测试 platform 4 / chat-core 19 / app 138 / backend 367 通过；`pnpm build`（Web/后端/Expo 导出）通过；Docker 镜像以冻结 lockfile 构建，在隔离 PostgreSQL 容器中验证 Web 页面 200、未授权 API 401、鉴权 API 200，产物 bundle 含共享 UI 且不含 assistant-ui。视觉上共享视图气泡为全宽布局，与旧版居中窄栏不同，按共享 tokens 后续统一。旧视图已不可回退，回滚需完整回退本次发布。
+Web 主聊天已默认渲染共享 ChatScreen（`SharedThread` 经 `useChatSession` 消费唯一 ChatSession），旧 assistant-ui 实现彻底移除：删除 `apps/web/src/components/assistant-ui/`（thread/slash-command-input/use-antler-runtime）、localStorage 开关与 `AssistantRuntimeProvider`，旧外层通知条与"加载更早消息"按钮由 ChatScreen 内建实现替代（凭据警告在欢迎页同样显示）；会话头部（标题与移动端抽屉触发）保留在 `chat.tsx`。`useAntlerRuntime` 重命名为 `useChatSession` 并移至 `apps/web/src/views/chat/`，仅返回 session/state 与派生值。依赖移除 `@assistant-ui/react`、`@assistant-ui/react-markdown` 及随之无用的 `remark-gfm`（lockfile 中 assistant-ui 与 zustand 均已消失）；Vite 删除绑定旧 runtime 的整页刷新插件；删除 `styles/chat.css` 的全部 aui-* 旧样式。测试迁移：模型选择/凭据配置断言改经真实 SharedThread 与共享 ModelPicker；session hook 行为测试（幂等重试、会话重置、旧快照拒绝、凭据门控、StrictMode 释放、live 内容不被旧快照擦除）迁至 `use-chat-session.test.ts`；旧组件测试删除；conversation fixture 换用自有消息类型。验证：`pnpm check` 0 错误；全量测试 platform 4 / chat-core 19 / app 138 / backend 367 通过；`pnpm build`（Web/后端/Expo 导出）通过；Docker 镜像以冻结 lockfile 构建，在隔离 PostgreSQL 容器中验证 Web 页面 200、未授权 API 401、鉴权 API 200，产物 bundle 含共享 UI 且不含 assistant-ui。视觉上共享视图气泡为全宽布局，与旧版居中窄栏不同，按共享 tokens 后续统一。旧视图已不可回退，回滚需完整回退本次发布。
 
 ## P4 第一域：会话列表
 
@@ -98,7 +98,7 @@ Web 主聊天已默认渲染共享 ChatScreen（`SharedThread` 经 `useChatSessi
 
 P2 剩余能力两项落地：实验入口接入 `expo-clipboard` 实现原生复制（替代此前仅 Web 可用的 `navigator.clipboard`，类型检查与 Expo 导出通过，真机复制行为待设备验证）；共享 Markdown 引入 `remend` 流式补全——MessageMarkdown 新增 `streaming` 输入（仅由 running/live 消息传入），流式中未闭合的加粗/斜体/行内代码/删除线等语法在展示层自动补全，领域消息文本不被改写（live 标记移除后按原文重新解析，有组件测试覆盖）。链接补全产物 `streamdown:` 协议在共享渲染器中按纯文本处理，不会成为可点击外链。`pnpm check`、全量测试、`pnpm build` 通过。语法高亮与脚注/中文强调增强仍未实现。
 
-移动端登录与令牌获取（P2 认证缺口）已实现：新增 `native-auth` 模块——从后端 `/api/auth-config` 读取认证模式（后端不可达或非 supabase 时降级 local，与 Web 宿主语义一致，该降级由测试先行暴露后修复）、创建使用 AsyncStorage 持久会话与自动刷新的 Supabase 客户端、邮箱密码登录/退出、读取持久会话访问令牌。实验入口在 Supabase 模式下提供登录表单（密码错误翻译为可读文案），连接时从登录会话取最新令牌而不再手输；local 模式保持手输令牌。类型检查、mobile/Web 导出与全量测试（app 143 项含新增 native-auth 测试）通过。登录界面、令牌自动刷新、会话持久化与跨重启恢复的真机行为仍待设备验证；密码找回等完整认证流程不属于本阶段范围。
+移动端登录与令牌获取（P2 认证缺口）已实现：新增 `native-auth` 模块——从后端 `/api/auth-config` 读取认证模式（后端不可达或非 supabase 时降级 local，与 Web 宿主语义一致，该降级由测试先行暴露后修复）、创建使用 AsyncStorage 持久会话与自动刷新的 Supabase 客户端、邮箱密码登录/退出、读取持久会话访问令牌。实验入口在 Supabase 模式下提供登录表单（密码错误翻译为可读文案），连接时从登录会话取最新令牌而不再手输；local 模式保持手输令牌。类型检查、apps/mobile/Web 导出与全量测试（app 143 项含新增 native-auth 测试）通过。登录界面、令牌自动刷新、会话持久化与跨重启恢复的真机行为仍待设备验证；密码找回等完整认证流程不属于本阶段范围。
 
 ## P4 第二域：登录/注册/找回密码
 
@@ -184,4 +184,4 @@ Android Release（含 `antler://` scheme 的 manifest，经 prebuild 重建）�
 
 ## P5 导航栈形态决策（依据实测）
 
-按计划"默认 Expo Router"的选型进行了实施尝试：安装 expo-router 并建立文件路由（web/_layout.tsx、index、chat、autostart 路由，深链 antler://autostart 经路由参数转发）。实测发现 SDK 58 的版本矩阵问题：registry 上的 expo-router 6.0.24 与 react-native-screens 4.30.1 存在 iOS 编译不兼容（LinkPreviewNativeNavigation.mm 引用不存在的 RNSBottomTabsScreenComponentView）；SDK 对齐版本 58.0.28 编译通过但运行时出现 React 渲染错误（hooks dispatcher 未初始化，疑似 screens/router 组合的副本或时序问题）。依据计划"最终以选定版本的包元数据与设备实测为准"，**决策：移动端导航栈当前采用已验证的状态驱动导航（主页 ⇄ 聊天/配置，共享 AgentList 组装），Expo Router 待 SDK 58 版本矩阵修复（screens/router 补丁）后引入**；文件路由结构已在本次尝试中验证可行（深链→路由参数→聊天自动连接的接线方式已跑通），重新引入时按既有组件直接映射。回退后 `pnpm check`、全量测试通过。
+按计划"默认 Expo Router"的选型进行了实施尝试：安装 expo-router 并建立文件路由（apps/web/_layout.tsx、index、chat、autostart 路由，深链 antler://autostart 经路由参数转发）。实测发现 SDK 58 的版本矩阵问题：registry 上的 expo-router 6.0.24 与 react-native-screens 4.30.1 存在 iOS 编译不兼容（LinkPreviewNativeNavigation.mm 引用不存在的 RNSBottomTabsScreenComponentView）；SDK 对齐版本 58.0.28 编译通过但运行时出现 React 渲染错误（hooks dispatcher 未初始化，疑似 screens/router 组合的副本或时序问题）。依据计划"最终以选定版本的包元数据与设备实测为准"，**决策：移动端导航栈当前采用已验证的状态驱动导航（主页 ⇄ 聊天/配置，共享 AgentList 组装），Expo Router 待 SDK 58 版本矩阵修复（screens/router 补丁）后引入**；文件路由结构已在本次尝试中验证可行（深链→路由参数→聊天自动连接的接线方式已跑通），重新引入时按既有组件直接映射。回退后 `pnpm check`、全量测试通过。

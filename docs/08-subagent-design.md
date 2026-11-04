@@ -266,7 +266,7 @@ MVP 可先只显示父流中的生命周期事件；完整 child transcript 展�
 ## 9. 文件落点
 
 ```text
-backend/src/
+apps/backend/src/
 ├── agent/
 │   ├── agent-run-executor.ts
 │   ├── subagent-coordinator.ts
@@ -280,7 +280,7 @@ backend/src/
 └── routes/
     └── runs.ts
 
-web/src/
+apps/web/src/
 ├── components/assistant-ui/
 │   ├── use-antler-runtime.ts
 │   └── subagent-card.tsx

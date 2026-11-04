@@ -8,14 +8,14 @@
 | 检查 | 结果 |
 | --- | --- |
 | `pnpm exec expo install --check`（mobile 包内） | Dependencies are up to date |
-| `pnpm dlx expo-doctor` | 19/20 通过；唯一失败项为 "app.json 与 app.config.js 并存" —— 实际 `mobile/app.config.js` 已通过 `...base.expo` 继承 app.json 全部值，属检查误报，记录不处理 |
+| `pnpm dlx expo-doctor` | 19/20 通过；唯一失败项为 "app.json 与 app.config.js 并存" —— 实际 `apps/mobile/app.config.js` 已通过 `...base.expo` 继承 app.json 全部值，属检查误报，记录不处理 |
 | `pnpm check`（全仓，含 check:mobile） | 通过 |
 | `pnpm test` | 全部通过：app 38 文件/208 用例、server 42 文件/375 用例、platform/chat-core/client-runtime 3 文件/4 用例与 4 文件/21 用例 |
 | `pnpm build:mobile` | 通过（web/android/ios 三平台 bundle 导出） |
 
 SDK 基线：`expo ~58.0.21`、React Native 0.88.1、react 19.3.0、react-native-web 0.21.4；Expo 模块：SecureStore、Clipboard、Constants、Crypto、AsyncStorage。依赖一致性无需升级。
 
-## mobile/src 现状盘点（20 文件，3322 行）
+## apps/mobile/src 现状盘点（20 文件，3322 行）
 
 ### 文件职责与导航
 
@@ -63,24 +63,24 @@ SDK 基线：`expo ~58.0.21`、React Native 0.88.1、react 19.3.0、react-native
 
 | 职责 | Web | 移动端 | 评估 |
 | --- | --- | --- | --- |
-| 会话列表/重命名/删除/变更订阅 | web/src/lib/conversation-store.ts | mobile conversation-service.ts | 接口相近但平台请求层不同；client-runtime 已有 subscribeChangeStream 共享。仅在接口稳定时抽取 |
-| RAG 配置读写 | web/src/lib（platform 目录） | mobile rag-config-service.ts | 同上 |
+| 会话列表/重命名/删除/变更订阅 | apps/web/src/lib/conversation-store.ts | mobile conversation-service.ts | 接口相近但平台请求层不同；client-runtime 已有 subscribeChangeStream 共享。仅在接口稳定时抽取 |
+| RAG 配置读写 | apps/web/src/lib（platform 目录） | mobile rag-config-service.ts | 同上 |
 | 服务器地址校验 | 后端/app 各有 validate 类逻辑 | native-config.ts validateServerUrl | 保留平台层 |
-| 认证 | web/src/lib/auth.ts | native-auth.ts | Supabase 存储适配不同（AsyncStorage vs 浏览器）；保留平台层 |
+| 认证 | apps/web/src/lib/auth.ts | native-auth.ts | Supabase 存储适配不同（AsyncStorage vs 浏览器）；保留平台层 |
 | UI | @antler/ui 已共享 AgentList、ChatScreen、AuthForm、ProviderConfigForm、ConversationList | 同左 | 已复用，无需新抽取 |
 
 结论：现有共享包已覆盖主要复用面；阶段 4 仅在有确证重复时小步抽取，不预设。
 
 ## 测试收集现状
 
-- mobile 相关测试 10 个位于 `web/test/native-*.test.ts(x)`、`web/test/mobile-*.test.ts`，以相对路径 `../../mobile/src/...` 直接引用 mobile 源码（含 .native.ts 平台文件；app 侧 vitest 解析按普通 ts）。
+- mobile 相关测试 10 个位于 `apps/web/test/native-*.test.ts(x)`、`apps/web/test/mobile-*.test.ts`，以相对路径 `../../mobile/src/...` 直接引用 mobile 源码（含 .native.ts 平台文件；app 侧 vitest 解析按普通 ts）。
 - `mobile` 包自身无 test 脚本；根 `pnpm test` 经 `@antler/app` 的 vitest 收集。目录移动需同步更新这些 import。
 - 根 `pnpm check` 已含 `check:mobile`；`build:mobile` 为 `expo export --platform all`。
 
 ### 别名约束（阶段 2 实测）
 
-- `mobile/tsconfig.json` 已配置 `paths: {"@/*": ["./src/*"]}`（TS 6 弃用 baseUrl，paths 相对 tsconfig 解析）。
-- 但 mobile 源码内部**保持相对导入**：app 包 vite/vitest 把 `@` 解析到 `web/src`，且 `web/test/native-*` 经组件树传递性导入全部 mobile 源码，mobile 内使用 `@/` 会在 app 测试中错解析到 web/src。别名仅供未来 app 测试不再传递导入 mobile 源码后启用。
+- `apps/mobile/tsconfig.json` 已配置 `paths: {"@/*": ["./src/*"]}`（TS 6 弃用 baseUrl，paths 相对 tsconfig 解析）。
+- 但 mobile 源码内部**保持相对导入**：app 包 vite/vitest 把 `@` 解析到 `apps/web/src`，且 `apps/web/test/native-*` 经组件树传递性导入全部 mobile 源码，mobile 内使用 `@/` 会在 app 测试中错解析到 apps/web/src。别名仅供未来 app 测试不再传递导入 mobile 源码后启用。
 
 ## 阶段 4 试点记录：@expo/ui Switch（清除密钥）
 

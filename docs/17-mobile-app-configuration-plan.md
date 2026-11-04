@@ -15,9 +15,9 @@
 
 ## 当前实现
 
-- `mobile/src/app.tsx` 使用状态切换首页与聊天验证界面，并暴露流式诊断入口。
-- `mobile/src/native-config.ts` 默认服务端地址为空，供应商模型列表保存为逗号分隔的字符串。
-- `mobile/src/native-storage.native.ts` 使用 AsyncStorage 保存普通配置，使用 SecureStore 保存访问令牌和供应商 API Key，且凭据与对应地址等信息绑定。
+- `apps/mobile/src/app.tsx` 使用状态切换首页与聊天验证界面，并暴露流式诊断入口。
+- `apps/mobile/src/native-config.ts` 默认服务端地址为空，供应商模型列表保存为逗号分隔的字符串。
+- `apps/mobile/src/native-storage.native.ts` 使用 AsyncStorage 保存普通配置，使用 SecureStore 保存访问令牌和供应商 API Key，且凭据与对应地址等信息绑定。
 - Web 的供应商配置包含名称、协议、Base URL、API Key、模型列表和当前模型；`packages/ui/src/provider-config-form.tsx` 已提供跨端共享表单。
 - Mobile 已复用共享聊天组件和客户端运行时，可在现有基础上调整，不需要重建聊天协议。
 

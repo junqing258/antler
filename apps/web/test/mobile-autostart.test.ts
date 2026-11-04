@@ -9,7 +9,7 @@ it("opens the configured automation link on an iOS device or simulator", () => {
   const output = join(dir, "args.json");
   const script = resolve(
     import.meta.dirname,
-    "../../scripts/mobile-autostart.mjs",
+    "../../../scripts/mobile-autostart.mjs",
   );
   try {
     writeFileSync(

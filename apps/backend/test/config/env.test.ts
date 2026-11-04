@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.spyOn(process, "loadEnvFile").mockImplementation(() => {});
 
-const projectRoot = fileURLToPath(new URL("../../..", import.meta.url));
+const projectRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 
 describe("backend workspace configuration", () => {
   it.each([

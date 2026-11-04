@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Antler is a pnpm workspace with three packages. `web/` contains the React/Vite Web/PWA UI: page components in `src/views`, reusable components in `src/components`, browser services in `src/lib`, styles in `src/styles`, and static assets in `public`. `backend/` is the Fastify/TypeScript service, organized by routes, agent runtime, skills, knowledge, and persistence. `mobile/` is the Expo (SDK 58) React Native app: Expo Router routes in `src/app`, pages in `src/views`, shared widgets in `src/components`, services and platform adapters in `src/lib`, and diagnostics under `src/experiments`; its root container (boot, auth gate, automation deep links) lives in `src/views/root`. Prisma files live in `backend/prisma/`; architecture material and deployment utilities are in `docs/` and `scripts/`.
+Antler is a pnpm workspace with three applications in `apps/` and shared packages in `packages/`. `apps/web/` contains the React/Vite Web/PWA UI: page components in `src/views`, reusable components in `src/components`, browser services in `src/lib`, styles in `src/styles`, and static assets in `public`. `apps/backend/` is the Fastify/TypeScript service, organized by routes, agent runtime, skills, knowledge, and persistence. `apps/mobile/` is the Expo (SDK 58) React Native app: Expo Router routes in `src/app`, pages in `src/views`, shared widgets in `src/components`, services and platform adapters in `src/lib`, and diagnostics under `src/experiments`; its root container (boot, auth gate, automation deep links) lives in `src/views/root`. Prisma files live in `apps/backend/prisma/`; architecture material and deployment utilities are in `docs/` and `scripts/`.
 
 ## Build, Test, and Development Commands
 
@@ -23,7 +23,7 @@ Use strict TypeScript, ES modules, two-space indentation, semicolons, and traili
 
 ## Testing Guidelines
 
-Vitest is used throughout; frontend tests use jsdom and Testing Library, while backend tests use Node. Tests live in the package's `test/` directory (`web/test/`, `backend/test/`), mirroring the `src/` directory layout as `*.test.ts` or `*.test.tsx`. Add regression coverage for behavior changes, especially routes, run transitions, persistence, and UI interactions. No coverage threshold is enforced; avoid reducing meaningful coverage.
+Vitest is used throughout; frontend tests use jsdom and Testing Library, while backend tests use Node. Tests live in the package's `test/` directory (`apps/web/test/`, `apps/backend/test/`), mirroring the `src/` directory layout as `*.test.ts` or `*.test.tsx`. Add regression coverage for behavior changes, especially routes, run transitions, persistence, and UI interactions. No coverage threshold is enforced; avoid reducing meaningful coverage.
 
 ## Commit & Pull Request Guidelines
 

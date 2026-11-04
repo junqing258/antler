@@ -180,7 +180,7 @@ run 状态机一次到位：`queued -> running -> awaiting_approval -> running -
 ## 5. 文件落点与依赖顺序
 
 ```
-backend/src/
+apps/backend/src/
 ├── agent/
 │   ├── pi-agent-adapter.ts
 │   ├── host-runtime.ts

@@ -20,12 +20,12 @@
 
 | 当前实现 | 位置 | 插件化所需变化 |
 | --- | --- | --- |
-| 搜索、SMTP、调度按进程配置注入工具 | `backend/src/agent/pi-agent-adapter.ts` 的 `tools()` | 从已解析的 Agent 能力快照构造工具 |
-| Agent 绑定 Skill，尚无插件绑定 | `backend/prisma/schema.prisma` 的 `Agent` / `AgentSkill` | 新增插件、连接、绑定实体 |
-| 平台解析提示词与技能并计算 Agent 指纹 | `backend/src/platform/service.ts` 的 `resolveAgent()` | 把插件版本、工具描述和绑定策略纳入一致性检查 |
-| 会话缓存校验 `contextFingerprint` | `backend/src/agent/pi-agent-adapter.ts` | 将工具配置变化纳入会话兼容性判断 |
-| 运行保存技能快照并处理取消和事件 | `backend/src/agent/host-runtime.ts` | 增加能力快照、连接租约和调用生命周期 |
-| 工具输出已有凭据脱敏 | `backend/src/agent/secret-guard.ts` | 注册连接密钥，统一覆盖插件结果、流式输出和错误 |
+| 搜索、SMTP、调度按进程配置注入工具 | `apps/backend/src/agent/pi-agent-adapter.ts` 的 `tools()` | 从已解析的 Agent 能力快照构造工具 |
+| Agent 绑定 Skill，尚无插件绑定 | `apps/backend/prisma/schema.prisma` 的 `Agent` / `AgentSkill` | 新增插件、连接、绑定实体 |
+| 平台解析提示词与技能并计算 Agent 指纹 | `apps/backend/src/platform/service.ts` 的 `resolveAgent()` | 把插件版本、工具描述和绑定策略纳入一致性检查 |
+| 会话缓存校验 `contextFingerprint` | `apps/backend/src/agent/pi-agent-adapter.ts` | 将工具配置变化纳入会话兼容性判断 |
+| 运行保存技能快照并处理取消和事件 | `apps/backend/src/agent/host-runtime.ts` | 增加能力快照、连接租约和调用生命周期 |
+| 工具输出已有凭据脱敏 | `apps/backend/src/agent/secret-guard.ts` | 注册连接密钥，统一覆盖插件结果、流式输出和错误 |
 
 现有 Skill 的使用与执行约定见 [skill-execution.md](./skill-execution.md)。脚本沙箱仍为[待实施方案](./13-skill-sandbox-design.md)，插件化不能宣称已经提供执行隔离。
 
@@ -81,7 +81,7 @@ flowchart TD
   E --> I[Run 事件与调用记录]
 ```
 
-建议新增 `backend/src/plugins-agent/`，与现有 Fastify `plugins/` 区分：
+建议新增 `apps/backend/src/plugins-agent/`，与现有 Fastify `plugins/` 区分：
 
 | 模块 | 职责 |
 | --- | --- |

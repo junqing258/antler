@@ -89,7 +89,7 @@
 ### 文件结构
 
 ```
-backend/
+apps/backend/
 ├── prisma/schema.prisma                  # 新增 ScheduledTask / TaskExecution 模型
 ├── src/
 │   ├── scheduler/
@@ -108,7 +108,7 @@ backend/
 
 ## 3. 数据库设计
 
-在 `backend/prisma/schema.prisma` 末尾追加：
+在 `apps/backend/prisma/schema.prisma` 末尾追加：
 
 ```prisma
 enum ScheduledTaskType {
@@ -201,7 +201,7 @@ interface ScriptTaskPayload {
 
 ## 4. 核心模块实现
 
-### 4.1 类型定义 — `backend/src/scheduler/types.ts`
+### 4.1 类型定义 — `apps/backend/src/scheduler/types.ts`
 
 ```typescript
 import type { ScheduledTask, TaskExecution } from "../generated/prisma/client.js";
@@ -277,7 +277,7 @@ export interface ExecutionResult {
 }
 ```
 
-### 4.2 任务执行器 — `backend/src/scheduler/executor.ts`
+### 4.2 任务执行器 — `apps/backend/src/scheduler/executor.ts`
 
 ```typescript
 import type { PrismaClient } from "../generated/prisma/client.js";
@@ -486,7 +486,7 @@ export class TaskExecutor {
 }
 ```
 
-### 4.3 调度核心 — `backend/src/scheduler/scheduler.ts`
+### 4.3 调度核心 — `apps/backend/src/scheduler/scheduler.ts`
 
 先安装依赖：
 
@@ -729,7 +729,7 @@ export class CronScheduler {
 }
 ```
 
-### 4.4 服务层 — `backend/src/scheduler/service.ts`
+### 4.4 服务层 — `apps/backend/src/scheduler/service.ts`
 
 ```typescript
 import type { PrismaClient } from "../generated/prisma/client.js";
@@ -927,7 +927,7 @@ export class SchedulerService {
 | GET | `/api/scheduled-tasks/:id/executions` | 执行历史 |
 | GET | `/api/task-executions/:executionId` | 执行详情 |
 
-### 5.2 路由实现 — `backend/src/routes/scheduler.ts`
+### 5.2 路由实现 — `apps/backend/src/routes/scheduler.ts`
 
 ```typescript
 import type { FastifyInstance } from "fastify";
@@ -1093,7 +1093,7 @@ GET /api/scheduled-tasks?enabled=true&type=http&page=1&limit=20
 
 ## 6. 主应用集成
 
-修改 `backend/src/app.ts`：
+修改 `apps/backend/src/app.ts`：
 
 ```typescript
 // 新增导入
@@ -1134,7 +1134,7 @@ export function createApp(config: AppConfig) {
 }
 ```
 
-同时在 `backend/src/config/env.ts` 的 `AppConfig` 中新增一项：
+同时在 `apps/backend/src/config/env.ts` 的 `AppConfig` 中新增一项：
 
 ```typescript
 enableScriptTasks?: boolean;
@@ -1145,7 +1145,7 @@ enableScriptTasks?: boolean;
 
 ## 7. 测试方案
 
-### 7.1 执行器测试 — `backend/test/scheduler/executor.test.ts`
+### 7.1 执行器测试 — `apps/backend/test/scheduler/executor.test.ts`
 
 ```typescript
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
@@ -1429,7 +1429,7 @@ curl -X DELETE http://localhost:3000/api/scheduled-tasks/{taskId}
 | Script 任务命令注入 | **默认禁用**：`ANTLER_SCHEDULER_ENABLE_SCRIPT=true` 显式开启；`spawn` 使用数组参数、不经 shell；定期审计 |
 | 子进程泄露密钥 | 子进程不继承 `process.env`，仅透传 `PATH` 与 payload 显式声明的 `env` |
 | HTTP 任务泄露密钥 | 密钥从环境变量读取，不写入 payload |
-| API 未授权访问 | **前提：必须配置 `ANTLER_ACCESS_TOKEN`**。现有鉴权在未配置 token 时放行所有请求（[http.ts:22](../backend/src/plugins/http.ts)），服务默认仅绑 127.0.0.1 只是缓解。若将服务暴露到局域网/公网，未配置 token 且开启 script 任务 = 任意命令执行 |
+| API 未授权访问 | **前提：必须配置 `ANTLER_ACCESS_TOKEN`**。现有鉴权在未配置 token 时放行所有请求（[http.ts:22](../apps/backend/src/plugins/http.ts)），服务默认仅绑 127.0.0.1 只是缓解。若将服务暴露到局域网/公网，未配置 token 且开启 script 任务 = 任意命令执行 |
 | 资源耗尽 | 超时控制 + 并发防护 + 避免高频任务 |
 
 ### 运维要点

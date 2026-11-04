@@ -4,8 +4,8 @@ dist/
 dist-p0/
 .expo/
 .codegraph
-mobile/ios/
-mobile/android/
+apps/mobile/ios/
+apps/mobile/android/
 *.log
 .DS_Store
 .pnpm-store
@@ -16,7 +16,7 @@ mobile/android/
 *.db-journal
 *.db-shm
 *.db-wal
-backend/src/generated/prisma/
+apps/backend/src/generated/prisma/
 
 .antler-platform/
 

@@ -6,6 +6,20 @@ Antler 是一个 Web Agent 项目。前端使用 React + Vite，后端使用 Fas
 
 知识库（Antler RAG）演示：[http://47.100.210.56:6050/](http://47.100.210.56:6050/)
 
+## 目录结构
+
+```text
+apps/
+  web/       # React / Vite Web 与 PWA
+  backend/   # Fastify 服务与 Prisma
+  mobile/    # Expo / React Native 应用
+packages/    # platform、chat-core、client-runtime、ui 共享包
+scripts/     # 开发与部署脚本
+docs/        # 架构与使用文档
+```
+
+在仓库根目录运行 pnpm 命令；`.env`、`workspace/` 和 `.antler-platform/` 也位于根目录。
+
 ## 本地开发
 
 需要 Node.js、pnpm 10。安装依赖并同时启动前后端：
@@ -43,7 +57,7 @@ ANTLER_SUPABASE_PUBLISHABLE_KEY=<publishable key>
 Supabase URL 或 publishable key 缺失或无效时服务端拒绝启动；`ANTLER_AUTH_MODE` 若已设置，只能为 `local` 或 `supabase`。前端无需单独配置：启动时从 `GET /api/auth-config` 获取认证配置（含 Supabase URL 与 publishable key），随后在浏览器直连 Supabase 完成邮箱密码登录。`ANTLER_AUTH_MODE=supabase` 时本地开发与 Web 部署行为一致。
 数据隔离：`runs`、会话、`scheduled_tasks` 和 `task_executions` 记录归属用户；local 模式使用本地用户范围。连接同一后端并登录同一账号的设备可查看服务端会话，浏览器中的模型 API Key 不随账号同步。已知约束：登录用户仍可指定服务器上任意绝对路径作为 Agent 工作目录，如需收紧应在网关或后续版本限制在 `ANTLER_WORKSPACE_ROOT` 之下。
 
-后端数据存放在 Postgres（推荐 Supabase）中，启动前必须设置 `DATABASE_URL` 指向 Postgres 连接串（应用运行可使用事务池化连接；`prisma migrate deploy` 需要直连或会话池化连接）。`ANTLER_WORKSPACE_ROOT` 仍决定 Agent 工作空间目录。修改 `backend/prisma/schema.prisma` 后，运行：
+后端数据存放在 Postgres（推荐 Supabase）中，启动前必须设置 `DATABASE_URL` 指向 Postgres 连接串（应用运行可使用事务池化连接；`prisma migrate deploy` 需要直连或会话池化连接）。`ANTLER_WORKSPACE_ROOT` 仍决定 Agent 工作空间目录。修改 `apps/backend/prisma/schema.prisma` 后，运行：
 
 ```bash
 pnpm --filter @antler/server db:migrate -- --name <migration-name>
@@ -75,7 +89,7 @@ pnpm --filter @antler/app exec vite preview --host 127.0.0.1
 
 ## backend 共享技能
 
-`backend/skills/` 中的技能随服务端分发，供所有 Web Agent 工作空间使用，目前内置 `antler-rag`。服务端从自身模块的位置定位该目录，本地开发、编译后启动和 Docker 运行使用同一套发现逻辑，无需把技能安装到开发机或各个工作空间的 `.agents` 目录。
+`apps/backend/skills/` 中的技能随服务端分发，供所有 Web Agent 工作空间使用，目前内置 `antler-rag`。服务端从自身模块的位置定位该目录，本地开发、编译后启动和 Docker 运行使用同一套发现逻辑，无需把技能安装到开发机或各个工作空间的 `.agents` 目录。
 
 技能优先级为工作空间的 `.agents/skills/`、用户级 `~/.agents/skills/`（可通过 `ANTLER_AGENTS_DIR` 调整）、backend 内置技能。同名技能只保留优先级最高的版本。`GET /api/skills` 返回内置技能的 `scope: "bundled"`；Web 使用的 `POST /api/runs` 默认采用 `skillPolicy: { "mode": "auto" }`，Agent 根据名称和描述选择技能，再调用 `load_skill` 加载完整说明。请求仍可显式指定 `disabled` 或 `selected`。
 
@@ -98,11 +112,11 @@ ANTLER_RAG_KEY=your-rag-api-key
 
 ```bash
 pnpm build        # 构建 Web、后端和移动端验证 bundle
-pnpm build:web    # 仅构建前端，输出 web/dist
-pnpm build:server # 仅构建后端，输出 backend/dist
+pnpm build:web    # 仅构建前端，输出 apps/web/dist
+pnpm build:server # 仅构建后端，输出 apps/backend/dist
 ```
 
-构建后可设置 `ANTLER_STATIC_DIR` 为 `web/dist` 的绝对路径，再运行 `pnpm --filter @antler/server start`，由后端同源提供前端页面、API 和 SSE。后端启动前仍需配置 `DATABASE_URL` 并应用数据库迁移。
+构建后可设置 `ANTLER_STATIC_DIR` 为 `apps/web/dist` 的绝对路径，再运行 `pnpm --filter @antler/server start`，由后端同源提供前端页面、API 和 SSE。后端启动前仍需配置 `DATABASE_URL` 并应用数据库迁移。
 
 Docker 镜像会编译前端，并由 Fastify 在同一个端口提供网页、API 和 SSE；远端数据保存在部署目录的 `workspace/`。本地需要 Docker（含 buildx）、SSH 和 SCP，远端需要 Docker Compose。
 
@@ -119,7 +133,7 @@ scripts/deploy-apps-ssh.sh
 
 Docker 构建默认使用 npmmirror 下载 pnpm 和 npm 依赖，使用中科大 Debian 镜像安装系统依赖。apt 下载最多重试 3 次，连接及数据等待超时为 30 秒。手动构建时可通过 `--build-arg DEBIAN_MIRROR=http://其他镜像主机` 更换 Debian 镜像；该主机需同时提供 `/debian` 和 `/debian-security`。
 
-镜像在 `/opt/antler-python` 中预装 pip、uv 和 Tushare SDK（版本见 `backend/requirements-runtime.txt`），`python`、`python3`、`pip`、`pip3` 和 `uv` 可直接在容器内使用。Python 包默认从腾讯云 PyPI 镜像下载，可在构建时通过 `--build-arg PYPI_INDEX_URL=https://其他镜像/simple` 更换；运行时可分别通过 `PIP_INDEX_URL` 和 `UV_DEFAULT_INDEX` 覆盖。部署脚本会在传输镜像前离线检查工具版本、依赖完整性及 Tushare 导入，避免把缺少依赖的镜像部署到远端。
+镜像在 `/opt/antler-python` 中预装 pip、uv 和 Tushare SDK（版本见 `apps/backend/requirements-runtime.txt`），`python`、`python3`、`pip`、`pip3` 和 `uv` 可直接在容器内使用。Python 包默认从腾讯云 PyPI 镜像下载，可在构建时通过 `--build-arg PYPI_INDEX_URL=https://其他镜像/simple` 更换；运行时可分别通过 `PIP_INDEX_URL` 和 `UV_DEFAULT_INDEX` 覆盖。部署脚本会在传输镜像前离线检查工具版本、依赖完整性及 Tushare 导入，避免把缺少依赖的镜像部署到远端。
 
 Tushare Pro 的 Token 可放在 `.env.deploy` 的 `TUSHARE_TOKEN` 中，随部署传入容器，并显式注入 Agent 工具子进程；工具输出中的 Token 会脱敏。Python 调用需显式传入环境变量，例如 `ts.pro_api(os.environ["TUSHARE_TOKEN"])`（先导入 `os` 和 `tushare as ts`）；仅检查 `ts.get_token()` 不能判断环境变量是否配置。直接执行 `python3` 脚本即可使用预装的 SDK。股票技能的 `uv run --project` 使用独立项目环境；使用 Tushare 时需加 `--extra enhanced`（例如 `uv run --project .agents/skills/stock-analysis --extra enhanced .agents/skills/stock-analysis/references/stock_data_fetcher.py --stocks 600519`），首次运行仍会安装该技能的项目依赖。
 

@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import type { SmtpConfig } from "../agent/email-tool.js";
 import { registerProtectedEnvFile } from "./protected-env.js";
 
-const projectRoot = fileURLToPath(new URL("../../..", import.meta.url));
+const projectRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const envFile = resolve(projectRoot, ".env");
 
 if (existsSync(envFile)) {

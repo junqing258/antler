@@ -2,7 +2,7 @@ import { useState } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Composer, ChatScreen, MessageBubble, ModelPicker } from "@antler/ui";
-import { MessageList } from "../../packages/ui/src/message-list.web";
+import { MessageList } from "../../../packages/ui/src/message-list.web";
 const { Keyboard, Platform } = await vi.importActual<{
   Keyboard: { dismiss: () => void };
   Platform: { OS: string };

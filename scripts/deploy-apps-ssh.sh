@@ -231,7 +231,7 @@ fi
 
 log_step "构建 backend 镜像：$DEPLOY_BACKEND_IMAGE_REF"
 docker buildx build --load --platform "$DEPLOY_PLATFORM" \
-  --file "$ROOT_DIR/backend/Dockerfile" \
+  --file "$ROOT_DIR/apps/backend/Dockerfile" \
   --tag "$DEPLOY_BACKEND_IMAGE_REF" "$ROOT_DIR"
 
 log_step "检查镜像中的 Python 工具和 Tushare SDK"

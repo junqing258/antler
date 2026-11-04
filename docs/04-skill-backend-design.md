@@ -577,7 +577,7 @@ Skill 文件属于外部指令输入，不属于 Backend 代码或不可覆盖�
 ## 12. 文件落点
 
 ```text
-backend/src/
+apps/backend/src/
 ├── agent/
 │   ├── host-runtime.ts                  # 接收并保存 SkillSnapshot
 │   ├── pi-agent-adapter.ts              # 会话绑定、工具注册、事件脱敏

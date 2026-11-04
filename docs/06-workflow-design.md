@@ -448,7 +448,7 @@ type WorkflowFrontendDataSource = {
 ## 10. 代码落点
 
 ```text
-backend/src/
+apps/backend/src/
 ├── workflows/
 │   ├── definition.ts
 │   ├── validator.ts
@@ -467,7 +467,7 @@ backend/src/
 └── routes/
     └── workflows.ts
 
-web/src/
+apps/web/src/
 ├── features/workflows/
 │   ├── api.ts
 │   ├── data-source.ts
@@ -483,7 +483,7 @@ web/src/
     └── workflow.css
 ```
 
-`backend/src/app.ts` 只负责装配 store、engine、service 和 routes。路由不直接调用 Prisma，executor 不直接写 HTTP/SSE。
+`apps/backend/src/app.ts` 只负责装配 store、engine、service 和 routes。路由不直接调用 Prisma，executor 不直接写 HTTP/SSE。
 
 ## 11. 实施阶段
 

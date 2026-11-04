@@ -22,7 +22,7 @@
 | `yaml` | Pi harness 的间接依赖 | 直接依赖 `2.9.0` |
 | `ignore` | Pi harness 的间接依赖 | 直接依赖 `7.0.5` |
 
-升级前锁文件实际解析为 0.84.3，本次升级后的锁文件解析为 1.1.0。升级提交必须包含 `backend/package.json` 和根目录 `pnpm-lock.yaml`；首次迁移以锁文件解析到 1.1.0 为验收基线。如果将来 `^1.1.0` 解析到更新版本，需要重新核对其变更后再验证。
+升级前锁文件实际解析为 0.84.3，本次升级后的锁文件解析为 1.1.0。升级提交必须包含 `apps/backend/package.json` 和根目录 `pnpm-lock.yaml`；首次迁移以锁文件解析到 1.1.0 为验收基线。如果将来 `^1.1.0` 解析到更新版本，需要重新核对其变更后再验证。
 
 ## 受影响文件清单
 
@@ -30,17 +30,17 @@
 
 | 文件路径 | 使用的 API | 风险等级 |
 |---------|-----------|---------|
-| `backend/src/agent/pi-agent-adapter.ts` | Agent, AgentEvent, AgentMessage, anthropicProvider, openaiProvider, Model | 高 |
-| `backend/src/agent/workspace-tools.ts` | AgentTool | 中 |
-| `backend/src/agent/tavily-search-tool.ts` | AgentTool | 中 |
-| `backend/src/skills/skill-tools.ts` | AgentTool、已删除的 formatSkillInvocation | 高 |
-| `backend/src/skills/types.ts` | 已删除的 Skill | 高 |
-| `backend/src/agent/host-runtime.ts` | AgentEvent | 低 |
-| `backend/src/agent/host-runtime.test.ts` | AgentEvent | 低 |
-| `backend/src/skills/skill-registry.ts` | 已删除的 loadSourcedSkills、ExecutionEnv、FileInfo、FileError、ok、err | 高 |
-| `backend/src/skills/skill-registry.test.ts` | 技能加载、诊断、优先级和工具安全回归 | 高 |
-| `backend/src/skills/skill-loader.ts` | 本地 YAML 元数据解析与调用格式化 | 高 |
-| `backend/src/agent/pi-agent-adapter.test.ts` | 真实 Agent 与模拟 provider 流的兼容性回归 | 高 |
+| `apps/backend/src/agent/pi-agent-adapter.ts` | Agent, AgentEvent, AgentMessage, anthropicProvider, openaiProvider, Model | 高 |
+| `apps/backend/src/agent/workspace-tools.ts` | AgentTool | 中 |
+| `apps/backend/src/agent/tavily-search-tool.ts` | AgentTool | 中 |
+| `apps/backend/src/skills/skill-tools.ts` | AgentTool、已删除的 formatSkillInvocation | 高 |
+| `apps/backend/src/skills/types.ts` | 已删除的 Skill | 高 |
+| `apps/backend/src/agent/host-runtime.ts` | AgentEvent | 低 |
+| `apps/backend/src/agent/host-runtime.test.ts` | AgentEvent | 低 |
+| `apps/backend/src/skills/skill-registry.ts` | 已删除的 loadSourcedSkills、ExecutionEnv、FileInfo、FileError、ok、err | 高 |
+| `apps/backend/src/skills/skill-registry.test.ts` | 技能加载、诊断、优先级和工具安全回归 | 高 |
+| `apps/backend/src/skills/skill-loader.ts` | 本地 YAML 元数据解析与调用格式化 | 高 |
+| `apps/backend/src/agent/pi-agent-adapter.test.ts` | 真实 Agent 与模拟 provider 流的兼容性回归 | 高 |
 
 ### API 使用情况分析
 
@@ -125,7 +125,7 @@ pnpm --filter @antler/server update '@earendil-works/pi-agent-core@^1.1.0' '@ear
 pnpm --filter @antler/server list @earendil-works/pi-agent-core @earendil-works/pi-ai typebox
 ```
 
-或手动编辑 `backend/package.json` 后执行:
+或手动编辑 `apps/backend/package.json` 后执行:
 
 ```bash
 pnpm install
@@ -157,18 +157,18 @@ pnpm check 2>&1 | tee /tmp/antler-pi-type-errors.log
 
 采用本地实现技能加载和格式化，解除 skills 模块对 Pi harness 导出的依赖：
 
-- `backend/src/skills/types.ts`：定义本地 `Skill` 类型，保留当前使用的 `name`、`description`、`content`、`filePath` 和 `disableModelInvocation` 字段及其语义。
-- `backend/src/skills/skill-registry.ts`：替换 `loadSourcedSkills` 和 `RestrictedSkillExecutionEnv` 所依赖的 Pi 类型、错误和 Result 帮助函数，直接使用现有异步文件系统操作加载 `SKILL.md`。在读取前保留真实路径 containment、符号链接检查、只读访问和大小上限。
+- `apps/backend/src/skills/types.ts`：定义本地 `Skill` 类型，保留当前使用的 `name`、`description`、`content`、`filePath` 和 `disableModelInvocation` 字段及其语义。
+- `apps/backend/src/skills/skill-registry.ts`：替换 `loadSourcedSkills` 和 `RestrictedSkillExecutionEnv` 所依赖的 Pi 类型、错误和 Result 帮助函数，直接使用现有异步文件系统操作加载 `SKILL.md`。在读取前保留真实路径 containment、符号链接检查、只读访问和大小上限。
 - 本地 frontmatter 解析需保持现有支持范围及元数据校验；名称、描述、`disable-model-invocation`、引号和多行字段都需核对旧实现。不能仅按冒号拆分 YAML 并将现有可加载的技能静默丢弃。解析失败应产生诊断并跳过该技能。
 - 保留 workspace → user → bundled 的覆盖优先级、fingerprint、禁用模型调用行为，以及 `skill_invalid`、`skill_too_large`、`skill_shadowed` 等对外诊断。
-- `backend/src/skills/skill-tools.ts`：本地替换 `formatSkillInvocation`，保持 `load_skill` 输出和 `skill://` 路径语义，并继续经过 SecretGuard 保护。
-- `backend/src/skills/skill-prompt.ts`：继续消费 `SkillSnapshot`；验证可用技能摘要与实际加载内容一致。
+- `apps/backend/src/skills/skill-tools.ts`：本地替换 `formatSkillInvocation`，保持 `load_skill` 输出和 `skill://` 路径语义，并继续经过 SecretGuard 保护。
+- `apps/backend/src/skills/skill-prompt.ts`：继续消费 `SkillSnapshot`；验证可用技能摘要与实际加载内容一致。
 
 补充 `skill-registry.test.ts` 中的无效元数据、忽略规则、覆盖优先级、大小限制、目录和 `SKILL.md` 符号链接逃逸、fingerprint 变化及资源读取回归。
 
 #### 5.2 Agent 构造函数
 
-**位置**: `backend/src/agent/pi-agent-adapter.ts:204, 123`
+**位置**: `apps/backend/src/agent/pi-agent-adapter.ts:204, 123`
 
 **当前代码**:
 ```typescript
@@ -191,7 +191,7 @@ const agent = new Agent({
 
 #### 5.3 Provider streamSimple 方法
 
-**位置**: `backend/src/agent/pi-agent-adapter.ts:215, 135`
+**位置**: `apps/backend/src/agent/pi-agent-adapter.ts:215, 135`
 
 **当前代码**:
 ```typescript
@@ -217,7 +217,7 @@ provider.streamSimple(
 
 #### 5.4 Model 类型断言
 
-**位置**: `backend/src/agent/pi-agent-adapter.ts:125, 205`
+**位置**: `apps/backend/src/agent/pi-agent-adapter.ts:125, 205`
 
 **当前代码**:
 ```typescript
@@ -231,9 +231,9 @@ model: model as Model<any>
 #### 5.5 AgentTool 接口实现
 
 **位置**: 
-- `backend/src/agent/workspace-tools.ts`
-- `backend/src/agent/tavily-search-tool.ts`
-- `backend/src/skills/skill-tools.ts`
+- `apps/backend/src/agent/workspace-tools.ts`
+- `apps/backend/src/agent/tavily-search-tool.ts`
+- `apps/backend/src/skills/skill-tools.ts`
 
 **可能需要调整**:
 - 工具接口字段变更
@@ -249,8 +249,8 @@ pnpm test
 ```
 
 重点关注:
-- `backend/src/skills/skill-registry.test.ts` 及 Step 5.1 的新增回归
-- `backend/src/agent/host-runtime.test.ts`
+- `apps/backend/src/skills/skill-registry.test.ts` 及 Step 5.1 的新增回归
+- `apps/backend/src/agent/host-runtime.test.ts`
 - Agent/provider 测试中的 transcript、system prompt、工具声明、取消和错误事件；使用真实 Agent 加可控模拟流补足覆盖，host-runtime 的 adapter mock 无法证明 provider 兼容性
 
 如果测试失败,记录失败信息:
@@ -335,7 +335,7 @@ git tag antler-pi-1.1.0
 
 ## 回滚计划
 
-回滚必须恢复代码、`backend/package.json` 和 `pnpm-lock.yaml` 的一致版本，并重新安装、重启和验证。两个本地标签和升级分支均保留，便于排查；不通过删除分支完成回滚。
+回滚必须恢复代码、`apps/backend/package.json` 和 `pnpm-lock.yaml` 的一致版本，并重新安装、重启和验证。两个本地标签和升级分支均保留，便于排查；不通过删除分支完成回滚。
 
 ### 未合并时：恢复升级前提交
 
@@ -386,7 +386,7 @@ pnpm dev:server
 
 升级成功的标准:
 
-- [x] `backend/package.json` 与根目录锁文件版本一致，Pi 实际解析为 1.1.0
+- [x] `apps/backend/package.json` 与根目录锁文件版本一致，Pi 实际解析为 1.1.0
 - [x] `pnpm install --frozen-lockfile` 无错误
 - [x] `pnpm check` 类型检查通过
 - [x] `pnpm test` 所有测试通过（前端 38、后端 82，共 120 项）

@@ -19,7 +19,7 @@
 | 聊天 | Web 与原生使用共享 `ChatScreen` | 已使用共享 `ChatScreen` 和 `ChatSession` | 继续复用，集中改宿主导航和必要的跨端组件 |
 | 配置 | 有知识库配置、服务地址、定时任务和设置中心 | 现有设置主要是本设备模型供应商配置 | 首期接入现有配置；其余能力按阶段实现，不冒充已支持 |
 
-代码依据：`web/src/views/chat/chat.tsx`、`web/src/views/chat/index.tsx`、`mobile/src/app.tsx`、`mobile/src/home-page.tsx`、`mobile/src/native-chat.tsx`、`packages/ui/src/conversation-list.tsx`。既有范围及验证背景见 [React Native 迁移进度](16-react-native-migration-progress.md)。当前分析基于源码和用户截图，尚未对 App 截图或真机表现做视觉测量。
+代码依据：`apps/web/src/views/chat/chat.tsx`、`apps/web/src/views/chat/index.tsx`、`apps/mobile/src/app.tsx`、`apps/mobile/src/home-page.tsx`、`apps/mobile/src/native-chat.tsx`、`packages/ui/src/conversation-list.tsx`。既有范围及验证背景见 [React Native 迁移进度](16-react-native-migration-progress.md)。当前分析基于源码和用户截图，尚未对 App 截图或真机表现做视觉测量。
 
 ## 3. 交互与视觉规格
 
@@ -34,7 +34,7 @@
 
 ### 4.1 导航容器与原生抽屉
 
-在 `mobile/src/app.tsx` 保留现有状态驱动导航及自动化深链，增加聊天页抽屉状态与返回首页、设置、会话操作回调；退出或切换账号时清理抽屉及账号相关状态。将 `mobile/src/native-chat.tsx` 的标题区域改为菜单与会话标题，`ChatScreen` 继续使用现有 session。新增原生抽屉组件，使用适合 RN 的模态/遮罩、动画及返回键处理；先评估现有依赖能否满足焦点和安全区域要求，必要时再引入经过 Expo 版本兼容性验证的依赖。避免为此次改造强制迁移导航框架。
+在 `apps/mobile/src/app.tsx` 保留现有状态驱动导航及自动化深链，增加聊天页抽屉状态与返回首页、设置、会话操作回调；退出或切换账号时清理抽屉及账号相关状态。将 `apps/mobile/src/native-chat.tsx` 的标题区域改为菜单与会话标题，`ChatScreen` 继续使用现有 session。新增原生抽屉组件，使用适合 RN 的模态/遮罩、动画及返回键处理；先评估现有依赖能否满足焦点和安全区域要求，必要时再引入经过 Expo 版本兼容性验证的依赖。避免为此次改造强制迁移导航框架。
 
 ### 4.2 会话数据与操作
 
@@ -46,7 +46,7 @@
 
 ### 4.3 后续功能
 
-知识库阶段参照 `web/src/components/knowledge-configuration-link.tsx` 接入配置读取、保存、恢复默认和外部服务地址；必须保留 Key 留空不变、显式清除、错误及认证语义，并验证外链协议和打开失败处理。定时任务管理当前不在移动端范围，需单独定义创建、编辑、启停和权限范围，再决定原生实现或其他入口；未经实现不显示可点击的占位项。个人资料编辑同样在确认后单独安排。
+知识库阶段参照 `apps/web/src/components/knowledge-configuration-link.tsx` 接入配置读取、保存、恢复默认和外部服务地址；必须保留 Key 留空不变、显式清除、错误及认证语义，并验证外链协议和打开失败处理。定时任务管理当前不在移动端范围，需单独定义创建、编辑、启停和权限范围，再决定原生实现或其他入口；未经实现不显示可点击的占位项。个人资料编辑同样在确认后单独安排。
 
 ## 5. 分阶段交付
 
@@ -61,7 +61,7 @@
 - **交互**：菜单、关闭、遮罩、Android 返回键、返回首页和设置均可用；关闭抽屉保留草稿及运行状态。新建/切换保持正确 Agent；重命名、删除、取消、失败和当前会话删除均符合第 3 节；分页不重项且不会跨 Agent 混入。
 - **一致性**：同账号跨端新建、改名、删除及自动标题更新后，打开抽屉或恢复前台能看到服务端最新状态；弱网/重连、快速切换账号和失效登录不显示旧账号数据。生成中切换与返回可恢复状态，不误发或取消。
 - **输入与无障碍**：iOS/Android 键盘打开、中文输入、发送、停止和收起正常；VoiceOver/TalkBack 可识别控件及选中状态，焦点不穿透抽屉，操作目标可触达。
-- **自动化**：为列表过滤、分页去重、版本冲突、删除当前会话、请求竞态和账号切换增加有意义的回归测试；为抽屉及主要操作增加组件交互测试，复用现有 `web/test/native-app.test.tsx` 等测试设施。执行 `pnpm check`、`pnpm test`、`pnpm build:mobile`；共享组件变更同时验证 Web 构建及相关测试。记录命令、结果与跳过原因。
+- **自动化**：为列表过滤、分页去重、版本冲突、删除当前会话、请求竞态和账号切换增加有意义的回归测试；为抽屉及主要操作增加组件交互测试，复用现有 `apps/web/test/native-app.test.tsx` 等测试设施。执行 `pnpm check`、`pnpm test`、`pnpm build:mobile`；共享组件变更同时验证 Web 构建及相关测试。记录命令、结果与跳过原因。
 - **设备**：至少在 iOS 和 Android 模拟器完成上述主要路径；真机及独立 Release 用目标 HTTPS 后端验证登录、SSE、后台恢复和键盘。设备或后端不可用时明确列为未验证，不以 bundle 导出代替设备验收。
 
 ## 7. 风险与依赖
@@ -75,13 +75,13 @@
 
 已完成（阶段 2 + 自动化部分）：
 
-- 新增 `mobile/src/chat-drawer.tsx`：原生抽屉（Modal + Animated 滑入、遮罩点击关闭、Android 返回键、宽度 `min(78%, 320)`、安全区），含品牌回首页、新建会话、历史列表（复用 `ConversationList`）、账号区（头像首字母 + 邮箱，local 模式显示"本地模式"中性占位）、设置入口与退出登录确认；重命名/删除使用 `mobile/src/dialogs.tsx` 跨平台弹窗，空值禁止提交、失败保留列表。
-- 新增 `mobile/src/conversation-service.ts`：列表/分页（服务端 `agentId` 过滤）、`PATCH`/`DELETE` 对齐 Web 语义（404、版本冲突、错误文案），并接入 `subscribeChangeStream` 变更流（删除即时移除、更新刷新首页按 revision 合并、reset 重建、账号切换由 platform 断言兜底）。
-- `mobile/src/native-chat.tsx`：标题栏改为菜单按钮 + 单行省略会话标题；保留"配置"入口。
-- `mobile/src/app.tsx` / `home-page.tsx` / `native-auth.ts`：抽屉接线（新建/切换/删除当前会话保持当前 Agent）、当前会话标题随服务端更新、Supabase 账号邮箱读取、认证失效/退出/切换账号时清理抽屉与账号状态；回首页路径由抽屉品牌承载。
+- 新增 `apps/mobile/src/chat-drawer.tsx`：原生抽屉（Modal + Animated 滑入、遮罩点击关闭、Android 返回键、宽度 `min(78%, 320)`、安全区），含品牌回首页、新建会话、历史列表（复用 `ConversationList`）、账号区（头像首字母 + 邮箱，local 模式显示"本地模式"中性占位）、设置入口与退出登录确认；重命名/删除使用 `apps/mobile/src/dialogs.tsx` 跨平台弹窗，空值禁止提交、失败保留列表。
+- 新增 `apps/mobile/src/conversation-service.ts`：列表/分页（服务端 `agentId` 过滤）、`PATCH`/`DELETE` 对齐 Web 语义（404、版本冲突、错误文案），并接入 `subscribeChangeStream` 变更流（删除即时移除、更新刷新首页按 revision 合并、reset 重建、账号切换由 platform 断言兜底）。
+- `apps/mobile/src/native-chat.tsx`：标题栏改为菜单按钮 + 单行省略会话标题；保留"配置"入口。
+- `apps/mobile/src/app.tsx` / `home-page.tsx` / `native-auth.ts`：抽屉接线（新建/切换/删除当前会话保持当前 Agent）、当前会话标题随服务端更新、Supabase 账号邮箱读取、认证失效/退出/切换账号时清理抽屉与账号状态；回首页路径由抽屉品牌承载。
 - `packages/ui/src/conversation-list.tsx`：触控目标提升至 ≥44dp（Web 测试同步回归通过）。
-- 知识库配置（阶段 4 可落地部分）：新增 `mobile/src/rag-config-service.ts`（`GET /api/config`、`PUT`/`DELETE /api/config/rag`，错误透传服务端语义）与 `mobile/src/knowledge-settings.tsx`（读取/保存/恢复环境默认值、Key 留空保留、显式清除密钥、外链仅接受 HTTP(S) 且打开失败有提示）；接入设置面板为"模型供应商 / 知识库"双分区。定时任务与完整个人资料仍按计划待产品范围确认，未放置占位入口。
-- 自动化：新增 `web/test/native-chat-drawer.test.tsx`（12 例：过滤、选中、新建、重命名空值/成功/冲突、删除当前/非当前/失败、分页去重、变更流标题与删除、退订清理、中性占位）与 `web/test/native-knowledge-settings.test.tsx`（8 例：读取、留空保留、替换密钥、显式清除、恢复默认门控、服务端校验错误、失败重试、外链协议与失败处理）。`pnpm check`、`pnpm test`、`pnpm build:mobile`（iOS/Android/Web bundle）、`pnpm build:web` 全部通过。
+- 知识库配置（阶段 4 可落地部分）：新增 `apps/mobile/src/rag-config-service.ts`（`GET /api/config`、`PUT`/`DELETE /api/config/rag`，错误透传服务端语义）与 `apps/mobile/src/knowledge-settings.tsx`（读取/保存/恢复环境默认值、Key 留空保留、显式清除密钥、外链仅接受 HTTP(S) 且打开失败有提示）；接入设置面板为"模型供应商 / 知识库"双分区。定时任务与完整个人资料仍按计划待产品范围确认，未放置占位入口。
+- 自动化：新增 `apps/web/test/native-chat-drawer.test.tsx`（12 例：过滤、选中、新建、重命名空值/成功/冲突、删除当前/非当前/失败、分页去重、变更流标题与删除、退订清理、中性占位）与 `apps/web/test/native-knowledge-settings.test.tsx`（8 例：读取、留空保留、替换密钥、显式清除、恢复默认门控、服务端校验错误、失败重试、外链协议与失败处理）。`pnpm check`、`pnpm test`、`pnpm build:mobile`（iOS/Android/Web bundle）、`pnpm build:web` 全部通过。
 
 未验证 / 待办（对应阶段 1、3）：
 

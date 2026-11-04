@@ -32,7 +32,7 @@ Antler 目前有两种不同的访问形态：
 
 | 区域 | 当前实现 | 与登录认证的差距 |
 |---|---|---|
-| HTTP 入口 | `backend/src/plugins/http.ts` 检查 `x-antler-token` 或 URL `token` | 只判断共享令牌，不产生用户主体 |
+| HTTP 入口 | `apps/backend/src/plugins/http.ts` 检查 `x-antler-token` 或 URL `token` | 只判断共享令牌，不产生用户主体 |
 | Tauri | Rust 启动 Backend 时生成进程级 token | 可继续作为本机传输凭证，但不能代表账号 |
 | Web | 静态页面公开；未设置 access token 时 API 全部可用 | 公网部署缺少登录边界 |
 | 数据库 | Prisma + SQLite，仅有 `Run`、`RunEvent` | 没有用户、密码摘要、会话和所有者 |
@@ -149,7 +149,7 @@ flowchart LR
 
 ## 6. 数据模型
 
-建议在 `backend/prisma/schema.prisma` 增加：
+建议在 `apps/backend/prisma/schema.prisma` 增加：
 
 ```prisma
 enum UserRole {
@@ -361,7 +361,7 @@ sequenceDiagram
 建议文件结构：
 
 ```text
-backend/src/
+apps/backend/src/
 ├── auth/
 │   ├── password-service.ts
 │   ├── session-service.ts
@@ -402,7 +402,7 @@ backend/src/
 建议拆出：
 
 ```text
-web/src/
+apps/web/src/
 ├── auth/
 │   ├── auth-provider.tsx
 │   ├── auth-api.ts

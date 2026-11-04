@@ -12,7 +12,7 @@ importers:
         specifier: ^3.6.2
         version: 3.9.6
 
-  backend:
+  apps/backend:
     dependencies:
       '@earendil-works/pi-agent-core':
         specifier: ^1.1.0
@@ -103,20 +103,20 @@ importers:
         specifier: ^5.0.3
         version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(@vitest/coverage-v8@5.0.3)(jsdom@30.0.1)(vite@8.2.2(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(sass-embedded@1.105.1)(sass@1.105.1)(terser@5.51.2)(tsx@4.23.12)(yaml@2.9.0))
 
-  mobile:
+  apps/mobile:
     dependencies:
       '@antler/chat-core':
         specifier: workspace:*
-        version: link:../packages/chat-core
+        version: link:../../packages/chat-core
       '@antler/client-runtime':
         specifier: workspace:*
-        version: link:../packages/client-runtime
+        version: link:../../packages/client-runtime
       '@antler/platform':
         specifier: workspace:*
-        version: link:../packages/platform
+        version: link:../../packages/platform
       '@antler/ui':
         specifier: workspace:^
-        version: link:../packages/ui
+        version: link:../../packages/ui
       '@expo/ui':
         specifier: ~58.0.26
         version: 58.0.26(@babel/core@7.29.7)(expo@58.0.22)(react-dom@19.3.0(react@19.3.0))(react-native-worklets@0.13.0(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7))(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0))(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))(react@19.3.0)
@@ -310,20 +310,20 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
 
-  web:
+  apps/web:
     dependencies:
       '@antler/chat-core':
         specifier: workspace:*
-        version: link:../packages/chat-core
+        version: link:../../packages/chat-core
       '@antler/client-runtime':
         specifier: workspace:*
-        version: link:../packages/client-runtime
+        version: link:../../packages/client-runtime
       '@antler/platform':
         specifier: workspace:*
-        version: link:../packages/platform
+        version: link:../../packages/platform
       '@antler/ui':
         specifier: workspace:^
-        version: link:../packages/ui
+        version: link:../../packages/ui
       '@base-ui/react':
         specifier: ^1.7.0
         version: 1.7.0(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
