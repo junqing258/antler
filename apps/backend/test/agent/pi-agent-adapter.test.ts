@@ -135,6 +135,36 @@ function completed(
   return stream;
 }
 
+it("serializes restored tool changes for an unknown Anthropic gateway model", async () => {
+  const { adapter } = await setup("anthropic");
+  streams.anthropic.mockImplementation((model) =>
+    completed(model, [{ type: "text", text: "Done." }]),
+  );
+  await adapter.run("hello", "conversation", DISABLED_SKILL_SNAPSHOT, new AbortController().signal, () => {});
+  const [model, context] = streams.anthropic.mock.calls[0]!;
+  const tools = getCurrentTools(context.messages);
+  expect(tools.length).toBeGreaterThan(0);
+  const { anthropicProvider } = await vi.importActual<typeof import("@earendil-works/pi-ai/providers/anthropic")>(
+    "@earendil-works/pi-ai/providers/anthropic",
+  );
+  let payload: unknown;
+  const stream = anthropicProvider().streamSimple(model as Model<"anthropic-messages">, {
+    ...context,
+    messages: [
+      ...context.messages,
+      { role: "system", content: "", toolsAdded: [tools[0]!], timestamp: Date.now() },
+    ],
+  }, {
+    apiKey: secret,
+    onPayload: (body) => { payload = body; throw new Error("captured"); },
+  });
+  await stream.result();
+  expect(payload).toBeDefined();
+  expect(JSON.stringify(payload)).not.toContain("tool_definition");
+  expect(JSON.stringify(payload)).not.toContain("tool_addition");
+  expect((payload as { tools: Array<{ name: string }> }).tools.map((tool) => tool.name)).toContain(tools[0]!.name);
+});
+
 describe.each(["openai", "anthropic"] as const)(
   "Pi 1.1.0 %s adapter",
   (provider) => {

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { platformApi, type PlatformSkill } from "@/lib/platform-api";
 import { SkillList, type SkillItem } from "@antler/ui";
+import { Upload } from "lucide-react";
 import { ErrorNotice, PlatformLayout, control } from "./layout";
 export function SkillLibraryPage() {
   const [skills, setSkills] = useState<PlatformSkill[]>([]),
@@ -68,21 +69,22 @@ export function SkillLibraryPage() {
       <p className="mb-6 text-sm text-[#666]">
         上传含 SKILL.md 和资源文件的 ZIP 包。技能名称须与文件中的 name 一致。
       </p>
-      <div className="mb-8 flex flex-wrap items-end gap-4 rounded-xl border bg-white p-6">
-        <label className="grid gap-2 text-sm">
+      <div className="mb-8 flex flex-wrap items-end gap-4 rounded-xl border bg-white p-5 sm:p-6">
+        <label className="grid min-w-0 flex-1 basis-56 gap-2 text-sm font-medium text-[#333]">
           技能名称
           <input
-            className={control}
+            className={`${control} w-full font-normal`}
             value={name}
             maxLength={64}
             placeholder="stock-analysis"
             onChange={(e) => setName(e.target.value)}
           />
         </label>
-        <label className={`${control} cursor-pointer`}>
-          上传 ZIP
+        <label className={`inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 ${busy ? "cursor-not-allowed opacity-50" : ""}`}>
+          <Upload size={16} aria-hidden="true" />
+          {busy ? "正在上传…" : "上传 ZIP"}
           <input
-            className="ml-3 max-w-60"
+            className="sr-only"
             aria-label="上传技能 ZIP"
             type="file"
             accept=".zip"
@@ -93,7 +95,7 @@ export function SkillLibraryPage() {
             }}
           />
         </label>
-        <small className="pb-2 text-[#888]">最大 5 MiB</small>
+        <small className="basis-full text-xs text-[#888]">ZIP 压缩包，最大 5 MiB</small>
       </div>
       <ErrorNotice error={error} />
       {notice && (
@@ -125,7 +127,7 @@ export function SkillLibraryPage() {
             const original = skills.find((s) => s.id === skill.id);
             if (!original) return null;
             return (
-              <label className={`${control} cursor-pointer`}>
+              <label className={`${control} cursor-pointer whitespace-nowrap`}>
                 {label}
                 <input
                   aria-label={`更新 ${skill.name}`}

@@ -447,11 +447,12 @@ export class PiAgentAdapter {
         "model_not_found",
         "Pi 的 Anthropic model catalog 为空。",
       );
+    // 未知网关模型不能继承目录模型的协议扩展（如会话中途工具变更）。
     const model = {
       ...(catalogModel ?? fallbackModel),
       ...(catalogModel
         ? {}
-        : { id: this.config.model, name: this.config.model }),
+        : { id: this.config.model, name: this.config.model, compat: {} }),
       ...(this.config.anthropicBaseUrl
         ? { baseUrl: this.config.anthropicBaseUrl }
         : {}),

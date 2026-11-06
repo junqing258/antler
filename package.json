@@ -29,6 +29,7 @@
     "build:ios:device": "pnpm --filter @antler/mobile ios:release:device"
   },
   "devDependencies": {
-    "prettier": "^3.6.2"
+    "prettier": "^3.6.2",
+    "vitest": "^5.0.3"
   }
 }

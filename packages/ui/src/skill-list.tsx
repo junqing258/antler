@@ -74,10 +74,8 @@ export function SkillList({
 const styles = StyleSheet.create({
   list: { gap: 12 },
   card: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: "column",
+    alignItems: "stretch",
     gap: 16,
     borderRadius: 12,
     borderWidth: 1,
@@ -85,7 +83,7 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     padding: 20,
   },
-  info: { flex: 1, minWidth: 0 },
+  info: { minWidth: 0 },
   nameRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -96,7 +94,7 @@ const styles = StyleSheet.create({
   state: { fontSize: 12, color: "#777" },
   description: { marginVertical: 8, fontSize: 14, color: "#666" },
   meta: { fontSize: 12, color: "#888" },
-  actions: { flexDirection: "row", alignItems: "center", gap: 12 },
-  remove: { fontSize: 14, color: "#b42318" },
+  actions: { flexDirection: "row", alignItems: "center", flexShrink: 0, gap: 12 },
+  remove: { fontSize: 14, color: "#b42318", textDecorationLine: "underline" },
   empty: { padding: 48, textAlign: "center", color: "#888" },
 });

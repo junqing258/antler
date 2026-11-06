@@ -1,17 +1,51 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRegisterSW } from "virtual:pwa-register/react";
+
+const UPDATE_CHECK_INTERVAL_MS = 60 * 1000;
 
 function UpdatePrompt() {
   const [error, setError] = useState("");
+  const [registration, setRegistration] = useState<ServiceWorkerRegistration>();
   const {
     offlineReady: [offlineReady, setOfflineReady],
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
   } = useRegisterSW({
+    onRegisteredSW(_url, registration) {
+      setRegistration(registration);
+    },
     onRegisterError(error) {
       console.warn("无法注册 Antler 离线缓存：", error);
     },
   });
+
+  useEffect(() => {
+    if (!registration) return;
+    let checking = false;
+    let lastCheckAt: number | undefined;
+    const checkForUpdate = () => {
+      if (document.visibilityState !== "visible") return;
+      if (registration.waiting) setNeedRefresh(true);
+      if (checking) return;
+      const now = Date.now();
+      if (lastCheckAt !== undefined && now - lastCheckAt < UPDATE_CHECK_INTERVAL_MS) return;
+      lastCheckAt = now;
+      checking = true;
+      void registration.update().catch((error) => {
+        console.warn("无法检查 Antler 更新：", error);
+      }).finally(() => {
+        checking = false;
+      });
+    };
+    document.addEventListener("visibilitychange", checkForUpdate);
+    window.addEventListener("pageshow", checkForUpdate);
+    window.addEventListener("online", checkForUpdate);
+    return () => {
+      document.removeEventListener("visibilitychange", checkForUpdate);
+      window.removeEventListener("pageshow", checkForUpdate);
+      window.removeEventListener("online", checkForUpdate);
+    };
+  }, [registration, setNeedRefresh]);
 
   if (!offlineReady && !needRefresh) return null;
 
