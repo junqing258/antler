@@ -61,5 +61,5 @@ it("rejects secrets in URLs and HTTP in production before they are bundled", () 
 it("uses the confirmed public production endpoint by default", () => {
   process.env.ANTLER_MOBILE_ENV = "production";
   delete process.env.EXPO_PUBLIC_ANTLER_SERVER_URL;
-  expect(loadConfig().extra.serverUrl).toBe("https://www.xiaoanai.top");
+  expect(loadConfig().extra.serverUrl).toBe("https://chat.xiaoanai.top");
 });

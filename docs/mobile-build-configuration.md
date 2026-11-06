@@ -1,6 +1,6 @@
 # Mobile 构建配置
 
-正式构建默认使用 `https://www.xiaoanai.top`；也可在构建时通过公开的 `EXPO_PUBLIC_ANTLER_SERVER_URL` 注入其他环境地址，例如 `https://antler.example.com`。开发和测试构建须显式注入地址。它是应用唯一的后端地址，不要在其中放凭据或令牌。`ANTLER_MOBILE_ENV` 可为 `development`、`test` 或 `production`，默认为 `production`。正式构建只允许 HTTPS；开发和专用测试构建可使用 HTTP，并在原生配置中为指定主机生成 ATS 例外及 Android 明文策略。修改环境或地址后必须重新生成原生配置并重新构建，检查生成的 iOS Info.plist 和 Android manifest；已有原生工程不会自动应用 app.config.js 的变更；应在干净检出中生成工程，并确认 iOS 安装包的 `CFBundleDisplayName` 为 `Antler`。本机旧的 P0 工程不会因修改 Expo 配置自动更名。
+正式构建默认使用 `https://chat.xiaoanai.top`；也可在构建时通过公开的 `EXPO_PUBLIC_ANTLER_SERVER_URL` 注入其他环境地址，例如 `https://antler.example.com`。开发和测试构建须显式注入地址。它是应用唯一的后端地址，不要在其中放凭据或令牌。`ANTLER_MOBILE_ENV` 可为 `development`、`test` 或 `production`，默认为 `production`。正式构建只允许 HTTPS；开发和专用测试构建可使用 HTTP，并在原生配置中为指定主机生成 ATS 例外及 Android 明文策略。修改环境或地址后必须重新生成原生配置并重新构建，检查生成的 iOS Info.plist 和 Android manifest；已有原生工程不会自动应用 app.config.js 的变更；应在干净检出中生成工程，并确认 iOS 安装包的 `CFBundleDisplayName` 为 `Antler`。本机旧的 P0 工程不会因修改 Expo 配置自动更名。
 
 `ANTLER_MOBILE_AUTOMATION=true` 仅在 `development` 或 `test` 构建启用诊断和 `antler://autostart`，正式构建始终关闭。测试构建启动并完成必要登录后，可运行：
 
@@ -86,7 +86,7 @@ pnpm --filter @antler/mobile android:device --device <设备名或标识>
 脚本固定使用 `development` 环境，在 macOS 上自动从 en0/en1 获取局域网 IP，后端端口默认为 3210（可用 `ANTLER_PORT` 覆盖）。其他系统或需要连接指定后端时，显式设置地址：
 
 ```sh
-EXPO_PUBLIC_ANTLER_SERVER_URL=https://www.xiaoanai.top pnpm --filter @antler/mobile android:device
+EXPO_PUBLIC_ANTLER_SERVER_URL=https://chat.xiaoanai.top pnpm --filter @antler/mobile android:device
 ```
 
 这是开发调试构建。首次运行时 Expo 会生成 Android 工程；已有工程若需要同步环境或原生配置，先在 `apps/mobile/` 中使用相同环境变量执行 `pnpm exec expo prebuild --platform android`，再重新运行脚本。

@@ -6,7 +6,7 @@ if (!["development", "test", "production"].includes(buildEnvironment))
 const development = buildEnvironment !== "production";
 const serverUrl =
   process.env.EXPO_PUBLIC_ANTLER_SERVER_URL ??
-  (buildEnvironment === "production" ? "https://www.xiaoanai.top" : "");
+  (buildEnvironment === "production" ? "https://chat.xiaoanai.top" : "");
 let httpHost;
 if (serverUrl) {
   let endpoint;

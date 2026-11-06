@@ -13,7 +13,7 @@ const invocationRoot = process.env.INIT_CWD || process.cwd();
 const help = `用法：pnpm build:ios [选项]
 
   --team <id>                覆盖 Apple Team ID，也可设置 APPLE_TEAM_ID
-  --server-url <https-url>   后端地址，默认 https://www.xiaoanai.top
+  --server-url <https-url>   后端地址，默认 https://chat.xiaoanai.top
   --output <目录>           产物目录，默认 apps/mobile/dist/ios/<时间>
   --export-options <plist>  使用自己的 ExportOptions.plist
   --archive-only           仅生成 .xcarchive，稍后在 Xcode 中分发
@@ -143,7 +143,7 @@ function main() {
   const team = options.team || process.env.APPLE_TEAM_ID || localTeamId();
   if (!team || !/^[A-Z0-9]{10}$/.test(team))
     throw new Error("未找到有效 Apple Team ID。请在本机 iOS 工程中配置 Team，或通过 --team / APPLE_TEAM_ID 提供 10 位 Team ID。");
-  const serverUrl = options.serverUrl || process.env.EXPO_PUBLIC_ANTLER_SERVER_URL || "https://www.xiaoanai.top";
+  const serverUrl = options.serverUrl || process.env.EXPO_PUBLIC_ANTLER_SERVER_URL || "https://chat.xiaoanai.top";
   const endpoint = new URL(serverUrl);
   if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password || endpoint.search || endpoint.hash)
     throw new Error("正式包后端必须为 HTTPS 地址，且不能包含凭据、查询参数或 fragment。");
