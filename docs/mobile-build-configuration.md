@@ -13,6 +13,16 @@ node scripts/mobile-autostart.mjs --platform android --message '请详细回答'
 
 发版前须用与正式包相同的环境和地址验证两平台实际地址、TLS、服务端认证配置、登录、流式对话和异常恢复，并对正式包本身做冒烟测试。Supabase 配置必须完整；受 local 令牌保护的部署仅支持持有与该地址绑定的旧令牌的升级设备。确认公网部署具备受信任的访问控制；不要为适配新设备而关闭访问控制。Expo Updates 的配置更新和回滚尚未纳入此流程。
 
+## iPhone 真机开发
+
+USB 连接并解锁 iPhone，确认信任电脑并开启开发者模式；在 Xcode Accounts 登录开发者账号，并在本机 iOS 工程的 Signing & Capabilities 中选择 Team、启用 Automatically manage signing。运行：
+
+```sh
+pnpm --filter @antler/mobile ios:device
+```
+
+真机开发脚本会为 Expo 的 xcodebuild 构建补充 `-allowProvisioningUpdates` 和 `-allowProvisioningDeviceRegistration`，允许 Xcode 创建或续期开发描述文件并注册设备。这样即使工程已经配置 Team，也不会因 Expo 跳过签名初始化而报 `No profiles ... were found`。免费 Personal Team 签名过期后重新执行此命令；如仍失败，检查 Xcode 账号登录状态、Team 和开发证书。`ios:device metro` 仅启动 Metro，不执行签名或构建。
+
 ## iPhone 个人自用 Release
 
 使用免费 Personal Team 在自己的 iPhone 上运行 Release 版本，在仓库根目录执行：

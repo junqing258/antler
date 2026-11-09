@@ -36,5 +36,9 @@ if [ "${1:-run}" = "metro" ]; then
   shift || true
   exec npx expo start "$@"
 else
+  # Expo skips provisioning updates when the native project already has a Team.
+  # Scope the xcodebuild wrapper to this development build (not Metro-only runs).
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  export PATH="${SCRIPT_DIR}/ios-bin:${PATH}"
   exec npx expo run:ios --device "$@"
 fi

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# expo run:ios omits these flags when signing is already configured.
+# Use xcrun so resolving the real Xcode binary cannot recurse through PATH.
+set -euo pipefail
+
+extra_args=()
+for arg in "$@"; do
+  if [ "$arg" = "-destination" ]; then
+    extra_args=(-allowProvisioningUpdates -allowProvisioningDeviceRegistration)
+    break
+  fi
+done
+
+exec xcrun xcodebuild "$@" ${extra_args[@]+"${extra_args[@]}"}
