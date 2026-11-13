@@ -175,7 +175,8 @@ vi.mock("../../mobile/src/views/chat/native-chat", () => ({
     );
   },
 }));
-vi.mock("@antler/ui", () => ({
+vi.mock("@antler/ui", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@antler/ui")>()),
   AuthForm: () => <div>登录表单</div>,
   ProviderConfigForm: ({ onSubmit, value }: any) => (
     <button onClick={() => onSubmit(value)}>保存供应商</button>
@@ -235,14 +236,19 @@ it("keeps the chat and draft mounted while saving settings", async () => {
   expect(screen.getByLabelText("草稿")).toHaveValue("尚未发送");
 });
 
-it("shows the running JS bundle version in the about settings", async () => {
+it("switches native settings segments and shows the running JS bundle version", async () => {
   state.backend = { mode: "local", requiresAccessToken: false };
   render(<AppContainer />);
   fireEvent.click(await screen.findByText("开始对话"));
   fireEvent.click(screen.getByText("设置"));
-  fireEvent.click(screen.getByRole("tab", { name: /关于/ }));
+  expect(screen.getByRole("button", { name: "保存供应商" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "个人资料" }));
+  expect(screen.getByLabelText("显示名称")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /关于/ }));
   expect(screen.getByText(/当前版本\s+v9\.8\.7/)).toBeInTheDocument();
-  expect(screen.queryByRole("tab", { name: /知识库/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /知识库/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "供应商配置" }));
+  expect(screen.getByRole("button", { name: "保存供应商" })).toBeInTheDocument();
 });
 
 it("opens settings as a dialog and switches profile and about tabs", async () => {
@@ -250,12 +256,12 @@ it("opens settings as a dialog and switches profile and about tabs", async () =>
   render(<AppContainer />);
   fireEvent.click(await screen.findByText("开始对话"));
   fireEvent.click(screen.getByText("设置"));
-  fireEvent.click(screen.getByRole("tab", { name: /个人资料/ }));
+  fireEvent.click(screen.getByRole("button", { name: /个人资料/ }));
   const name = screen.getByLabelText("显示名称");
   fireEvent.change(name, { target: { value: "小安" } });
   expect(name).toHaveValue("小安");
   expect(screen.getByText("小")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("tab", { name: /关于/ }));
+  fireEvent.click(screen.getByRole("button", { name: /关于/ }));
   expect(screen.getByText("应用信息与版本")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "关闭设置" }));
   expect(screen.queryByText("应用信息与版本")).not.toBeInTheDocument();

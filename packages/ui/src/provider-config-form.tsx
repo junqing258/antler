@@ -1,12 +1,11 @@
 import { useState } from "react";
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
+import { FormButton, FormChoice, FormTextInput } from "./form-controls";
 
 export type ProviderConfigDraft = {
   name: string;
@@ -61,6 +60,7 @@ export function ProviderConfigForm({
   const update = (key: keyof ProviderConfigDraft, fieldValue: string) =>
     onChange({ ...value, [key]: fieldValue });
   const addModel = () => {
+    if (busy) return;
     const model = newModel.trim();
     if (!model || value.models.includes(model)) return;
     onChange({
@@ -80,6 +80,7 @@ export function ProviderConfigForm({
           : value.model,
     });
   const submit = () => {
+    if (busy) return;
     const models = [
       ...new Set(
         [...value.models, newModel].map((model) => model.trim()).filter(Boolean),
@@ -112,9 +113,9 @@ export function ProviderConfigForm({
         </View>
       )}
       <Text style={styles.fieldLabel}>名称</Text>
-      <TextInput
+      <FormTextInput
         accessibilityLabel="名称"
-        style={styles.input}
+        editable={!busy}
         value={value.name}
         onChangeText={(text) => update("name", text)}
         placeholder="例如：OpenAI"
@@ -123,48 +124,37 @@ export function ProviderConfigForm({
       <Text style={styles.fieldLabel}>协议</Text>
       <View style={styles.protocolRow}>
         {PROTOCOLS.map((protocol) => (
-          <Pressable
+          <FormChoice
             key={protocol.value}
-            accessibilityRole="radio"
-            accessibilityLabel={protocol.label}
-            accessibilityState={{ checked: value.protocol === protocol.value }}
-            aria-checked={value.protocol === protocol.value}
+            label={protocol.label}
+            selected={value.protocol === protocol.value}
+            disabled={busy}
             onPress={() => onChange({ ...value, protocol: protocol.value })}
-            style={[
-              styles.protocolOption,
-              value.protocol === protocol.value && styles.protocolActive,
-            ]}
-          >
-            <Text
-              style={
-                value.protocol === protocol.value
-                  ? styles.protocolActiveText
-                  : styles.protocolText
-              }
-            >
-              {protocol.label}
-            </Text>
-          </Pressable>
+            containerStyle={styles.flexControl}
+          />
         ))}
       </View>
       <Text style={styles.fieldLabel}>Base URL（可选）</Text>
-      <TextInput
+      <FormTextInput
         accessibilityLabel="Base URL（可选）"
-        style={styles.input}
+        editable={!busy}
         value={value.baseUrl}
         onChangeText={(text) => update("baseUrl", text)}
         placeholder="https://api.openai.com/v1"
         autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="url"
       />
       <Text style={styles.fieldLabel}>API Key</Text>
-      <TextInput
+      <FormTextInput
         accessibilityLabel="API Key"
-        style={styles.input}
+        editable={!busy}
         value={value.apiKey}
         onChangeText={(text) => update("apiKey", text)}
         placeholder="仅保存在本地"
         secureTextEntry
         autoCapitalize="none"
+        autoCorrect={false}
       />
       <Text style={styles.fieldLabel}>模型</Text>
       {credentialBinding ? (
@@ -182,49 +172,42 @@ export function ProviderConfigForm({
       )}
       {value.models.map((model) => (
         <View key={model} style={styles.modelRow}>
-          <Pressable
-            accessibilityRole="radio"
+          <FormChoice
+            label={model}
             accessibilityLabel={`默认模型 ${model}`}
-            accessibilityState={{ checked: value.model === model }}
-            aria-checked={value.model === model}
+            selected={value.model === model}
+            variant="model"
+            disabled={busy}
             onPress={() => update("model", model)}
-            style={styles.modelSelect}
-          >
-            <Text style={value.model === model ? styles.radioActive : styles.radio}>
-              {value.model === model ? "◉" : "○"}
-            </Text>
-            <Text numberOfLines={1} style={styles.modelText}>
-              {model}
-            </Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
+            containerStyle={styles.flexControl}
+          />
+          <FormButton
+            label="删除"
+            variant="text"
             accessibilityLabel={`删除 ${model}`}
             disabled={busy}
             onPress={() => removeModel(model)}
-          >
-            <Text style={styles.removeText}>删除</Text>
-          </Pressable>
+          />
         </View>
       ))}
       <View style={styles.addRow}>
-        <TextInput
+        <FormTextInput
           accessibilityLabel="新模型 ID"
-          style={styles.addInput}
+          containerStyle={styles.flexControl}
+          editable={!busy}
           value={newModel}
           onChangeText={setNewModel}
           onSubmitEditing={addModel}
           placeholder="输入供应商支持的模型 ID"
           autoCapitalize="none"
+          autoCorrect={false}
         />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="添加模型"
+        <FormButton
+          label="添加模型"
+          variant="outlined"
+          disabled={busy || !newModel.trim() || value.models.includes(newModel.trim())}
           onPress={addModel}
-          style={styles.addButton}
-        >
-          <Text>添加模型</Text>
-        </Pressable>
+        />
       </View>
       {!!error && (
         <Text accessibilityRole="alert" style={styles.error}>
@@ -238,25 +221,22 @@ export function ProviderConfigForm({
       )}
       <View style={styles.footerRow}>
         {onReset && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="恢复默认"
+          <FormButton
+            label="恢复默认"
+            variant="outlined"
             disabled={busy}
-            onPress={onReset}
-            style={styles.secondaryButton}
-          >
-            <Text>恢复默认</Text>
-          </Pressable>
+            onPress={() => {
+              setNewModel("");
+              onReset();
+            }}
+          />
         )}
-        <Pressable
-          accessibilityRole="button"
+        <FormButton
+          label={busy ? "请稍候…" : submitLabel}
           accessibilityLabel={submitLabel}
           disabled={busy}
           onPress={submit}
-          style={[styles.submit, busy && styles.disabled]}
-        >
-          <Text style={styles.submitText}>{busy ? "请稍候…" : submitLabel}</Text>
-        </Pressable>
+        />
       </View>
     </ScrollView>
   );
@@ -279,29 +259,8 @@ const styles = StyleSheet.create({
   bindingTitle: { fontSize: 12, fontWeight: "600", color: "#78350f" },
   bindingText: { fontSize: 12, color: "#92400e" },
   fieldLabel: { fontSize: 12, fontWeight: "600", color: "#4b4b4b", marginTop: 16, marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    backgroundColor: "white",
-    paddingHorizontal: 11,
-    paddingVertical: 10,
-    fontSize: 13,
-    color: "#222",
-  },
   protocolRow: { flexDirection: "row", gap: 8 },
-  protocolOption: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: "center",
-    backgroundColor: "white",
-  },
-  protocolActive: { borderColor: "#087d61", backgroundColor: "#f2faf5" },
-  protocolText: { fontSize: 13, color: "#222" },
-  protocolActiveText: { fontSize: 13, color: "#087d61", fontWeight: "600" },
+  flexControl: { flex: 1, minWidth: 0 },
   hint: { fontSize: 12, color: "#777", marginBottom: 8 },
   modelRow: {
     flexDirection: "row",
@@ -314,32 +273,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginBottom: 8,
   },
-  modelSelect: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
-  radio: { color: "#777" },
-  radioActive: { color: "#087d61" },
-  modelText: { fontSize: 13, color: "#222", flexShrink: 1 },
-  removeText: { fontSize: 12, color: "#b42318" },
   addRow: { flexDirection: "row", gap: 8, alignItems: "center" },
-  addInput: {
-    flex: 1,
-    minWidth: 0,
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    backgroundColor: "white",
-    paddingHorizontal: 11,
-    paddingVertical: 8,
-    fontSize: 13,
-    color: "#222",
-  },
-  addButton: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 7,
-    backgroundColor: "white",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
   error: {
     borderRadius: 8,
     borderWidth: 1,
@@ -361,22 +295,4 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   footerRow: { flexDirection: "row", gap: 8, marginTop: 16 },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    backgroundColor: "white",
-    paddingHorizontal: 13,
-    paddingVertical: 8,
-    alignItems: "center",
-  },
-  submit: {
-    borderRadius: 8,
-    backgroundColor: "#087d61",
-    paddingHorizontal: 13,
-    paddingVertical: 8,
-    alignItems: "center",
-  },
-  submitText: { color: "white", fontSize: 14, fontWeight: "500" },
-  disabled: { opacity: 0.5 },
 });

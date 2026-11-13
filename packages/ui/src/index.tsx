@@ -11,6 +11,7 @@ export type { ConversationItem } from "./conversation-list";
 export { AuthForm, friendlyAuthError } from "./auth-form";
 export type { AuthFormActions, AuthMode } from "./auth-form";
 export { ProviderConfigForm } from "./provider-config-form";
+export { FormButton, FormTextInput } from "./form-controls";
 export type {
   ProviderConfigDraft,
   CredentialBinding,

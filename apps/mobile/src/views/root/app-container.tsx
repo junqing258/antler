@@ -10,20 +10,18 @@ import {
   KeyboardAvoidingView,
   Linking,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BottomSheet, RNHostView } from "@expo/ui";
+import SegmentedControl from "@expo/ui/community/segmented-control";
 import * as Crypto from "expo-crypto";
-import { CircleHelp, Settings, UserRound } from "lucide-react-native";
 import { useRouter, useGlobalSearchParams, Stack } from "expo-router";
-import { AuthForm, ProviderConfigForm } from "@antler/ui";
+import { AuthForm, FormButton, FormTextInput, ProviderConfigForm } from "@antler/ui";
 import type { BoundCredential } from "@antler/client-runtime";
 import { Button } from "../../components/button";
 import { QueryProvider } from "./query-provider";
@@ -69,6 +67,12 @@ type Boot = {
   generation: number;
   cacheScope?: string;
 };
+
+const settingsTabs = [
+  { value: "provider", label: "供应商配置" },
+  { value: "profile", label: "个人资料" },
+  { value: "about", label: "关于" },
+] as const;
 
 /**
  * 根容器：启动、认证边界、自动化深链分发与全局设置。
@@ -524,25 +528,17 @@ export function AppContainer() {
             <View style={styles.dialog} accessibilityViewIsModal>
               <View style={styles.grabber} />
               <View style={styles.dialogHeader}>
-                <View accessibilityRole="tablist" accessibilityLabel="设置分类" style={styles.tabRow}>
-                  {([
-                    ["provider", Settings, "供应商配置"],
-                    ["profile", UserRound, "个人资料"],
-                    ["about", CircleHelp, "关于"],
-                  ] as const).map(([tab, Icon, label]) => (
-                    <Pressable
-                      key={tab}
-                      accessibilityRole="tab"
-                      accessibilityLabel={label}
-                      accessibilityState={{ selected: settingsTab === tab }}
-                      onPress={() => setSettingsTab(tab)}
-                      style={({ pressed }) => [styles.tab, settingsTab === tab && styles.activeTab, pressed && styles.pressedTab]}
-                    >
-                      <Icon size={15} strokeWidth={settingsTab === tab ? 2.2 : 1.8} color={settingsTab === tab ? "#087d61" : "#7a827e"} />
-                      <Text numberOfLines={1} style={[styles.tabText, settingsTab === tab && styles.activeTabText]}>{label}</Text>
-                    </Pressable>
-                  ))}
-                </View>
+                <SegmentedControl
+                  accessibilityLabel="设置分类"
+                  appearance="light"
+                  values={settingsTabs.map((tab) => tab.label)}
+                  selectedIndex={settingsTabs.findIndex((tab) => tab.value === settingsTab)}
+                  onChange={({ nativeEvent }) => {
+                    const tab = settingsTabs[nativeEvent.selectedSegmentIndex];
+                    if (tab) setSettingsTab(tab.value);
+                  }}
+                  style={styles.segmentedControl}
+                />
               </View>
               <View style={styles.dialogContent}>
                 {settingsTab === "provider" ? (
@@ -567,14 +563,12 @@ export function AppContainer() {
                     <View style={styles.avatar}><Text style={styles.avatarText}>{displayName.slice(0, 1).toUpperCase() || "U"}</Text></View>
                     <View style={styles.field}>
                       <Text style={styles.label}>显示名称</Text>
-                      <TextInput accessibilityLabel="显示名称" value={displayName} onChangeText={setDisplayName} placeholder="输入你的名称" style={styles.input} />
+                      <FormTextInput accessibilityLabel="显示名称" value={displayName} onChangeText={setDisplayName} placeholder="输入你的名称" />
                     </View>
                     {!!accountEmail && <View style={styles.infoCard}>
                       <Text style={styles.label}>登录账号</Text>
                       <Text style={styles.account}>{accountEmail}</Text>
-                      <Pressable accessibilityRole="button" onPress={() => { setSettings(false); handleSignOut(); }} style={styles.signOut}>
-                        <Text style={styles.signOutText}>退出登录</Text>
-                      </Pressable>
+                      <FormButton label="退出登录" variant="outlined" onPress={() => { setSettings(false); handleSignOut(); }} />
                     </View>}
                     <Text style={styles.hint}>个人资料当前仅保存在本次应用会话中。</Text>
                   </ScrollView>
@@ -650,12 +644,7 @@ const styles = StyleSheet.create({
   dialog: { flexShrink: 1, width: "100%", maxWidth: 820, alignSelf: "center", backgroundColor: "white" },
   dialogHeader: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4, backgroundColor: "white" },
   grabber: { alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: "#d9d9d9", marginTop: 10, marginBottom: 8 },
-  tabRow: { flexDirection: "row", gap: 4, padding: 4, borderRadius: 14, backgroundColor: "#f3f5f4" },
-  tab: { flex: 1, minWidth: 0, minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderRadius: 10, borderWidth: 1, borderColor: "transparent", paddingHorizontal: 4, paddingVertical: 10 },
-  activeTab: { backgroundColor: "#fff", borderColor: "#e3ebe6", shadowColor: "#193c2c", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 1 },
-  pressedTab: { opacity: 0.65 },
-  tabText: { flexShrink: 1, color: "#737c77", fontSize: 12, fontWeight: "500" },
-  activeTabText: { color: "#087d61", fontWeight: "600" },
+  segmentedControl: { width: "100%" },
   dialogContent: { flexShrink: 1, minHeight: 0, paddingTop: 20 },
   detailContent: { gap: 20, paddingHorizontal: 20, paddingBottom: 32 },
   detailHeading: { borderBottomWidth: 1, borderBottomColor: "#eee", paddingBottom: 16, gap: 4 },
@@ -665,9 +654,6 @@ const styles = StyleSheet.create({
   avatarText: { fontSize: 20, fontWeight: "600", color: "#087d61" },
   field: { gap: 6 },
   label: { color: "#4b4b4b", fontWeight: "600", fontSize: 12 },
-  input: { borderWidth: 1, borderColor: "#ddd", borderRadius: 8, minHeight: 40, paddingHorizontal: 11, fontSize: 14, color: "#222" },
   infoCard: { backgroundColor: "#f6faf8", borderWidth: 1, borderColor: "#e7eeeb", borderRadius: 12, padding: 16, gap: 8 },
   account: { color: "#222", fontSize: 13 },
-  signOut: { alignSelf: "flex-start", borderWidth: 1, borderColor: "#ddd", borderRadius: 8, backgroundColor: "white", paddingHorizontal: 12, paddingVertical: 8, marginTop: 4 },
-  signOutText: { color: "#4b4b4b", fontSize: 12 },
 });
