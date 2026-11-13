@@ -9,7 +9,6 @@ import {
 } from "react";
 import {
   ActivityIndicator,
-  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -233,9 +232,6 @@ export function NativeChat({
         <View style={styles.loading} accessibilityState={{ busy: true }}>
           {(showLoading || !!state.notice) && (
             <>
-              <View style={styles.loadingLogo}>
-                <Image source={require("../../../assets/antler-logo.png")} style={styles.logo} accessibilityIgnoresInvertColors />
-              </View>
               <View style={styles.loadingLabel} accessibilityRole="progressbar" accessibilityLabel={state.notice.includes("正在重连") ? state.notice : "正在加载会话"}>
                 <ActivityIndicator size="small" color="#087d61" />
                 <Text style={styles.loadingText}>正在加载会话…</Text>
@@ -307,8 +303,6 @@ const styles = StyleSheet.create({
   dockTint: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(255,255,255,0.7)" },
   safeAreaFade: { position: "absolute", left: 0, right: 0, bottom: 0, height: 32 },
   loading: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24, backgroundColor: "#fff" },
-  loadingLogo: { width: 64, height: 64, borderRadius: 16, backgroundColor: "#f0f8f5", alignItems: "center", justifyContent: "center", marginBottom: 20, opacity: 0.4 },
-  logo: { width: 40, height: 40, resizeMode: "contain" },
   loadingLabel: { flexDirection: "row", alignItems: "center", gap: 8, opacity: 0.5 },
   loadingText: { fontSize: 14, fontWeight: "500", color: "#404b47" },
   loadingNotice: { marginTop: 12, textAlign: "center", fontSize: 14, color: "#747d79" },

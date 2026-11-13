@@ -524,18 +524,25 @@ export function AppContainer() {
             <View style={styles.dialog} accessibilityViewIsModal>
               <View style={styles.grabber} />
               <View style={styles.dialogHeader}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow}>
+                <View accessibilityRole="tablist" accessibilityLabel="设置分类" style={styles.tabRow}>
                   {([
                     ["provider", Settings, "供应商配置"],
                     ["profile", UserRound, "个人资料"],
                     ["about", CircleHelp, "关于"],
                   ] as const).map(([tab, Icon, label]) => (
-                    <Pressable key={tab} accessibilityRole="tab" accessibilityState={{ selected: settingsTab === tab }} onPress={() => setSettingsTab(tab)} style={[styles.tab, settingsTab === tab && styles.activeTab]}>
-                      <Icon size={16} color={settingsTab === tab ? "#087d61" : "#555"} />
-                      <Text style={[styles.tabText, settingsTab === tab && styles.activeTabText]}>{label}</Text>
+                    <Pressable
+                      key={tab}
+                      accessibilityRole="tab"
+                      accessibilityLabel={label}
+                      accessibilityState={{ selected: settingsTab === tab }}
+                      onPress={() => setSettingsTab(tab)}
+                      style={({ pressed }) => [styles.tab, settingsTab === tab && styles.activeTab, pressed && styles.pressedTab]}
+                    >
+                      <Icon size={15} strokeWidth={settingsTab === tab ? 2.2 : 1.8} color={settingsTab === tab ? "#087d61" : "#7a827e"} />
+                      <Text numberOfLines={1} style={[styles.tabText, settingsTab === tab && styles.activeTabText]}>{label}</Text>
                     </Pressable>
                   ))}
-                </ScrollView>
+                </View>
               </View>
               <View style={styles.dialogContent}>
                 {settingsTab === "provider" ? (
@@ -641,12 +648,13 @@ const styles = StyleSheet.create({
   loginContent: { flexGrow: 1, justifyContent: "center", padding: 24, gap: 12 },
   modalFrame: { width: "100%", flexShrink: 1, backgroundColor: "white" },
   dialog: { flexShrink: 1, width: "100%", maxWidth: 820, alignSelf: "center", backgroundColor: "white" },
-  dialogHeader: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, backgroundColor: "white", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#e5e5e5" },
+  dialogHeader: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4, backgroundColor: "white" },
   grabber: { alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: "#d9d9d9", marginTop: 10, marginBottom: 8 },
-  tabRow: { flexDirection: "row", gap: 4, marginTop: 12 },
-  tab: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10 },
-  activeTab: { backgroundColor: "#e8f3ef" },
-  tabText: { color: "#555", fontSize: 12 },
+  tabRow: { flexDirection: "row", gap: 4, padding: 4, borderRadius: 14, backgroundColor: "#f3f5f4" },
+  tab: { flex: 1, minWidth: 0, minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, borderRadius: 10, borderWidth: 1, borderColor: "transparent", paddingHorizontal: 4, paddingVertical: 10 },
+  activeTab: { backgroundColor: "#fff", borderColor: "#e3ebe6", shadowColor: "#193c2c", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 1 },
+  pressedTab: { opacity: 0.65 },
+  tabText: { flexShrink: 1, color: "#737c77", fontSize: 12, fontWeight: "500" },
   activeTabText: { color: "#087d61", fontWeight: "600" },
   dialogContent: { flexShrink: 1, minHeight: 0, paddingTop: 20 },
   detailContent: { gap: 20, paddingHorizontal: 20, paddingBottom: 32 },
