@@ -21,14 +21,14 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BottomSheet, RNHostView } from "@expo/ui";
 import * as Crypto from "expo-crypto";
-import { BookOpen, CircleHelp, Settings, UserRound } from "lucide-react-native";
+import { CircleHelp, Settings, UserRound } from "lucide-react-native";
 import { useRouter, useGlobalSearchParams, Stack } from "expo-router";
 import { AuthForm, ProviderConfigForm } from "@antler/ui";
 import type { BoundCredential } from "@antler/client-runtime";
 import { Button } from "../../components/button";
-import { KnowledgeSettings } from "../settings/knowledge-settings";
 import { QueryProvider } from "./query-provider";
 import { readAppConfig } from "../../lib/app-config";
+import { bundleVersion } from "../../lib/bundle-version";
 import { createNativePlatform } from "../../lib/native-platform";
 import { useDelayedPending } from "../../lib/use-delayed-pending";
 import {
@@ -90,7 +90,7 @@ export function AppContainer() {
   const [draftProvider, setDraftProvider] = useState(defaultProvider);
   const [settings, setSettings] = useState(false);
   const [settingsError, setSettingsError] = useState("");
-  const [settingsTab, setSettingsTab] = useState<"provider" | "profile" | "about" | "knowledge">(
+  const [settingsTab, setSettingsTab] = useState<"provider" | "profile" | "about">(
     "provider",
   );
   const [displayName, setDisplayName] = useState("用户");
@@ -529,7 +529,6 @@ export function AppContainer() {
                     ["provider", Settings, "供应商配置"],
                     ["profile", UserRound, "个人资料"],
                     ["about", CircleHelp, "关于"],
-                    ["knowledge", BookOpen, "知识库"],
                   ] as const).map(([tab, Icon, label]) => (
                     <Pressable key={tab} accessibilityRole="tab" accessibilityState={{ selected: settingsTab === tab }} onPress={() => setSettingsTab(tab)} style={[styles.tab, settingsTab === tab && styles.activeTab]}>
                       <Icon size={16} color={settingsTab === tab ? "#087d61" : "#555"} />
@@ -552,8 +551,6 @@ export function AppContainer() {
                     description="配置只保存在当前设备，账号不会同步 API Key。"
                     contentPaddingHorizontal={20}
                   />
-                ) : settingsTab === "knowledge" ? (
-                  <KnowledgeSettings config={boot.config} getToken={getToken} onUnauthorized={onUnauthorized} isCurrent={isCurrent} />
                 ) : settingsTab === "profile" ? (
                   <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.detailContent}>
                     <View style={styles.detailHeading}>
@@ -581,7 +578,7 @@ export function AppContainer() {
                       <Text style={styles.hint}>应用信息与版本</Text>
                     </View>
                     <View style={styles.infoCard}><Text style={styles.detailTitle}>Antler</Text><Text style={styles.hint}>移动助手</Text></View>
-                    <View style={styles.infoCard}><Text style={styles.account}>应用名称　 Antler</Text><Text style={styles.account}>当前版本　 v0.1.1</Text><Text style={styles.account}>运行环境　移动应用</Text></View>
+                    <View style={styles.infoCard}><Text style={styles.account}>应用名称　 Antler</Text><Text style={styles.account}>当前版本　 v{bundleVersion}</Text><Text style={styles.account}>运行环境　移动应用</Text></View>
                   </ScrollView>
                 )}
               </View>

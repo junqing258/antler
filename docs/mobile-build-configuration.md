@@ -60,9 +60,16 @@ pnpm update:bundle --message "优化聊天页面"
 
 # 也可直接运行 mobile 包命令
 pnpm --filter @antler/mobile update:bundle --message "修复页面样式"
+
+# 预览下一版本和发布命令，不修改文件或发布
+pnpm update:bundle --dry-run
 ```
 
 脚本固定使用 `--platform all --channel production --environment production`，同时发布 iOS 和 Android 更新，并设置 `ANTLER_MOBILE_ENV=production`、`ANTLER_MOBILE_AUTOMATION=false`、`EXPO_NO_DOTENV=1`。发布使用当前工作区源码，包括未提交的改动，不执行原生构建，也不安装应用。命令成功后，在两平台手机上打开 App 等待后台下载，彻底退出并重新打开后验证更新。
+
+JS bundle 版本独立保存在 `apps/mobile/bundle-version.json`，设置页“当前版本”和移动端侧栏从正在运行的 JS bundle 读取它，同时写入 Expo 配置的 `extra.bundleVersion`。`update:bundle` 在导出前自动递增补丁号，例如 `0.1.1 → 0.1.2`，两平台使用同一个版本；不修改各 `package.json`、`expo.version` 或 `runtimeVersion`。未提供 `--message` 时，更新说明默认包含新 bundle 版本。支持 `--non-interactive` 供 CI 使用。
+
+发布失败时保留已递增的 bundle 版本，下次运行继续递增，避免复用可能已部分上传的版本号；排查失败后直接重试即可。发布后将版本文件随源码提交，后续发布从该版本继续递增。`--dry-run` 不递增版本、不联网。下载安装尚未应用的新 bundle 时，设置页继续显示实际运行的旧版本，重启应用并加载更新后才显示新版本。
 
 SDK 58 发布更新必须指定 Expo 环境；`--environment production` 会读取 Expo 项目中 `production` 环境的变量，不加载本地 `.env`。确保该环境中的 `ANTLER_MOBILE_ENV` 为 `production`、`ANTLER_MOBILE_AUTOMATION` 为 `false`，且 `EXPO_PUBLIC_ANTLER_SERVER_URL` 与已安装 Release 包一致；默认正式后端为 `https://chat.xiaoanai.top`。详见 [Expo 环境变量说明](https://docs.expo.dev/eas/environment-variables/usage/)。
 

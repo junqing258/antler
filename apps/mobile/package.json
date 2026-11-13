@@ -11,7 +11,7 @@
     "export": "npx expo export --platform all",
     "ios:release": "node scripts/ios-release.mjs",
     "ios:release:device": "node scripts/ios-release.mjs --install",
-    "update:bundle": "ANTLER_MOBILE_ENV=production ANTLER_MOBILE_AUTOMATION=false EXPO_NO_DOTENV=1 pnpm dlx eas-cli@latest update --platform all --channel production --environment production"
+    "update:bundle": "node scripts/update-bundle.mjs"
   },
   "dependencies": {
     "@antler/chat-core": "workspace:*",

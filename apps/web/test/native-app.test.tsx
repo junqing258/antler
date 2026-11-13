@@ -109,6 +109,7 @@ vi.mock("../../mobile/src/lib/app-config", () => ({
     };
   },
 }));
+vi.mock("../../mobile/src/lib/bundle-version", () => ({ bundleVersion: "9.8.7" }));
 vi.mock("../../mobile/src/lib/native-storage", () => ({
   loadNativeConfig: async () => state.legacy,
 }));
@@ -232,6 +233,16 @@ it("keeps the chat and draft mounted while saving settings", async () => {
     expect(screen.queryByText("保存供应商")).not.toBeInTheDocument(),
   );
   expect(screen.getByLabelText("草稿")).toHaveValue("尚未发送");
+});
+
+it("shows the running JS bundle version in the about settings", async () => {
+  state.backend = { mode: "local", requiresAccessToken: false };
+  render(<AppContainer />);
+  fireEvent.click(await screen.findByText("开始对话"));
+  fireEvent.click(screen.getByText("设置"));
+  fireEvent.click(screen.getByRole("tab", { name: /关于/ }));
+  expect(screen.getByText(/当前版本\s+v9\.8\.7/)).toBeInTheDocument();
+  expect(screen.queryByRole("tab", { name: /知识库/ })).not.toBeInTheDocument();
 });
 
 it("opens settings as a dialog and switches profile and about tabs", async () => {

@@ -17,6 +17,7 @@ import { Pencil, Plus, Settings } from "lucide-react-native";
 import type { NativeConfig } from "../../lib/native-config";
 import { createNativePlatform } from "../../lib/native-platform";
 import { useDelayedPending } from "../../lib/use-delayed-pending";
+import { bundleVersion } from "../../lib/bundle-version";
 import {
   deleteConversation,
   listConversations,
@@ -346,7 +347,7 @@ export function ChatDrawer({
                 </View>
                 <View style={styles.brandText}>
                   <Text style={styles.brand}>Antler Agent</Text>
-                  <Text style={styles.version}>V0.1.1 · YOUR AI WORKSPACE</Text>
+                  <Text style={styles.version}>V{bundleVersion} · YOUR AI WORKSPACE</Text>
                 </View>
               </Pressable>
             </View>

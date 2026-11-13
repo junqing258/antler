@@ -1,5 +1,6 @@
 // EXPO_PUBLIC_ANTLER_SERVER_URL is a public endpoint, never a credential.
 const base = require("./app.json");
+const bundle = require("./bundle-version.json");
 const buildEnvironment = process.env.ANTLER_MOBILE_ENV ?? "production";
 if (!["development", "test", "production"].includes(buildEnvironment))
   throw new Error("Invalid ANTLER_MOBILE_ENV");
@@ -33,6 +34,7 @@ module.exports = {
   ...base.expo,
   extra: {
     ...base.expo.extra,
+    bundleVersion: bundle.version,
     serverUrl,
     allowHttp: development,
     automationEnabled:

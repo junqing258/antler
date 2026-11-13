@@ -1,5 +1,5 @@
 import React from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 const capture = vi.hoisted(() => ({
@@ -86,6 +86,7 @@ import { defaultNativeConfig } from "../../mobile/src/lib/native-config";
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   capture.sessions.length = 0;
   capture.getProvider = undefined;
   capture.executionConfig = undefined;
@@ -95,7 +96,8 @@ afterEach(() => {
   capture.notice = "";
   capture.messages = [];
 });
-it("shows cached messages read-only and keeps short reconnections quiet", async () => {
+it("shows cached messages read-only without a cache connection notice", async () => {
+  vi.useFakeTimers();
   capture.ready = false;
   render(<NativeChat
     config={{ ...defaultNativeConfig, conversationId: "c" }}
@@ -106,7 +108,10 @@ it("shows cached messages read-only and keeps short reconnections quiet", async 
   expect(screen.getByTestId("message-preview")).toHaveTextContent("本地消息");
   expect(screen.getByTestId("chat-ready")).toHaveTextContent("false");
   expect(screen.queryByText(/显示本地缓存/)).not.toBeInTheDocument();
-  expect(await screen.findByText(/显示本地缓存/)).toBeInTheDocument();
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1000);
+  });
+  expect(screen.queryByText(/显示本地缓存/)).not.toBeInTheDocument();
 });
 it("keeps the chat header visible and only animates a longer wait", async () => {
   capture.ready = false;

@@ -262,8 +262,7 @@ export function NativeChat({
         running={state.running}
         sending={state.sending}
         hasMore={state.hasMore}
-        notice={state.ready || state.notice ? state.notice : showLoading ? "显示本地缓存，正在连接服务端…" : ""}
-        noticeVariant={!state.ready && !state.notice ? "sync" : "default"}
+        notice={state.notice}
         operationError={operationError}
         contextReason={state.contextReason}
         onStartNewConversation={onStartNewConversation}
@@ -308,9 +307,9 @@ const styles = StyleSheet.create({
   dockTint: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(255,255,255,0.7)" },
   safeAreaFade: { position: "absolute", left: 0, right: 0, bottom: 0, height: 32 },
   loading: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24, backgroundColor: "#fff" },
-  loadingLogo: { width: 64, height: 64, borderRadius: 16, backgroundColor: "#f0f8f5", alignItems: "center", justifyContent: "center", marginBottom: 20 },
+  loadingLogo: { width: 64, height: 64, borderRadius: 16, backgroundColor: "#f0f8f5", alignItems: "center", justifyContent: "center", marginBottom: 20, opacity: 0.4 },
   logo: { width: 40, height: 40, resizeMode: "contain" },
-  loadingLabel: { flexDirection: "row", alignItems: "center", gap: 8 },
+  loadingLabel: { flexDirection: "row", alignItems: "center", gap: 8, opacity: 0.5 },
   loadingText: { fontSize: 14, fontWeight: "500", color: "#404b47" },
   loadingNotice: { marginTop: 12, textAlign: "center", fontSize: 14, color: "#747d79" },
   title: { flex: 1, minWidth: 0 },
