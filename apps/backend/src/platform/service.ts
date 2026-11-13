@@ -78,8 +78,8 @@ export class PlatformService {
       throw new PlatformError("agent_not_found", 404);
     return agent;
   }
-  async listAgents(auth: AuthContext, mine = false) {
-    return this.prisma.agent.findMany({
+  async listAgents(auth: AuthContext, mine = false, includeRecentConversation = false) {
+    const agents = await this.prisma.agent.findMany({
       where:
         auth.authMode === "local"
           ? {}
@@ -89,6 +89,22 @@ export class PlatformService {
       include: { _count: { select: { skills: true } } },
       orderBy: { updatedAt: "desc" },
     });
+    if (!includeRecentConversation || !agents.length) return agents;
+    const conversations = await this.prisma.conversation.findMany({
+      where: {
+        userId: auth.userId,
+        agentId: { in: agents.map((agent) => agent.id) },
+        deletedAt: null,
+      },
+      distinct: ["agentId"],
+      orderBy: [{ lastMessageAt: "desc" }, { id: "desc" }],
+      select: { id: true, agentId: true, title: true, lastMessageAt: true },
+    });
+    const recentByAgent = new Map(conversations.map(({ agentId, ...conversation }) => [agentId, conversation]));
+    return agents.map((agent) => ({
+      ...agent,
+      recentConversation: recentByAgent.get(agent.id) ?? null,
+    }));
   }
   private fields(body: unknown, creating: boolean) {
     if (!body || typeof body !== "object" || Array.isArray(body))

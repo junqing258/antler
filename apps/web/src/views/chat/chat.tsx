@@ -116,7 +116,7 @@ export function Chat({
             Antler Agent
           </strong>
           <span className="font-mono text-[10px] leading-normal tracking-[0.08em]">
-            V0.1.0
+            V0.1.1
           </span>
         </div>
       </Link>

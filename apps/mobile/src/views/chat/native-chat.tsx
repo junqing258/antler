@@ -33,6 +33,7 @@ import {
 import type { NativeConfig } from "../../lib/native-config";
 import type { ChatMessage } from "@antler/chat-core";
 import { createNativePlatform } from "../../lib/native-platform";
+import { useDelayedPending } from "../../lib/use-delayed-pending";
 
 // The library’s class declaration targets older React Native types.
 const GradientMask = MaskedView as unknown as ComponentType<ViewProps & { maskElement: ReactElement }>;
@@ -102,6 +103,7 @@ export function NativeChat({
     session.getSnapshot,
     session.getSnapshot,
   );
+  const showLoading = useDelayedPending(!state.ready);
   const [draft, setDraft] = useState("");
   const draftVersion = useRef(0);
   const [operationError, setOperationError] = useState("");
@@ -229,14 +231,18 @@ export function NativeChat({
       </View>
       {!state.ready && !cachedMessages?.length ? (
         <View style={styles.loading} accessibilityState={{ busy: true }}>
-          <View style={styles.loadingLogo}>
-            <Image source={require("../../../assets/antler-logo.png")} style={styles.logo} accessibilityIgnoresInvertColors />
-          </View>
-          <View style={styles.loadingLabel} accessibilityRole="progressbar" accessibilityLabel={state.notice.includes("正在重连") ? state.notice : "正在加载会话"}>
-            <ActivityIndicator size="small" color="#087d61" />
-            <Text style={styles.loadingText}>正在加载会话…</Text>
-          </View>
-          {!!state.notice && !state.notice.includes("正在重连") && <Text accessibilityRole="alert" style={styles.loadingNotice}>{state.notice}</Text>}
+          {(showLoading || !!state.notice) && (
+            <>
+              <View style={styles.loadingLogo}>
+                <Image source={require("../../../assets/antler-logo.png")} style={styles.logo} accessibilityIgnoresInvertColors />
+              </View>
+              <View style={styles.loadingLabel} accessibilityRole="progressbar" accessibilityLabel={state.notice.includes("正在重连") ? state.notice : "正在加载会话"}>
+                <ActivityIndicator size="small" color="#087d61" />
+                <Text style={styles.loadingText}>正在加载会话…</Text>
+              </View>
+              {!!state.notice && !state.notice.includes("正在重连") && <Text accessibilityRole="alert" style={styles.loadingNotice}>{state.notice}</Text>}
+            </>
+          )}
         </View>
       ) : <View style={styles.chatContent}>
       <ChatScreen
@@ -256,7 +262,8 @@ export function NativeChat({
         running={state.running}
         sending={state.sending}
         hasMore={state.hasMore}
-        notice={state.ready ? state.notice : `显示本地缓存，${state.notice || "正在连接服务端…"}`}
+        notice={state.ready || state.notice ? state.notice : showLoading ? "显示本地缓存，正在连接服务端…" : ""}
+        noticeVariant={!state.ready && !state.notice ? "sync" : "default"}
         operationError={operationError}
         contextReason={state.contextReason}
         onStartNewConversation={onStartNewConversation}

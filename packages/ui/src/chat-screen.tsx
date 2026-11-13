@@ -12,6 +12,7 @@ export type ChatScreenProps = {
   sending: boolean;
   hasMore?: boolean;
   notice?: string;
+  noticeVariant?: "default" | "sync";
   operationError?: string;
   contextReason?: string;
   onStartNewConversation?: () => void;
@@ -39,6 +40,7 @@ export function ChatScreen({
   sending,
   hasMore,
   notice,
+  noticeVariant = "default",
   operationError,
   contextReason,
   onStartNewConversation,
@@ -103,7 +105,18 @@ export function ChatScreen({
           <Text>加载更早消息</Text>
         </Pressable>
       )}
-      {!!notice && (notice.includes("正在重连") ? (
+      {!!notice && (noticeVariant === "sync" ? (
+        <View
+          accessibilityRole="progressbar"
+          accessibilityLabel={notice}
+          accessibilityLiveRegion="polite"
+          accessibilityState={{ busy: true }}
+          style={styles.syncNotice}
+        >
+          <ActivityIndicator accessible={false} size="small" color="#729184" style={styles.syncIndicator} />
+          <Text style={styles.syncNoticeText}>{notice}</Text>
+        </View>
+      ) : notice.includes("正在重连") ? (
         <View accessibilityLabel={notice} style={styles.connectionLoading}>
           <ActivityIndicator size="small" color="#087d61" />
         </View>
@@ -195,6 +208,22 @@ const styles = StyleSheet.create({
   welcomeTitle: { fontSize: 24, fontWeight: "600", marginBottom: 24 },
   welcomeComposer: { width: "100%", maxWidth: 1024 },
   notices: { gap: 8, paddingHorizontal: 16, paddingTop: 10 },
+  syncNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 1032,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#e8eeeb",
+    borderRadius: 10,
+    backgroundColor: "#f4f7f5",
+  },
+  syncIndicator: { width: 16, height: 16, transform: [{ scale: 0.75 }] },
+  syncNoticeText: { flexShrink: 1, fontSize: 12, lineHeight: 18, color: "#6b7971" },
   connectionLoading: {
     alignSelf: "center",
     marginTop: 8,

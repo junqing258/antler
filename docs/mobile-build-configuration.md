@@ -11,7 +11,7 @@ node scripts/mobile-autostart.mjs --platform android --message '请详细回答'
 
 可通过 `--device` 选择模拟器或 Android 设备；iOS 真机须同时指定 `--ios-physical --device <设备标识>`，使用已签名并安装的测试包。`--agent-id` 和 `--conversation-id` 可选择测试目标。深链不接受后端地址和 local 访问令牌，无法覆盖构建地址。Supabase 自动登录仅在测试构建中支持深链的 `email` 和 `password` 参数；测试凭据不要写入仓库或日志。
 
-发版前须用与正式包相同的环境和地址验证两平台实际地址、TLS、服务端认证配置、登录、流式对话和异常恢复，并对正式包本身做冒烟测试。Supabase 配置必须完整；受 local 令牌保护的部署仅支持持有与该地址绑定的旧令牌的升级设备。确认公网部署具备受信任的访问控制；不要为适配新设备而关闭访问控制。Expo Updates 的配置更新和回滚尚未纳入此流程。
+发版前须用与正式包相同的环境和地址验证两平台实际地址、TLS、服务端认证配置、登录、流式对话和异常恢复，并对正式包本身做冒烟测试。Supabase 配置必须完整；受 local 令牌保护的部署仅支持持有与该地址绑定的旧令牌的升级设备。确认公网部署具备受信任的访问控制；不要为适配新设备而关闭访问控制。Expo Updates 的发布见下方“iOS / Android 热更新”；回滚尚未纳入此流程。
 
 ## iPhone 真机开发
 
@@ -42,6 +42,31 @@ pnpm build:ios:device --archive apps/mobile/dist/ios/<时间>/Antler.xcarchive
 此命令使用 `production` 配置和正式 HTTPS 后端，创建 Apple Development 签名的 Release 归档，直接将归档中的 `.app` 安装到手机并启动，不执行 App Store IPA 导出，也不依赖 Metro。安装会更新手机上相同 Bundle ID 的应用。默认只自动选择已连接的真实 iPhone；找不到设备或连接多台时会提示处理。若已安装但启动被系统拒绝，请解锁手机并在设置中确认开发者信任后手动打开 Antler。
 
 Personal Team 不需要开通 App Store 分发会员即可执行上述个人安装，但开发签名有有效期，过期后需要重新运行构建安装命令。后端仍需可通过网络访问。需要 App Store / TestFlight 分发时，使用下方的 `pnpm build:ios` 流程。
+
+## iOS / Android 热更新
+
+两平台手机均须先安装包含 `expo-updates` 和更新配置的 Release 包，且运行时版本须与更新匹配。当前通过 Expo 官方 EAS Update 服务发布，应用配置中的 `updates.requestHeaders` 指向 `production` 频道，`runtimeVersion` 使用 `appVersion` 策略。
+
+在仓库根目录执行：
+
+```sh
+# 首次使用时登录有该 Expo 项目权限的账号
+cd apps/mobile
+pnpm dlx eas-cli@latest login
+cd ../..
+
+# 同时导出并上传当前源码的 iOS、Android JS bundle 和资源
+pnpm update:bundle --message "优化聊天页面"
+
+# 也可直接运行 mobile 包命令
+pnpm --filter @antler/mobile update:bundle --message "修复页面样式"
+```
+
+脚本固定使用 `--platform all --channel production --environment production`，同时发布 iOS 和 Android 更新，并设置 `ANTLER_MOBILE_ENV=production`、`ANTLER_MOBILE_AUTOMATION=false`、`EXPO_NO_DOTENV=1`。发布使用当前工作区源码，包括未提交的改动，不执行原生构建，也不安装应用。命令成功后，在两平台手机上打开 App 等待后台下载，彻底退出并重新打开后验证更新。
+
+SDK 58 发布更新必须指定 Expo 环境；`--environment production` 会读取 Expo 项目中 `production` 环境的变量，不加载本地 `.env`。确保该环境中的 `ANTLER_MOBILE_ENV` 为 `production`、`ANTLER_MOBILE_AUTOMATION` 为 `false`，且 `EXPO_PUBLIC_ANTLER_SERVER_URL` 与已安装 Release 包一致；默认正式后端为 `https://chat.xiaoanai.top`。详见 [Expo 环境变量说明](https://docs.expo.dev/eas/environment-variables/usage/)。
+
+纯 JS、样式和资源改动保持 `app.json` 的 `expo.version` 不变，才能匹配现有安装包。新增或升级原生模块、升级 RN/Expo、修改权限或原生配置时，提升 `expo.version` 并重新构建安装完整包，再向相应运行时发布更新。热更新不会延长 Personal Team 签名有效期。
 
 ## iOS 正式包
 

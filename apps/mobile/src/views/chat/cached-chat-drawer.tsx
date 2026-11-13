@@ -1,9 +1,7 @@
 import { useCallback, type ComponentProps } from "react";
-import { useIsRestoring, useQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { useIsRestoring, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ConversationSummary } from "../../lib/conversation-service";
 import { ChatDrawer } from "./chat-drawer";
-
-type HomePage = { conversations: ConversationSummary[] };
 
 export function CachedChatDrawer(props: ComponentProps<typeof ChatDrawer>) {
   const client = useQueryClient();
@@ -18,8 +16,5 @@ export function CachedChatDrawer(props: ComponentProps<typeof ChatDrawer>) {
     client.setQueryData(["drawer-conversations", agentId ?? null], rows);
   }, [client, agentId]);
   if (restoring) return null;
-  const home = client.getQueryData<InfiniteData<HomePage>>(["home-conversations"]);
-  const fallback = home?.pages.flatMap((page) => page.conversations)
-    .filter((row) => !agentId || row.agentId === agentId);
-  return <ChatDrawer key={agentId ?? ""} {...props} cachedConversations={cached.data ?? fallback} onCacheConversations={save} />;
+  return <ChatDrawer key={agentId ?? ""} {...props} cachedConversations={cached.data} onCacheConversations={save} />;
 }

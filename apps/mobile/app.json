@@ -3,7 +3,21 @@
     "name": "Antler",
     "slug": "antler-p0-probe",
     "scheme": "antler",
-    "version": "0.1.0",
+    "version": "0.1.1",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/a74415c4-3000-4d8c-aeb6-4207325b8094",
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "a74415c4-3000-4d8c-aeb6-4207325b8094"
+      }
+    },
     "icon": "./assets/icon.png",
     "orientation": "default",
     "ios": {

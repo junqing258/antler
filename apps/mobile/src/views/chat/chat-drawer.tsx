@@ -16,6 +16,7 @@ import { ConversationList } from "@antler/ui";
 import { Pencil, Plus, Settings } from "lucide-react-native";
 import type { NativeConfig } from "../../lib/native-config";
 import { createNativePlatform } from "../../lib/native-platform";
+import { useDelayedPending } from "../../lib/use-delayed-pending";
 import {
   deleteConversation,
   listConversations,
@@ -85,6 +86,7 @@ export function ChatDrawer({
   const [cacheReady, setCacheReady] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const showLoading = useDelayedPending(visible && loading);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [operationError, setOperationError] = useState("");
@@ -344,7 +346,7 @@ export function ChatDrawer({
                 </View>
                 <View style={styles.brandText}>
                   <Text style={styles.brand}>Antler Agent</Text>
-                  <Text style={styles.version}>V0.1.0 · YOUR AI WORKSPACE</Text>
+                  <Text style={styles.version}>V0.1.1 · YOUR AI WORKSPACE</Text>
                 </View>
               </Pressable>
             </View>
@@ -369,7 +371,7 @@ export function ChatDrawer({
                   </Pressable>
                 </View>
               )}
-              {loading && rows.length === 0 && (
+              {showLoading && rows.length === 0 && (
                 <Text style={styles.hint}>正在加载会话…</Text>
               )}
               {(rows.length > 0 || (!error && !loading)) && (

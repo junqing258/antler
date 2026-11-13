@@ -1,7 +1,7 @@
 {
   "name": "antler",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "packageManager": "pnpm@10.0.0",
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -26,7 +26,8 @@
     "build:mobile": "pnpm --filter @antler/mobile export",
     "build:probe": "pnpm --filter @antler/app build:probe",
     "build:ios": "pnpm --filter @antler/mobile ios:release",
-    "build:ios:device": "pnpm --filter @antler/mobile ios:release:device"
+    "build:ios:device": "pnpm --filter @antler/mobile ios:release:device",
+    "update:bundle": "pnpm --filter @antler/mobile update:bundle"
   },
   "devDependencies": {
     "prettier": "^3.6.2",

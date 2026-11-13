@@ -27,10 +27,12 @@ export function AgentList({
   groups,
   renderLink,
   renderIcon,
+  renderFooter,
 }: {
   groups: { name: string; items: AgentCardItem[] }[];
   renderLink: (link: AgentListLink, content: ReactNode) => ReactNode;
   renderIcon?: (name?: string | null) => ReactNode;
+  renderFooter?: (item: AgentCardItem) => ReactNode;
 }) {
   return (
     <View>
@@ -44,6 +46,7 @@ export function AgentList({
               items={group.items}
               renderLink={renderLink}
               renderIcon={renderIcon}
+              renderFooter={renderFooter}
             />
           </View>
         ) : null,
@@ -64,10 +67,12 @@ function AgentGrid({
   items,
   renderLink,
   renderIcon,
+  renderFooter,
 }: {
   items: AgentCardItem[];
   renderLink: (link: AgentListLink, content: ReactNode) => ReactNode;
   renderIcon?: (name?: string | null) => ReactNode;
+  renderFooter?: (item: AgentCardItem) => ReactNode;
 }) {
   const [containerWidth, setContainerWidth] = useState(0);
   const columns = containerWidth >= 880 ? 3 : containerWidth >= 560 ? 2 : 1;
@@ -110,6 +115,7 @@ function AgentGrid({
                 <Text style={styles.editText}>编辑</Text>,
               )}
           </View>
+          {renderFooter && <View style={styles.footer}>{renderFooter(agent)}</View>}
         </View>
       ))}
     </View>
@@ -171,6 +177,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   openText: { fontSize: 14, fontWeight: "600", color: "#087d61" },
+  footer: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#e6e6e2", marginTop: 16, paddingTop: 12 },
   editText: { fontSize: 14, color: "#666" },
   empty: {
     borderRadius: 12,

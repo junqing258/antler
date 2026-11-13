@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import type { NativeConfig } from "../../lib/native-config";
 import { createNativePlatform } from "../../lib/native-platform";
+import { useDelayedPending } from "../../lib/use-delayed-pending";
 import { Toggle } from "../../components/ui/toggle";
 import {
   getRagConfig,
@@ -39,6 +40,7 @@ export function KnowledgeSettings({
   const [ragKey, setRagKey] = useState("");
   const [clearKey, setClearKey] = useState(false);
   const [loading, setLoading] = useState(true);
+  const showLoading = useDelayedPending(loading);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
@@ -109,7 +111,7 @@ export function KnowledgeSettings({
   return (
     <ScrollView style={styles.page} contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled">
       <Text style={styles.sectionTitle}>知识库配置</Text>
-      {loading && <Text>正在读取配置…</Text>}
+      {showLoading && <Text>正在读取配置…</Text>}
       <View
         pointerEvents={loading || saving || !config_ ? "none" : "auto"}
         style={styles.form}

@@ -95,7 +95,7 @@ afterEach(() => {
   capture.notice = "";
   capture.messages = [];
 });
-it("shows cached messages read-only while the live session is reconnecting", () => {
+it("shows cached messages read-only and keeps short reconnections quiet", async () => {
   capture.ready = false;
   render(<NativeChat
     config={{ ...defaultNativeConfig, conversationId: "c" }}
@@ -105,7 +105,22 @@ it("shows cached messages read-only while the live session is reconnecting", () 
   />);
   expect(screen.getByTestId("message-preview")).toHaveTextContent("本地消息");
   expect(screen.getByTestId("chat-ready")).toHaveTextContent("false");
-  expect(screen.getByText(/显示本地缓存/)).toBeInTheDocument();
+  expect(screen.queryByText(/显示本地缓存/)).not.toBeInTheDocument();
+  expect(await screen.findByText(/显示本地缓存/)).toBeInTheDocument();
+});
+it("keeps the chat header visible and only animates a longer wait", async () => {
+  capture.ready = false;
+  render(<NativeChat
+    config={{ ...defaultNativeConfig, conversationId: "c" }}
+    provider={{ name: "x", protocol: "openai-responses", baseUrl: "", apiKey: "", model: "", models: [] }}
+    getToken={async () => ""} onUnauthorized={() => {}} onConfigure={() => {}} onModelSelected={() => {}}
+    title="当前会话"
+  />);
+  expect(screen.getByText("当前会话")).toBeInTheDocument();
+  expect(screen.queryByText("正在加载会话…")).not.toBeInTheDocument();
+  expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("聊天输入")).not.toBeInTheDocument();
+  expect(await screen.findByText("正在加载会话…")).toBeInTheDocument();
 });
 it("only caches server-sequenced messages after the session is ready", () => {
   const save = vi.fn();

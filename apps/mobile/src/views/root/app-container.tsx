@@ -30,6 +30,7 @@ import { KnowledgeSettings } from "../settings/knowledge-settings";
 import { QueryProvider } from "./query-provider";
 import { readAppConfig } from "../../lib/app-config";
 import { createNativePlatform } from "../../lib/native-platform";
+import { useDelayedPending } from "../../lib/use-delayed-pending";
 import {
   defaultNativeConfig,
   legacyLocalToken,
@@ -82,6 +83,7 @@ export function AppContainer() {
   const [attempt, setAttempt] = useState(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const showLoading = useDelayedPending(loading);
   const [authenticated, setAuthenticated] = useState(false);
   const [busy, setBusy] = useState(false);
   const [provider, setProvider] = useState(defaultProvider);
@@ -490,8 +492,8 @@ export function AppContainer() {
   );
   if (loading)
     return (
-      <SafeAreaView style={[styles.center, styles.connectionLoading]} accessibilityLabel="正在连接">
-        <ActivityIndicator size="small" color="#087d61" />
+      <SafeAreaView style={[styles.center, styles.connectionLoading]} accessibilityLabel={showLoading ? "正在连接" : undefined}>
+        {showLoading && <ActivityIndicator size="small" color="#087d61" />}
       </SafeAreaView>
     );
   if (!boot)
@@ -579,7 +581,7 @@ export function AppContainer() {
                       <Text style={styles.hint}>应用信息与版本</Text>
                     </View>
                     <View style={styles.infoCard}><Text style={styles.detailTitle}>Antler</Text><Text style={styles.hint}>移动助手</Text></View>
-                    <View style={styles.infoCard}><Text style={styles.account}>应用名称　 Antler</Text><Text style={styles.account}>当前版本　 v0.1.0</Text><Text style={styles.account}>运行环境　移动应用</Text></View>
+                    <View style={styles.infoCard}><Text style={styles.account}>应用名称　 Antler</Text><Text style={styles.account}>当前版本　 v0.1.1</Text><Text style={styles.account}>运行环境　移动应用</Text></View>
                   </ScrollView>
                 )}
               </View>

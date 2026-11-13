@@ -164,7 +164,7 @@ export function SettingsDialog({
                 </div>
                 <div className="flex items-center justify-between gap-4 py-4">
                   <dt className="shrink-0 text-xs text-[#777]">当前版本</dt>
-                  <dd className="m-0 rounded-md bg-[#f3f4f4] px-2 py-0.5 text-xs font-medium tabular-nums text-[#555]">v0.1.0</dd>
+                  <dd className="m-0 rounded-md bg-[#f3f4f4] px-2 py-0.5 text-xs font-medium tabular-nums text-[#555]">v0.1.1</dd>
                 </div>
                 <div className="flex items-center justify-between gap-4 py-4">
                   <dt className="shrink-0 text-xs text-[#777]">运行环境</dt>

@@ -48,9 +48,11 @@ export function registerAgentRoutes(
   });
   app.get("/api/agents", async (req) => {
     const auth = platformAuth(req, authMode);
+    const query = req.query as { mine?: string; includeRecentConversation?: string };
     const agents = await service.listAgents(
       auth,
-      (req.query as { mine?: string }).mine === "1",
+      query.mine === "1",
+      query.includeRecentConversation === "1",
     );
     return {
       agents: agents.map((agent) => ({

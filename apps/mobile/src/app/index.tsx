@@ -30,14 +30,14 @@ export function HomeRoute() {
           onUnauthorized={root.onUnauthorized}
           isCurrent={root.isCurrent}
           onOpenSettings={() => root.openSettings()}
+          onOpenConversation={(id, agentId, title) =>
+            root.openChat({ id, agentId, title }, "push")
+          }
           onOpenAgent={(agentId) =>
             root.openChat(
               { id: Crypto.randomUUID(), agentId },
               "push",
             )
-          }
-          onOpenConversation={(id, agentId, title) =>
-            root.openChat({ id, agentId, title: title || "新会话" }, "push")
           }
         />
       )}

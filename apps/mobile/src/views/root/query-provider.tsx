@@ -32,7 +32,7 @@ export function QueryProvider({ children, scope }: { children: ReactNode; scope?
     persister,
     maxAge: 7 * 24 * 60 * 60 * 1000,
     dehydrateOptions: { shouldDehydrateQuery: (query) =>
-      query.state.data !== undefined && (query.queryKey[0] === "agents" || query.queryKey[0] === "home-conversations" || query.queryKey[0] === "drawer-conversations" || query.queryKey[0] === "conversation-messages"),
+      query.state.data !== undefined && (query.queryKey[0] === "agents" || query.queryKey[0] === "drawer-conversations" || query.queryKey[0] === "conversation-messages"),
     },
   }}>{children}</PersistQueryClientProvider>;
 }

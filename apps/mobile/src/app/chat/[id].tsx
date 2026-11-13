@@ -3,7 +3,7 @@ import { View, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as Crypto from "expo-crypto";
 import { CachedNativeChat } from "../../views/chat/cached-native-chat";
-import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { CachedChatDrawer } from "../../views/chat/cached-chat-drawer";
 import type { ConversationSummary } from "../../lib/conversation-service";
 import type { NativeConfig } from "../../lib/native-config";
@@ -17,13 +17,6 @@ export function ChatRoute() {
     queryClient.removeQueries({ queryKey: ["conversation-messages", deletedId], exact: true });
     queryClient.setQueriesData<ConversationSummary[]>({ queryKey: ["drawer-conversations"] },
       (rows) => rows?.filter((row) => row.id !== deletedId));
-    queryClient.setQueryData<InfiniteData<{ conversations: { id: string }[]; nextCursor: string | null }>>(
-      ["home-conversations"],
-      (data) => data && ({ ...data, pages: data.pages.map((page) => ({
-        ...page, conversations: page.conversations.filter((row) => row.id !== deletedId),
-      })) }),
-    );
-    void queryClient.invalidateQueries({ queryKey: ["home-conversations"] });
   }, [queryClient]);
   const [titles, setTitles] = useState<Record<string, string>>({});
   const [drawerOpen, setDrawerOpen] = useState(false);
